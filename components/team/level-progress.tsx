@@ -1,0 +1,157 @@
+"use client"
+
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Trophy, Users, Target } from "lucide-react"
+
+interface LevelProgressProps {
+  currentLevel: number
+  levelProgress: {
+    currentActive: number
+    requiredActive: number
+    progress: number
+    nextLevel: number
+  } | null
+  teamStats: {
+    totalMembers: number
+    activeMembers: number
+    directReferrals: number
+    directActive: number
+    totalTeamDeposits: number
+    totalTeamEarnings: number
+  }
+  currentRule: any
+  nextRule: any
+}
+
+export function LevelProgress({ currentLevel, levelProgress, teamStats, currentRule, nextRule }: LevelProgressProps) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Current Level Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5 text-amber-600" />
+            Current Level Status
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-2xl font-bold">Level {currentLevel}</span>
+            <Badge variant={currentLevel > 0 ? "default" : "secondary"} className="text-lg px-3 py-1">
+              {currentLevel === 0 ? "Starter" : `Level ${currentLevel}`}
+            </Badge>
+          </div>
+
+          {currentRule && (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Direct Commission:</span>
+                <span className="font-medium">{currentRule.directPct}%</span>
+              </div>
+              {currentRule.teamDailyPct > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Team Daily:</span>
+                  <span className="font-medium">{currentRule.teamDailyPct}%</span>
+                </div>
+              )}
+              {currentRule.teamRewardPct > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Team Reward:</span>
+                  <span className="font-medium">{currentRule.teamRewardPct}%</span>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Next Level Progress */}
+      {levelProgress && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5 text-blue-600" />
+              Next Level Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-lg font-semibold">Level {levelProgress.nextLevel}</span>
+              <span className="text-sm text-muted-foreground">
+                {levelProgress.currentActive} / {levelProgress.requiredActive} Active Members
+              </span>
+            </div>
+
+            <Progress value={levelProgress.progress} className="h-3" />
+
+            <div className="text-sm text-center text-muted-foreground">
+              {levelProgress.progress >= 100 ? (
+                <span className="text-green-600 font-medium">Requirements met! Level will update soon.</span>
+              ) : (
+                <span>{levelProgress.requiredActive - levelProgress.currentActive} more active members needed</span>
+              )}
+            </div>
+
+            {nextRule && (
+              <div className="space-y-2 text-sm border-t pt-3">
+                <h4 className="font-medium">Level {levelProgress.nextLevel} Benefits:</h4>
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Direct Commission:</span>
+                    <span className="font-medium text-green-600">
+                      {nextRule.directPct}% (+{nextRule.directPct - (currentRule?.directPct || 7)}%)
+                    </span>
+                  </div>
+                  {nextRule.teamRewardPct > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Team Reward:</span>
+                      <span className="font-medium text-green-600">{nextRule.teamRewardPct}%</span>
+                    </div>
+                  )}
+                  {nextRule.monthlyTargets?.bonus > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Monthly Bonus:</span>
+                      <span className="font-medium text-green-600">${nextRule.monthlyTargets.bonus}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Team Statistics */}
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-purple-600" />
+            Team Statistics
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-muted rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{teamStats.totalMembers}</div>
+              <div className="text-sm text-muted-foreground">Total Members</div>
+            </div>
+            <div className="text-center p-4 bg-muted rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{teamStats.activeMembers}</div>
+              <div className="text-sm text-muted-foreground">Active Members</div>
+            </div>
+            <div className="text-center p-4 bg-muted rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{teamStats.directReferrals}</div>
+              <div className="text-sm text-muted-foreground">Direct Referrals</div>
+            </div>
+            <div className="text-center p-4 bg-muted rounded-lg">
+              <div className="text-2xl font-bold text-amber-600">${teamStats.totalTeamDeposits.toFixed(0)}</div>
+              <div className="text-sm text-muted-foreground">Team Deposits</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
