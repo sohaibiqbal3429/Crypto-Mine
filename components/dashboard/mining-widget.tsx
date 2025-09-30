@@ -1,13 +1,16 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Zap, Clock, AlertCircle, Coins } from "lucide-react"
 import { motion } from "framer-motion"
+
+import { mineAction } from "@/app/mining/actions"
 
 interface MiningWidgetProps {
   mining: {
@@ -17,40 +20,27 @@ interface MiningWidgetProps {
     requiresDeposit?: boolean
     minDeposit?: number
   }
-  onMiningSuccess: () => void
 }
 
-export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+export function MiningWidget({ mining }: MiningWidgetProps) {
+  const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
-  const handleMining = async () => {
-    setIsLoading(true)
-    setError("")
-    setSuccess("")
-
-    try {
-      const response = await fetch("/api/mining/click", {
-        method: "POST",
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        setSuccess(`Mining successful! Earned $${data.profit.toFixed(2)}`)
-        onMiningSuccess()
-      } else {
-        setError(data.error || "Mining failed")
+  const handleMining = () => {
+    setFeedback({})
+    startTransition(async () => {
+      const result = await mineAction()
+      if (result.error) {
+        setFeedback({ error: result.error })
+        return
       }
-    } catch (err) {
-      setError("Network error. Please try again.")
-    } finally {
-      setIsLoading(false)
-    }
+      setFeedback({ success: result.success ?? "Mining successful!" })
+    })
   }
 
   const getTimeUntilNext = () => {
+    if (!mining.nextEligibleAt) return "Ready to mine!"
     const now = new Date()
     const nextTime = new Date(mining.nextEligibleAt)
     const diff = nextTime.getTime() - now.getTime()
@@ -85,17 +75,17 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {error && (
+        {feedback.error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{feedback.error}</AlertDescription>
           </Alert>
         )}
 
-        {success && (
+        {feedback.success && (
           <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
             <Zap className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800 dark:text-green-200">{success}</AlertDescription>
+            <AlertDescription className="text-green-800 dark:text-green-200">{feedback.success}</AlertDescription>
           </Alert>
         )}
 
@@ -161,11 +151,11 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
 
           <Button
             onClick={handleMining}
-            disabled={!mining.canMine || isLoading}
+            disabled={!mining.canMine || isPending}
             size="lg"
             className="w-full max-w-sm h-12 text-lg font-semibold bg-gradient-to-r from-primary to-accent hover:from-accent hover:to-primary transition-all duration-300 shadow-lg hover:shadow-xl"
           >
-            {isLoading ? (
+            {isPending ? (
               <>
                 <Loader2 className="mr-3 h-5 w-5 animate-spin" />
                 Mining in Progress...

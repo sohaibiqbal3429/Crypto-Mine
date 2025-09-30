@@ -1,6 +1,7 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useFormState, useFormStatus } from "react-dom"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -13,37 +14,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowDownLeft, CheckCircle, Copy, Loader2, RefreshCcw, XCircle } from "lucide-react"
+import { submitDepositAction, type DepositFormState } from "@/app/wallet/actions"
+import { ArrowDownLeft, CheckCircle, Copy, Loader2, XCircle } from "lucide-react"
+
+interface DepositOption {
+  id: string
+  label: string
+  network: string
+  address: string
+}
 
 interface DepositFormProps {
+  options: DepositOption[]
+  minDeposit: number
   onSuccess?: () => void
 }
 
-interface DepositAddressResponse {
-  address: string
-  network?: string
+const RECEIPT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
+const initialState: DepositFormState = { error: null, success: null }
+
+function SubmitButton() {
+  const { pending } = useFormStatus()
+
+  return (
+    <Button
+      type="submit"
+      disabled={pending}
+      className="w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-base font-semibold shadow-lg hover:from-emerald-600 hover:to-blue-600"
+    >
+      {pending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Processing...
+        </>
+      ) : (
+        <>
+          <ArrowDownLeft className="mr-2 h-4 w-4" />
+          Submit Deposit for Review
+        </>
+      )}
+    </Button>
+  )
 }
 
-const RECEIPT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
-const RECEIPT_MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
-const RECEIPT_MIN_SIZE_BYTES = 80 * 1024
+export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps) {
+  const [state, formAction] = useFormState(submitDepositAction, initialState)
 
-const TRANSACTION_HASH_PATTERNS = [
-  /^0x[a-fA-F0-9]{64}$/,
-  /^[a-fA-F0-9]{64}$/,
-  /^[A-Za-z0-9]{50,70}$/,
-]
+  const [selectedOptionId, setSelectedOptionId] = useState(() => options[0]?.id ?? "")
+  const selectedOption = useMemo(() => options.find((option) => option.id === selectedOptionId), [options, selectedOptionId])
 
-const EXCHANGE_OPTIONS = [
-  { value: "binance", label: "Binance" },
-  { value: "okx", label: "OKX" },
-  { value: "bybit", label: "Bybit" },
-  { value: "kucoin", label: "KuCoin" },
-  { value: "coinbase", label: "Coinbase" },
-  { value: "other", label: "Other" },
-]
+  useEffect(() => {
+    if (!selectedOption && options.length > 0) {
+      setSelectedOptionId(options[0].id)
+    }
+  }, [selectedOption, options])
 
-export function DepositForm({ onSuccess }: DepositFormProps) {
   const [formState, setFormState] = useState({
     amount: "",
     transactionNumber: "",
@@ -53,20 +78,15 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
   const [receiptPreview, setReceiptPreview] = useState("")
   const [receiptError, setReceiptError] = useState("")
   const [receiptInputKey, setReceiptInputKey] = useState(() => Date.now())
-
-  const [submitLoading, setSubmitLoading] = useState(false)
-  const [submitError, setSubmitError] = useState("")
-  const [submitSuccess, setSubmitSuccess] = useState("")
-
-  const [depositAddress, setDepositAddress] = useState("")
-  const [depositNetwork, setDepositNetwork] = useState("")
-  const [addressLoading, setAddressLoading] = useState(true)
-  const [addressError, setAddressError] = useState("")
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    fetchDepositAddress()
-  }, [])
+    if (state?.success) {
+      setFormState({ amount: "", transactionNumber: "", exchangePlatform: "binance" })
+      handleReceiptRemove()
+      onSuccess?.()
+    }
+  }, [state?.success, onSuccess])
 
   useEffect(() => {
     return () => {
@@ -76,44 +96,17 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
     }
   }, [receiptPreview])
 
-  const fetchDepositAddress = async () => {
-    try {
-      setAddressLoading(true)
-      setAddressError("")
-
-      const response = await fetch("/api/wallet/deposit-address")
-      if (!response.ok) {
-        throw new Error("Failed to load deposit address")
-      }
-
-      const data: DepositAddressResponse = await response.json()
-      setDepositAddress(data.address)
-      setDepositNetwork(data.network || "")
-    } catch (error) {
-      console.error("Failed to fetch deposit address", error)
-      setAddressError("Unable to load the deposit address. Please try again in a moment.")
-      setDepositAddress("")
-      setDepositNetwork("")
-    } finally {
-      setAddressLoading(false)
-    }
-  }
-
+  const selectedAddress = selectedOption?.address ?? ""
   const qrCodeUrl = useMemo(() => {
-    if (!depositAddress) {
-      return ""
-    }
-
-    return `https://quickchart.io/qr?size=220&text=${encodeURIComponent(depositAddress)}`
-  }, [depositAddress])
+    if (!selectedAddress) return ""
+    return `https://quickchart.io/qr?size=220&text=${encodeURIComponent(selectedAddress)}`
+  }, [selectedAddress])
 
   const handleCopy = async () => {
-    if (!depositAddress || copied) {
-      return
-    }
+    if (!selectedAddress || copied) return
 
     try {
-      await navigator.clipboard.writeText(depositAddress)
+      await navigator.clipboard.writeText(selectedAddress)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
@@ -144,13 +137,13 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
       return
     }
 
-    if (file.size > RECEIPT_MAX_SIZE_BYTES) {
+    if (file.size > 5 * 1024 * 1024) {
       setReceiptError("Receipt image must be smaller than 5MB")
       event.target.value = ""
       return
     }
 
-    if (file.size < RECEIPT_MIN_SIZE_BYTES) {
+    if (file.size < 80 * 1024) {
       setReceiptError("Receipt image is too small. Please upload the full exchange confirmation screenshot")
       event.target.value = ""
       return
@@ -177,123 +170,79 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
     setReceiptInputKey(Date.now())
   }
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
-    event.preventDefault()
-
-    if (!depositAddress) {
-      setSubmitError("Deposit address unavailable. Please refresh and try again.")
-      return
-    }
-
-    const parsedAmount = Number.parseFloat(formState.amount)
-    if (Number.isNaN(parsedAmount)) {
-      setSubmitError("Enter a valid deposit amount")
-      return
-    }
-
-    const trimmedTransactionNumber = formState.transactionNumber.trim()
-    if (!trimmedTransactionNumber) {
-      setSubmitError("Transaction hash is required")
-      return
-    }
-
-    if (!TRANSACTION_HASH_PATTERNS.some((pattern) => pattern.test(trimmedTransactionNumber))) {
-      setSubmitError("Enter a valid blockchain transaction hash")
-      return
-    }
-
-    if (!receiptFile) {
-      setSubmitError("Upload the exchange payment receipt screenshot")
-      return
-    }
-
-    setSubmitLoading(true)
-    setSubmitError("")
-    setSubmitSuccess("")
-
-    try {
-      const payload = new FormData()
-      payload.append("amount", parsedAmount.toString())
-      payload.append("transactionNumber", trimmedTransactionNumber)
-      payload.append("exchangePlatform", formState.exchangePlatform)
-      payload.append("receipt", receiptFile)
-
-      const response = await fetch("/api/wallet/deposit", {
-        method: "POST",
-        body: payload,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        setSubmitError(data.error || "Deposit failed. Please try again.")
-        return
-      }
-
-      setSubmitSuccess("Deposit request submitted successfully! Awaiting compliance review.")
-      setFormState({ amount: "", transactionNumber: "", exchangePlatform: formState.exchangePlatform })
-      handleReceiptRemove()
-      onSuccess?.()
-    } catch (error) {
-      console.error("Deposit submission failed", error)
-      setSubmitError("Network error. Please try again.")
-    } finally {
-      setSubmitLoading(false)
-    }
+  if (!selectedOption || !selectedAddress) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>No deposit wallets are configured. Please contact support.</AlertDescription>
+      </Alert>
+    )
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {addressError && (
+    <form action={formAction} className="space-y-6">
+      {state?.error && (
         <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between gap-4">
-            <span>{addressError}</span>
-            <Button type="button" variant="secondary" size="sm" onClick={fetchDepositAddress}>
-              <RefreshCcw className="mr-1 h-3 w-3" /> Retry
-            </Button>
-          </AlertDescription>
+          <AlertDescription>{state.error}</AlertDescription>
         </Alert>
       )}
 
-      {submitError && (
-        <Alert variant="destructive">
-          <AlertDescription>{submitError}</AlertDescription>
-        </Alert>
-      )}
-
-      {submitSuccess && (
+      {state?.success && (
         <Alert className="border-green-200 bg-green-50">
           <div className="flex items-center gap-2 text-green-700">
             <CheckCircle className="h-4 w-4" />
-            <AlertDescription>{submitSuccess}</AlertDescription>
+            <AlertDescription>{state.success}</AlertDescription>
           </div>
         </Alert>
       )}
 
       <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-4">
+          <Label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+            Select Network
+          </Label>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {options.map((option) => {
+              const isSelected = option.id === selectedOption.id
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSelectedOptionId(option.id)}
+                  className={`rounded-xl border p-4 text-left transition-shadow ${
+                    isSelected
+                      ? "border-emerald-500 bg-emerald-50 shadow-md dark:bg-emerald-950"
+                      : "border-slate-200 hover:shadow"
+                  }`}
+                >
+                  <p className="text-xs uppercase text-muted-foreground">{option.network}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{option.label}</p>
+                  <p className="mt-2 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+                    {option.address}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3 md:max-w-md">
             <div>
               <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Deposit address</p>
               <p className="text-xs text-muted-foreground">
-                Transfer only USDT to the address below. Cross-check the network before confirming on your exchange.
+                Transfer only USDT using the selected network. Cross-check the address before confirming on your exchange.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Input
                 readOnly
-                value={
-                  addressLoading
-                    ? "Loading deposit address..."
-                    : depositAddress || "Deposit address unavailable"
-                }
+                value={selectedAddress}
                 className="h-12 rounded-xl bg-white font-mono text-sm shadow-inner dark:bg-slate-950"
               />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleCopy}
-                disabled={!depositAddress || addressLoading}
                 className="h-12 rounded-xl border-slate-300 text-sm font-semibold shadow-sm"
               >
                 {copied ? (
@@ -307,16 +256,13 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
                 )}
               </Button>
             </div>
-            {depositNetwork && (
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Network: {depositNetwork}</p>
-            )}
             <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>• Use the exact transaction hash from Binance, OKX, or your preferred exchange.</li>
+              <li>• Use the exact transaction hash from your exchange withdrawal.</li>
               <li>• Upload the full confirmation screenshot showing date, amount, and hash.</li>
               <li>• Deposits are reviewed by compliance before crediting.</li>
             </ul>
           </div>
-          {depositAddress && (
+          {selectedAddress && (
             <div className="flex shrink-0 justify-center">
               <img
                 src={qrCodeUrl}
@@ -337,16 +283,16 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
               </Label>
               <Input
                 id="deposit-amount"
+                name="amount"
                 type="number"
-                min="30"
+                min={minDeposit}
                 step="0.01"
-                placeholder="Enter amount (min $30)"
+                placeholder={`Enter amount (min $${minDeposit})`}
                 value={formState.amount}
                 onChange={(event) =>
                   setFormState((previous) => ({ ...previous, amount: event.target.value }))
                 }
                 required
-                disabled={addressLoading}
                 className="h-12 rounded-xl"
               />
             </div>
@@ -358,17 +304,17 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
                 onValueChange={(value) =>
                   setFormState((previous) => ({ ...previous, exchangePlatform: value }))
                 }
-                disabled={addressLoading}
               >
                 <SelectTrigger className="h-12 rounded-xl">
                   <SelectValue placeholder="Select exchange" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EXCHANGE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="binance">Binance</SelectItem>
+                  <SelectItem value="okx">OKX</SelectItem>
+                  <SelectItem value="bybit">Bybit</SelectItem>
+                  <SelectItem value="kucoin">KuCoin</SelectItem>
+                  <SelectItem value="coinbase">Coinbase</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -379,6 +325,7 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
               </Label>
               <Input
                 id="transaction-number"
+                name="transactionNumber"
                 type="text"
                 placeholder="Paste the 64-character blockchain hash"
                 value={formState.transactionNumber}
@@ -386,7 +333,6 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
                   setFormState((previous) => ({ ...previous, transactionNumber: event.target.value }))
                 }
                 required
-                disabled={addressLoading}
                 className="h-12 rounded-xl font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
@@ -402,10 +348,10 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
             <Input
               key={receiptInputKey}
               id="transaction-receipt"
+              name="receipt"
               type="file"
               accept={RECEIPT_ALLOWED_TYPES.join(",")}
               onChange={handleReceiptChange}
-              disabled={addressLoading}
               className="h-12 cursor-pointer rounded-xl"
             />
             {receiptError && <p className="text-xs text-destructive">{receiptError}</p>}
@@ -442,23 +388,10 @@ export function DepositForm({ onSuccess }: DepositFormProps) {
         </div>
       </section>
 
-      <Button
-        type="submit"
-        disabled={submitLoading || addressLoading || !depositAddress}
-        className="w-full h-12 rounded-xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500 text-base font-semibold shadow-lg hover:from-emerald-600 hover:to-blue-600"
-      >
-        {submitLoading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Processing...
-          </>
-        ) : (
-          <>
-            <ArrowDownLeft className="mr-2 h-4 w-4" />
-            Submit Deposit for Review
-          </>
-        )}
-      </Button>
+      <input type="hidden" name="network" value={selectedOption.id} />
+      <input type="hidden" name="exchangePlatform" value={formState.exchangePlatform} />
+
+      <SubmitButton />
     </form>
   )
 }

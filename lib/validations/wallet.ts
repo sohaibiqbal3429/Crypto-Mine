@@ -1,4 +1,4 @@
-import { z } from "zod"
+﻿import { z } from "zod"
 
 const TRANSACTION_NUMBER_MAX_LENGTH = 120
 
@@ -15,6 +15,7 @@ export const depositSchema = z.object({
   exchangePlatform: z
     .enum(["binance", "okx", "bybit", "kucoin", "coinbase", "other"])
     .optional(),
+  network: z.string().trim().min(1, "Network selection is required"),
 })
 
 export const withdrawSchema = z.object({

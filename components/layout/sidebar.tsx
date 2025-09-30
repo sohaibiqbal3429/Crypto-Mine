@@ -31,7 +31,6 @@ const navigation = [
   { name: "Team", href: "/team", icon: Users },
   { name: "List Coin", href: "/coins", icon: Coins },
   { name: "Coin Mining", href: "/mining", icon: Pickaxe },
-  { name: "Staking", href: "/staking", icon: TrendingUp },
   { name: "Wallet", href: "/wallet", icon: Wallet },
   { name: "E-Wallet", href: "/e-wallet", icon: CreditCard },
   { name: "History", href: "/transactions", icon: History },
@@ -68,7 +67,7 @@ export function Sidebar({ user }: SidebarProps) {
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
         <div className="flex items-center space-x-2">
-          <Image src="/images/logo.jpg" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
+          <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
           <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
         </div>
         <div className="md:hidden">
@@ -110,7 +109,7 @@ export function Sidebar({ user }: SidebarProps) {
             <Settings className="mr-3 h-5 w-5" />
             Admin Panel
           </Link>
-        )}
+         )} 
       </nav>
 
       {/* User info and logout */}
@@ -141,7 +140,7 @@ export function Sidebar({ user }: SidebarProps) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-5 w-5" />
+            <Menu className="h-20 w-20" />
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">

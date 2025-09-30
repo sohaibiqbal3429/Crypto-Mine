@@ -74,7 +74,7 @@ async function seedDatabase() {
   }
 
   // Create admin user
-  const adminExists = await User.findOne({ email: "admin@cryptominingg.com" })
+  const adminExists = await User.findOne({ email: "admin@cryptomining.com" })
   if (!adminExists) {
     const passwordHash = await bcrypt.hash("admin123", 12)
     await User.create({

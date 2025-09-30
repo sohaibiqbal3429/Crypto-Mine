@@ -1,10 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server"
-import dbConnect from "@/lib/mongodb"
-import User from "@/models/User"
-import Balance from "@/models/Balance"
-import MiningSession from "@/models/MiningSession"
-import Settings from "@/models/Settings"
+﻿import { type NextRequest, NextResponse } from "next/server"
+
 import { getUserFromRequest } from "@/lib/auth"
+import { getMiningStatus, MiningActionError } from "@/lib/services/mining"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,44 +10,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    await dbConnect()
-
-    const user = await User.findById(userPayload.userId)
-    const balance = await Balance.findOne({ userId: user._id })
-    const settings = await Settings.findOne()
-
-    if (!user || !balance || !settings) {
-      return NextResponse.json({ error: "Data not found" }, { status: 404 })
-    }
-
-    // Get or create mining session
-    let miningSession = await MiningSession.findOne({ userId: user._id })
-    if (!miningSession) {
-      miningSession = await MiningSession.create({
-        userId: user._id,
-        isActive: false,
-        earnedInCycle: 0,
-        sessionStartedAt: null,
-        nextEligibleAt: null,
-      })
-    }
-
-    const requiredDeposit = settings.gating?.minDeposit ?? 30
-    const hasMinimumDeposit = user.depositTotal >= requiredDeposit
-
-    if (!hasMinimumDeposit) {
+    const status = await getMiningStatus(userPayload.userId)
+    if (status.requiresDeposit) {
       return NextResponse.json(
         {
-          error: `You need to deposit at least $${requiredDeposit} USDT before mining can start`,
+          error: `You need to deposit at least $${status.minDeposit} USDT before mining can start`,
           requiresDeposit: true,
-          minDeposit: requiredDeposit,
+          minDeposit: status.minDeposit,
         },
         { status: 403 },
       )
     }
 
-    const canMine = user.depositTotal > 0 || balance.current > 0
-    if (!canMine) {
+    if (!status.canMine) {
       return NextResponse.json(
         {
           error: "You need to make a deposit first to start mining",
@@ -59,27 +31,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate mining base amount
-    const baseAmount = Math.max(user.depositTotal, balance.staked, requiredDeposit)
-
     return NextResponse.json({
       success: true,
-      canMine: true,
-      baseAmount,
+      canMine: status.canMine,
+      baseAmount: status.baseAmount,
       miningSession: {
-        isActive: miningSession.isActive,
-        earnedInCycle: miningSession.earnedInCycle,
-        nextEligibleAt: miningSession.nextEligibleAt,
-        sessionStartedAt: miningSession.sessionStartedAt,
+        isActive: status.canMine,
+        earnedInCycle: status.earnedInCycle,
+        nextEligibleAt: status.nextEligibleAt,
+        sessionStartedAt: status.lastClickAt,
       },
-      userStats: {
-        depositTotal: user.depositTotal,
-        roiEarnedTotal: user.roiEarnedTotal,
-        currentBalance: balance.current,
-        totalEarning: balance.totalEarning,
-      },
+      userStats: status.userStats,
     })
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof MiningActionError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error("Start mining session error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }

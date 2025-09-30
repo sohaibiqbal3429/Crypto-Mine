@@ -1,52 +1,43 @@
-"use client"
+﻿import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
 
-import { useEffect, useState } from "react"
-
+import { verifyToken } from "@/lib/auth"
+import { fetchWalletContext } from "@/lib/services/wallet"
+import { getDepositWalletOptions } from "@/lib/config/wallet"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, ArrowDownLeft } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowDownLeft } from "lucide-react"
 import { DepositForm } from "@/components/wallet/deposit-form"
 
-export default function WalletDepositPage() {
-  const [user, setUser] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await fetch("/api/auth/me")
-        if (response.ok) {
-          const data = await response.json()
-          setUser(data.user)
-        }
-      } catch (error) {
-        console.error("Failed to load user information", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchUser()
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+export default async function WalletDepositPage() {
+  const token = cookies().get("auth-token")?.value
+  if (!token) {
+    redirect("/auth/login")
   }
+
+  const session = verifyToken(token!)
+  if (!session) {
+    redirect("/auth/login")
+  }
+
+  const context = await fetchWalletContext(session.userId)
+  if (!context) {
+    redirect("/auth/login")
+  }
+
+  const walletOptions = getDepositWalletOptions()
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar user={user} />
+      <Sidebar user={context.user} />
 
       <main className="flex-1 overflow-auto md:ml-64">
         <div className="p-6 space-y-6">
           <div className="space-y-2">
             <h1 className="text-3xl font-bold">Deposit Funds</h1>
             <p className="text-muted-foreground">
-              Transfer USDT to the platform wallet address and submit your transaction hash for verification.
+              Transfer USDT to one of the approved wallet addresses below and submit your transaction hash for verification.
             </p>
           </div>
 
@@ -57,11 +48,19 @@ export default function WalletDepositPage() {
                 Deposit Instructions
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                The deposit address below is unique to the platform. All users share the same address for now.
+                Choose the network that matches your exchange withdrawal. Only confirmed deposits will be credited to your account.
               </p>
             </CardHeader>
             <CardContent>
-              <DepositForm />
+              {walletOptions.length === 0 ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Deposit wallets are not configured. Please contact support.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <DepositForm options={walletOptions} minDeposit={context.minDeposit} />
+              )}
             </CardContent>
           </Card>
         </div>
@@ -69,4 +68,3 @@ export default function WalletDepositPage() {
     </div>
   )
 }
-
