@@ -47,30 +47,6 @@ export default function TasksPage() {
             target: 1,
             icon: CheckCircle,
           },
-<<<<<<< HEAD
-          // {
-          //   id: "2",
-          //   title: "Refer 3 Friends",
-          //   description: "Invite 3 friends to join the platform",
-          //   reward: 10,
-          //   type: "referral",
-          //   completed: false,
-          //   progress: 1,
-          //   target: 3,
-          //   icon: Users,
-          // },
-          // {
-          //   id: "3",
-          //   title: "First Deposit",
-          //   description: "Make your first deposit of $80 or more",
-          //   reward: 20,
-          //   type: "deposit",
-          //   completed: false,
-          //   progress: 0,
-          //   target: 1,
-          //   icon: DollarSign,
-          // },
-=======
           {
             id: "2",
             title: "Refer 3 Friends",
@@ -93,7 +69,6 @@ export default function TasksPage() {
             target: 1,
             icon: DollarSign,
           },
->>>>>>> edbdc6cf53078ea3108b8217842cce9568beafab
           {
             id: "4",
             title: "Mine 10 Times",
