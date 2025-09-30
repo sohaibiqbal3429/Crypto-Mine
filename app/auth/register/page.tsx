@@ -9,12 +9,22 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { SORTED_COUNTRY_DIAL_CODES } from "@/lib/constants/country-codes"
 
 export default function RegisterPage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    countryCode: "+1",
+    phone: "",
     password: "",
     confirmPassword: "",
     referralCode: "",
@@ -31,6 +41,14 @@ export default function RegisterPage() {
       return
     }
 
+    const cleanedPhone = formData.phone.replace(/\D/g, "")
+    const normalizedPhone = `${formData.countryCode}${cleanedPhone}`
+
+    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+      setError("Please enter a valid international phone number")
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -39,7 +57,8 @@ export default function RegisterPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name,
-          email: formData.email,
+          email: formData.email.trim().toLowerCase(),
+          phone: normalizedPhone,
           password: formData.password,
           referralCode: formData.referralCode,
         }),
@@ -62,13 +81,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-2xl rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
         <div className="bg-black text-white text-center py-4">
           <h1 className="text-lg font-semibold tracking-wide">Referral Signup System</h1>
         </div>
 
-        <div className="px-8 py-6 space-y-6">
+        <div className="px-6 sm:px-8 py-6 space-y-6">
           <div className="flex justify-center">
             <div className="w-14 h-14 rounded-full border border-slate-300 flex items-center justify-center text-slate-600">
               <UserPlus className="w-8 h-8" />
@@ -81,7 +100,7 @@ export default function RegisterPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-sm font-semibold text-slate-700">
@@ -111,6 +130,44 @@ export default function RegisterPage() {
                   className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">
+                Phone Number
+              </Label>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <Select
+                  value={formData.countryCode}
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, countryCode: value }))}
+                >
+                  <SelectTrigger className="sm:w-40 h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700">
+                    <SelectValue placeholder="Country" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64">
+                    {SORTED_COUNTRY_DIAL_CODES.map((country) => (
+                      <SelectItem key={country.isoCode} value={country.dialCode}>
+                        {country.name} ({country.dialCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  id="phone"
+                  inputMode="tel"
+                  placeholder="123456789"
+                  value={formData.phone}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, "") }))
+                  }
+                  required
+                  className="h-11 flex-1 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Include your full phone number. Country code is added automatically.
+              </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">

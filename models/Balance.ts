@@ -8,6 +8,9 @@ export interface IBalance extends Document {
   lockedCapital: number
   staked: number
   pendingWithdraw: number
+  teamRewardsAvailable: number
+  teamRewardsClaimed: number
+  teamRewardsLastClaimedAt?: Date
   updatedAt: Date
 }
 
@@ -20,6 +23,9 @@ const BalanceSchema = new Schema<IBalance>(
     lockedCapital: { type: Number, default: 0 },
     staked: { type: Number, default: 0 },
     pendingWithdraw: { type: Number, default: 0 },
+    teamRewardsAvailable: { type: Number, default: 0 },
+    teamRewardsClaimed: { type: Number, default: 0 },
+    teamRewardsLastClaimedAt: { type: Date },
   },
   {
     timestamps: true,

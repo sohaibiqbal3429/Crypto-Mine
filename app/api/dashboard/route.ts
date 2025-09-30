@@ -39,8 +39,7 @@ export async function GET(request: NextRequest) {
       depositTotal: { $gte: 80 },
     })
 
-    // Calculate team reward (simplified - would need more complex logic for actual team structure)
-    const teamReward = user.level * 100 // Placeholder calculation
+    const teamReward = balance.teamRewardsAvailable || 0
 
     // Get next mining eligible time
     const now = new Date()
