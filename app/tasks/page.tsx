@@ -51,7 +51,7 @@ export default function TasksPage() {
             id: "2",
             title: "Refer 3 Friends",
             description: "Invite 3 friends to join the platform",
-            reward: 50,
+            reward: 2,
             type: "referral",
             completed: false,
             progress: 1,
