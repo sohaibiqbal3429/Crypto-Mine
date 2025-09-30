@@ -2,7 +2,13 @@ import mongoose, { Schema, type Document } from "mongoose"
 
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId
-  kind: "referral-joined" | "deposit-approved" | "withdraw-approved" | "level-up" | "cap-reached"
+  kind:
+    | "referral-joined"
+    | "deposit-approved"
+    | "withdraw-approved"
+    | "level-up"
+    | "cap-reached"
+    | "team-reward-claimed"
   title: string
   body: string
   read: boolean
@@ -14,7 +20,14 @@ const NotificationSchema = new Schema<INotification>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     kind: {
       type: String,
-      enum: ["referral-joined", "deposit-approved", "withdraw-approved", "level-up", "cap-reached"],
+      enum: [
+        "referral-joined",
+        "deposit-approved",
+        "withdraw-approved",
+        "level-up",
+        "cap-reached",
+        "team-reward-claimed",
+      ],
       required: true,
     },
     title: { type: String, required: true },

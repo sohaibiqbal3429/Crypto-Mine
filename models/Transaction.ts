@@ -2,7 +2,16 @@ import mongoose, { Schema, type Document } from "mongoose"
 
 export interface ITransaction extends Document {
   userId: mongoose.Types.ObjectId
-  type: "deposit" | "withdraw" | "earn" | "stake" | "stakeInterest" | "commission" | "bonus" | "adjust"
+  type:
+    | "deposit"
+    | "withdraw"
+    | "earn"
+    | "stake"
+    | "stakeInterest"
+    | "commission"
+    | "bonus"
+    | "adjust"
+    | "teamReward"
   amount: number
   meta: any
   status?: "pending" | "approved" | "rejected"
@@ -14,7 +23,17 @@ const TransactionSchema = new Schema<ITransaction>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     type: {
       type: String,
-      enum: ["deposit", "withdraw", "earn", "stake", "stakeInterest", "commission", "bonus", "adjust"],
+      enum: [
+        "deposit",
+        "withdraw",
+        "earn",
+        "stake",
+        "stakeInterest",
+        "commission",
+        "bonus",
+        "adjust",
+        "teamReward",
+      ],
       required: true,
     },
     amount: { type: Number, required: true },

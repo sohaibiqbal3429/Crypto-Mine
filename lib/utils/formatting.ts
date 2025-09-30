@@ -73,24 +73,24 @@ export function formatTime(date: Date | string): string {
 
 // Phone number formatting
 export function formatPhoneDisplay(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "")
+  const cleaned = phone.replace(/[^\d]/g, "")
+  if (!cleaned) return phone
 
-  if (cleaned.startsWith("92")) {
-    // Pakistan format: +92 XXX XXX XXXX
-    return `+92 ${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`
+  // Basic grouping every 3-4 digits for readability
+  const groups: string[] = []
+  let index = 0
+  const countryCodeLength = Math.min(3, Math.max(1, cleaned.length - 6))
+  const countryCode = cleaned.slice(0, countryCodeLength)
+  let remaining = cleaned.slice(countryCodeLength)
+
+  while (remaining.length > 0) {
+    const chunkSize = remaining.length > 4 ? 3 : remaining.length
+    groups.push(remaining.slice(0, chunkSize))
+    remaining = remaining.slice(chunkSize)
+    index += 1
   }
 
-  if (cleaned.startsWith("86")) {
-    // China format: +86 XXX XXXX XXXX
-    return `+86 ${cleaned.slice(2, 5)} ${cleaned.slice(5, 9)} ${cleaned.slice(9)}`
-  }
-
-  if (cleaned.startsWith("91")) {
-    // India format: +91 XXXXX XXXXX
-    return `+91 ${cleaned.slice(2, 7)} ${cleaned.slice(7)}`
-  }
-
-  return phone
+  return `+${countryCode}${groups.length ? " " : ""}${groups.join(" ")}`
 }
 
 // Percentage formatting

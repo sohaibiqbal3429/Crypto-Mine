@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid phone number format" }, { status: 400 })
       }
 
-      const formattedPhone = formatPhoneNumber(phone, "+92") // Default to Pakistan if no country code
+      const formattedPhone = formatPhoneNumber(phone)
       console.log("[v0] Formatted phone:", formattedPhone)
 
       // Delete any existing OTPs for this phone
