@@ -20,10 +20,19 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Data validation passed")
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email: validatedData.email })
-    if (existingUser) {
+    const [existingEmail, existingPhone] = await Promise.all([
+      User.findOne({ email: validatedData.email.toLowerCase() }),
+      User.findOne({ phone: validatedData.phone }),
+    ])
+
+    if (existingEmail) {
       console.log("[v0] User already exists with email:", validatedData.email)
-      return NextResponse.json({ error: "User already exists" }, { status: 400 })
+      return NextResponse.json({ error: "Email already in use" }, { status: 400 })
+    }
+
+    if (existingPhone) {
+      console.log("[v0] User already exists with phone:", validatedData.phone)
+      return NextResponse.json({ error: "Phone number already in use" }, { status: 400 })
     }
 
     // Verify referral code exists
@@ -49,7 +58,8 @@ export async function POST(request: NextRequest) {
     // Create user
     const user = await User.create({
       name: validatedData.name,
-      email: validatedData.email,
+      email: validatedData.email.toLowerCase(),
+      phone: validatedData.phone,
       passwordHash,
       referralCode: newReferralCode,
       referredBy: referrer._id,

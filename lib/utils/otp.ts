@@ -19,34 +19,22 @@ export function isOTPExpired(expiresAt: Date): boolean {
   return new Date() > expiresAt
 }
 
-export function formatPhoneNumber(phone: string, countryCode: string): string {
-  // Remove all non-digits
-  const cleaned = phone.replace(/\D/g, "")
+const E164_REGEX = /^\+[1-9]\d{7,14}$/
 
-  // Add country code if not present
-  if (!cleaned.startsWith(countryCode.replace("+", ""))) {
-    return `${countryCode}${cleaned}`
+export function formatPhoneNumber(phone: string): string {
+  const trimmed = phone.trim()
+  if (trimmed.startsWith("+")) {
+    return `+${trimmed.replace(/[^\d]/g, "")}`
   }
 
-  return `+${cleaned}`
+  return `+${trimmed.replace(/[^\d]/g, "")}`
 }
 
-export function validatePhoneNumber(phone: string): { isValid: boolean; country?: string } {
-  const cleaned = phone.replace(/\D/g, "")
+export function validatePhoneNumber(phone: string): { isValid: boolean } {
+  const formatted = formatPhoneNumber(phone)
 
-  // Pakistan: +92 (11 digits total)
-  if (cleaned.startsWith("92") && cleaned.length === 12) {
-    return { isValid: true, country: "Pakistan" }
-  }
-
-  // China: +86 (11 digits total)
-  if (cleaned.startsWith("86") && cleaned.length === 13) {
-    return { isValid: true, country: "China" }
-  }
-
-  // India: +91 (10 digits total)
-  if (cleaned.startsWith("91") && cleaned.length === 12) {
-    return { isValid: true, country: "India" }
+  if (E164_REGEX.test(formatted)) {
+    return { isValid: true }
   }
 
   return { isValid: false }

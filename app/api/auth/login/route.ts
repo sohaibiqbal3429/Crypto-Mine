@@ -11,14 +11,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = loginSchema.parse(body)
 
+    const { identifier, identifierType, password } = validatedData
+
+    const query =
+      identifierType === "email"
+        ? { email: identifier.toLowerCase() }
+        : { phone: identifier }
+
     // Find user
-    const user = await User.findOne({ email: validatedData.email })
+    const user = await User.findOne(query)
     if (!user) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
     // Verify password
-    const isValidPassword = await comparePassword(validatedData.password, user.passwordHash)
+    const isValidPassword = await comparePassword(password, user.passwordHash)
     if (!isValidPassword) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }

@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { validatePhoneNumber } from "@/lib/utils/otp"
+import { SORTED_COUNTRY_DIAL_CODES } from "@/lib/constants/country-codes"
 
 interface PhoneInputProps {
   value: string
@@ -12,15 +13,21 @@ interface PhoneInputProps {
   error?: string
 }
 
-const countryCodes = [
-  { code: "+92", country: "Pakistan", flag: "🇵🇰" },
-  { code: "+86", country: "China", flag: "🇨🇳" },
-  { code: "+91", country: "India", flag: "🇮🇳" },
-]
-
 export default function PhoneInput({ value, onChange, error }: PhoneInputProps) {
-  const [selectedCountry, setSelectedCountry] = useState("+92")
-  const [phoneNumber, setPhoneNumber] = useState("")
+  const initialCode = useMemo(() => {
+    const match = value.match(/^(\+\d{1,4})/)
+    return match ? match[1] : "+1"
+  }, [value])
+  const [selectedCountry, setSelectedCountry] = useState(initialCode)
+  const [phoneNumber, setPhoneNumber] = useState(() => value.replace(/^(\+\d{1,4})/, ""))
+
+  useEffect(() => {
+    const match = value.match(/^(\+\d{1,4})(\d*)/)
+    if (match) {
+      setSelectedCountry(match[1])
+      setPhoneNumber(match[2])
+    }
+  }, [value])
 
   const handleCountryChange = (countryCode: string) => {
     setSelectedCountry(countryCode)
@@ -41,18 +48,15 @@ export default function PhoneInput({ value, onChange, error }: PhoneInputProps) 
   return (
     <div className="space-y-2">
       <Label htmlFor="phone">Phone Number</Label>
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <Select value={selectedCountry} onValueChange={handleCountryChange}>
-          <SelectTrigger className="w-32">
+          <SelectTrigger className="sm:w-44">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
-            {countryCodes.map((country) => (
-              <SelectItem key={country.code} value={country.code}>
-                <span className="flex items-center gap-2">
-                  <span>{country.flag}</span>
-                  <span>{country.code}</span>
-                </span>
+          <SelectContent className="max-h-64">
+            {SORTED_COUNTRY_DIAL_CODES.map((country) => (
+              <SelectItem key={country.isoCode} value={country.dialCode}>
+                {country.name} ({country.dialCode})
               </SelectItem>
             ))}
           </SelectContent>
