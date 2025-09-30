@@ -7,11 +7,14 @@ export const depositSchema = z.object({
   transactionNumber: z
     .string()
     .trim()
-    .min(3, "Transaction number must be at least 3 characters")
+    .min(10, "Transaction hash must be at least 10 characters")
     .max(
       TRANSACTION_NUMBER_MAX_LENGTH,
-      `Transaction number must be ${TRANSACTION_NUMBER_MAX_LENGTH} characters or less`,
+      `Transaction hash must be ${TRANSACTION_NUMBER_MAX_LENGTH} characters or less`,
     ),
+  exchangePlatform: z
+    .enum(["binance", "okx", "bybit", "kucoin", "coinbase", "other"])
+    .optional(),
 })
 
 export const withdrawSchema = z.object({

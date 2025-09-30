@@ -42,20 +42,26 @@ export const STAKING_CONFIG = {
 // Level system constants
 export const LEVEL_CONFIG = {
   requirements: [
-    { level: 1, depositRequired: 80, teamRequired: 0 },
-    { level: 2, depositRequired: 200, teamRequired: 2 },
-    { level: 3, depositRequired: 500, teamRequired: 5 },
-    { level: 4, depositRequired: 1000, teamRequired: 10 },
-    { level: 5, depositRequired: 2000, teamRequired: 20 },
-    { level: 6, depositRequired: 5000, teamRequired: 50 },
-    { level: 7, depositRequired: 10000, teamRequired: 100 },
-    { level: 8, depositRequired: 20000, teamRequired: 200 },
-    { level: 9, depositRequired: 50000, teamRequired: 500 },
-    { level: 10, depositRequired: 100000, teamRequired: 1000 },
+    { level: 0, depositRequired: 0, activeMembersRequired: 0 },
+    { level: 1, depositRequired: 30, activeMembersRequired: 0 },
+    { level: 2, depositRequired: 30, activeMembersRequired: 5 },
+    { level: 3, depositRequired: 30, activeMembersRequired: 10 },
+    { level: 4, depositRequired: 30, activeMembersRequired: 15 },
+    { level: 5, depositRequired: 30, activeMembersRequired: 25 },
   ],
-  benefits: {
-    miningBonus: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-    referralBonus: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5],
+  perks: {
+    directCommission: {
+      1: "7% base commission",
+      2: "8% direct commission",
+      3: "9% direct commission",
+      4: "9% direct commission + 1% daily team reward",
+      5: "Monthly bonus & salary eligibility once targets are met",
+    },
+    salaryRequirement: {
+      activeMembers: 35,
+      directSales: 7000,
+      payout: 500,
+    },
   },
 } as const
 
@@ -94,6 +100,7 @@ export const API_ENDPOINTS = {
     register: "/api/auth/register",
     logout: "/api/auth/logout",
     me: "/api/auth/me",
+    resetPassword: "/api/auth/reset-password",
     sendOTP: "/api/auth/send-otp",
     verifyOTP: "/api/auth/verify-otp",
   },

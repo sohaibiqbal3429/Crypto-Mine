@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { mkdir, writeFile } from "fs/promises"
+import { mkdir, unlink, writeFile } from "fs/promises"
 import { extname, join } from "path"
-import { randomUUID } from "crypto"
+import { createHash, randomUUID } from "crypto"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
@@ -10,10 +10,16 @@ import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
 import { getUserFromRequest } from "@/lib/auth"
 import { depositSchema } from "@/lib/validations/wallet"
-import { processReferralCommission } from "@/lib/utils/commission"
+import { calculateUserLevel, processReferralCommission } from "@/lib/utils/commission"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
+const MIN_RECEIPT_SIZE_BYTES = 80 * 1024
+const HASH_PATTERNS = [
+  /^0x[a-fA-F0-9]{64}$/,
+  /^[a-fA-F0-9]{64}$/,
+  /^[A-Za-z0-9]{50,70}$/,
+]
 
 const RECEIPT_ALLOWED_MIME_TYPES = new Set([
   "image/png",
@@ -30,11 +36,17 @@ class ReceiptValidationError extends Error {}
 interface ParsedDepositPayload {
   amount: number
   transactionNumber: string
+  exchangePlatform?: string
 }
 
 interface ParsedDepositRequest {
   payload: ParsedDepositPayload
   receiptFile: File | null
+}
+
+function isLikelyTransactionHash(hash: string): boolean {
+  if (!hash) return false
+  return HASH_PATTERNS.some((pattern) => pattern.test(hash.trim()))
 }
 
 export async function POST(request: NextRequest) {
@@ -67,9 +79,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const receiptMeta = receiptFile ? await persistReceipt(receiptFile) : null
+    const normalizedTransactionHash = validatedData.transactionNumber.trim()
+    const isFakeDeposit = normalizedTransactionHash === TEST_TRANSACTION_NUMBER
 
-    const isFakeDeposit = validatedData.transactionNumber === TEST_TRANSACTION_NUMBER
+    if (!isFakeDeposit && !isLikelyTransactionHash(normalizedTransactionHash)) {
+      return NextResponse.json(
+        { error: "Please provide a valid blockchain transaction hash" },
+        { status: 400 },
+      )
+    }
+
+    if (!receiptFile && !isFakeDeposit) {
+      return NextResponse.json(
+        { error: "A payment receipt screenshot from your exchange is required" },
+        { status: 400 },
+      )
+    }
+
+    const existingTransaction = await Transaction.findOne({
+      "meta.transactionNumber": normalizedTransactionHash,
+      type: "deposit",
+    })
+
+    if (existingTransaction) {
+      return NextResponse.json(
+        { error: "This transaction hash has already been submitted" },
+        { status: 400 },
+      )
+    }
+
+    const receiptResult = receiptFile ? await persistReceipt(receiptFile) : null
+    const receiptMeta = receiptResult?.meta ?? null
+
+    if (receiptMeta) {
+      const duplicateProof = await Transaction.findOne({ "meta.receipt.checksum": receiptMeta.checksum })
+
+      if (duplicateProof) {
+        if (receiptResult?.filePath) {
+          await unlink(receiptResult.filePath).catch(() => {})
+        }
+
+        return NextResponse.json(
+          { error: "This payment receipt has already been submitted" },
+          { status: 400 },
+        )
+      }
+    }
 
     if (isFakeDeposit) {
       const transaction = await Transaction.create({
@@ -78,9 +133,11 @@ export async function POST(request: NextRequest) {
         amount: FAKE_DEPOSIT_AMOUNT,
         status: "approved",
         meta: {
-          transactionNumber: validatedData.transactionNumber,
+          transactionNumber: normalizedTransactionHash,
+          transactionHash: normalizedTransactionHash,
           depositWalletAddress: configuredDepositAddress,
           isFakeDeposit: true,
+          exchangePlatform: validatedData.exchangePlatform ?? null,
           ...(receiptMeta ? { receipt: receiptMeta } : {}),
         },
       })
@@ -104,6 +161,7 @@ export async function POST(request: NextRequest) {
       ])
 
       await processReferralCommission(userPayload.userId, FAKE_DEPOSIT_AMOUNT)
+      await calculateUserLevel(userPayload.userId)
 
       await Notification.create({
         userId: userPayload.userId,
@@ -131,8 +189,10 @@ export async function POST(request: NextRequest) {
       amount: validatedData.amount,
       status: "pending",
       meta: {
-        transactionNumber: validatedData.transactionNumber,
+        transactionNumber: normalizedTransactionHash,
+        transactionHash: normalizedTransactionHash,
         depositWalletAddress: configuredDepositAddress,
+        exchangePlatform: validatedData.exchangePlatform ?? null,
         ...(receiptMeta ? { receipt: receiptMeta } : {}),
       },
     })
@@ -177,6 +237,7 @@ async function parseDepositRequest(request: NextRequest): Promise<ParsedDepositR
     const payload: ParsedDepositPayload = {
       amount: coerceNumericValue(formData.get("amount")),
       transactionNumber: coerceStringValue(formData.get("transactionNumber")),
+      exchangePlatform: coerceStringValue(formData.get("exchangePlatform")) || undefined,
     }
 
     const receiptEntry = formData.get("receipt")
@@ -190,6 +251,10 @@ async function parseDepositRequest(request: NextRequest): Promise<ParsedDepositR
   const payload: ParsedDepositPayload = {
     amount: coerceNumericValue(body?.amount),
     transactionNumber: typeof body?.transactionNumber === "string" ? body.transactionNumber : "",
+    exchangePlatform:
+      typeof body?.exchangePlatform === "string" && body.exchangePlatform.trim().length > 0
+        ? body.exchangePlatform
+        : undefined,
   }
 
   return { payload, receiptFile: null }
@@ -221,6 +286,10 @@ async function persistReceipt(file: File) {
     throw new ReceiptValidationError("Receipt image must be smaller than 5MB")
   }
 
+  if (file.size < MIN_RECEIPT_SIZE_BYTES) {
+    throw new ReceiptValidationError("Receipt image is too small. Please upload the full exchange confirmation screenshot")
+  }
+
   await mkdir(RECEIPT_UPLOAD_DIRECTORY, { recursive: true })
 
   const extension = resolveReceiptExtension(file)
@@ -230,12 +299,18 @@ async function persistReceipt(file: File) {
   const buffer = Buffer.from(await file.arrayBuffer())
   await writeFile(filePath, buffer)
 
+  const hash = createHash("sha256").update(buffer).digest("hex")
+
   return {
-    url: `/uploads/deposit-receipts/${fileName}`,
-    originalName: file.name,
-    mimeType: file.type,
-    size: file.size,
-    uploadedAt: new Date().toISOString(),
+    meta: {
+      url: `/uploads/deposit-receipts/${fileName}`,
+      originalName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      uploadedAt: new Date().toISOString(),
+      checksum: hash,
+    },
+    filePath,
   }
 }
 

@@ -214,14 +214,15 @@ export default function WalletPage() {
             </TabsContent>
 
             <TabsContent value="deposit" className="space-y-6">
-              <Card>
+              <Card className="border-0 shadow-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <ArrowDownLeft className="h-5 w-5" />
                     Make a Deposit
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Minimum deposit: $30 USDT. Deposits require admin approval.
+                    Deposit at least $30 USDT to unlock mining. Submit the blockchain hash and full exchange
+                    screenshot—our compliance team verifies every request before crediting.
                   </p>
                 </CardHeader>
                 <CardContent>

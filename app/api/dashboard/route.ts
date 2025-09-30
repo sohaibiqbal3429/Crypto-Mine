@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import MiningSession from "@/models/MiningSession"
+import Settings from "@/models/Settings"
 import { getUserFromRequest } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -27,7 +28,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Get mining session
-    const miningSession = await MiningSession.findOne({ userId: user._id })
+    const [miningSession, settings] = await Promise.all([
+      MiningSession.findOne({ userId: user._id }),
+      Settings.findOne(),
+    ])
 
     // Count active team members (users who deposited >= 80 USDT)
     const activeMembers = await User.countDocuments({
@@ -41,7 +45,9 @@ export async function GET(request: NextRequest) {
     // Get next mining eligible time
     const now = new Date()
     const nextEligibleAt = miningSession?.nextEligibleAt || now
-    const canMine = now >= nextEligibleAt
+    const minDeposit = settings?.gating?.minDeposit ?? 30
+    const hasMinimumDeposit = user.depositTotal >= minDeposit
+    const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
     return NextResponse.json({
       kpis: {
@@ -55,6 +61,8 @@ export async function GET(request: NextRequest) {
       },
       mining: {
         canMine,
+        requiresDeposit: !hasMinimumDeposit,
+        minDeposit,
         nextEligibleAt: nextEligibleAt.toISOString(),
         earnedInCycle: miningSession?.earnedInCycle || 0,
       },

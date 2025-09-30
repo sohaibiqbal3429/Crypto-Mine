@@ -1,206 +1,201 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { type FormEvent, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { Loader2, UserPlus } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ContactMethodSelector } from "@/components/auth/contact-method-selector"
-import { UserPlus, ArrowRight } from "lucide-react"
-
-type RegistrationStep = "contact" | "details" | "verification"
 
 export default function RegisterPage() {
-  const [step, setStep] = useState<RegistrationStep>("contact")
-  const [contactData, setContactData] = useState<{
-    email?: string
-    phone?: string
-    method: "email" | "phone"
-  } | null>(null)
-
+  const router = useRouter()
   const [formData, setFormData] = useState({
     name: "",
+    email: "",
     password: "",
+    confirmPassword: "",
     referralCode: "",
   })
-
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const router = useRouter()
 
-  const handleContactSubmit = async (data: { email?: string; phone?: string; method: "email" | "phone" }) => {
-    setIsLoading(true)
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
     setError("")
 
-    try {
-      console.log("[v0] Submitting contact data:", data)
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
 
-      // Send OTP to the provided contact method
-      const response = await fetch("/api/auth/send-otp", {
+    setIsLoading(true)
+
+    try {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: data.email,
-          phone: data.phone,
-          purpose: "registration",
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          referralCode: formData.referralCode,
         }),
       })
 
-      console.log("[v0] Response status:", response.status)
-      const result = await response.json()
-      console.log("[v0] Response data:", result)
+      const data = await response.json()
 
-      if (response.ok) {
-        setContactData(data)
-        setStep("details")
-        if (result.developmentOTP) {
-          setError(`Development Mode - Your OTP is: ${result.developmentOTP}`)
-        }
-      } else {
-        setError(result.error || "Failed to send verification code")
+      if (!response.ok) {
+        setError(data.error || "Registration failed")
+        return
       }
-    } catch (err) {
-      console.error("[v0] Network error:", err)
+
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Registration error", error)
       setError("Network error. Please try again.")
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleDetailsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!contactData) {
-      setError("Contact information missing")
-      return
-    }
-
-    // Redirect to OTP verification with form data stored in URL params
-    const params = new URLSearchParams({
-      purpose: "registration",
-      name: formData.name,
-      password: formData.password,
-      referralCode: formData.referralCode,
-    })
-
-    if (contactData.email) params.set("email", contactData.email)
-    if (contactData.phone) params.set("phone", contactData.phone)
-
-    router.push(`/auth/verify-otp?${params.toString()}`)
-  }
-
-  const renderContactStep = () => (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center">
-          <UserPlus className="w-8 h-8 text-white" />
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-xl rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
+        <div className="bg-black text-white text-center py-4">
+          <h1 className="text-lg font-semibold tracking-wide">Referral Signup System</h1>
         </div>
-        <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-        <CardDescription>Choose how you'd like to verify your account</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
 
-        <ContactMethodSelector onSubmit={handleContactSubmit} isLoading={isLoading} error={error} />
+        <div className="px-8 py-6 space-y-6">
+          <div className="flex justify-center">
+            <div className="w-14 h-14 rounded-full border border-slate-300 flex items-center justify-center text-slate-600">
+              <UserPlus className="w-8 h-8" />
+            </div>
+          </div>
 
-        <div className="mt-6 text-center text-sm">
-          <span className="text-muted-foreground">Already have an account? </span>
-          <Link href="/auth/login" className="text-primary hover:underline font-medium">
-            Sign in
-          </Link>
-        </div>
-      </CardContent>
-    </Card>
-  )
-
-  const renderDetailsStep = () => (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center">
-          <UserPlus className="w-8 h-8 text-white" />
-        </div>
-        <CardTitle className="text-2xl font-bold">Complete Registration</CardTitle>
-        <CardDescription>
-          Verification code sent to{" "}
-          <span className="font-medium text-foreground">{contactData?.email || contactData?.phone}</span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleDetailsSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder="Enter your full name"
-              value={formData.name}
-              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-              required
-            />
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-semibold text-slate-700">
+                  Name
+                </Label>
+                <Input
+                  id="name"
+                  placeholder="Enter name"
+                  value={formData.name}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
+                  required
+                  className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Create a password (min 6 characters)"
-              value={formData.password}
-              onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
-              required
-            />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter email"
+                  value={formData.email}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
+                  required
+                  className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="referralCode">Referral Code</Label>
-            <Input
-              id="referralCode"
-              type="text"
-              placeholder="Enter referral code (required)"
-              value={formData.referralCode}
-              onChange={(e) => setFormData((prev) => ({ ...prev, referralCode: e.target.value.toUpperCase() }))}
-              required
-            />
-          </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-semibold text-slate-700">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={formData.password}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
+                  required
+                  minLength={6}
+                  className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                />
+              </div>
 
-          <Button type="submit" className="w-full">
-            Continue to Verification
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </form>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-sm font-semibold text-slate-700">
+                  Re-enter Password
+                </Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Re-enter password"
+                  value={formData.confirmPassword}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                  }
+                  required
+                  minLength={6}
+                  className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
 
-        <div className="mt-6 text-center">
-          <Button
-            variant="ghost"
-            onClick={() => setStep("contact")}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Change contact method
-          </Button>
+            <div className="space-y-2">
+              <Label htmlFor="referralCode" className="text-sm font-semibold text-slate-700">
+                Referral Code
+              </Label>
+              <Input
+                id="referralCode"
+                placeholder="Referral code"
+                value={formData.referralCode}
+                onChange={(event) =>
+                  setFormData((prev) => ({ ...prev, referralCode: event.target.value.toUpperCase() }))
+                }
+                required
+                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:w-auto h-11 border-black text-black hover:bg-black/10"
+                onClick={() => router.push("/auth/forgot")}
+              >
+                Forgot Password?
+              </Button>
+
+              <Button type="submit" className="h-11 flex-1 sm:flex-none bg-black hover:bg-black/90" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  "Register"
+                )}
+              </Button>
+            </div>
+          </form>
+
+          <p className="text-center text-sm text-slate-600">
+            Already have an account?{" "}
+            <Link href="/auth/login" className="font-semibold text-black hover:underline">
+              Login instead
+            </Link>
+          </p>
         </div>
-      </CardContent>
-    </Card>
-  )
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-stone-100 flex items-center justify-center p-4">
-      {step === "contact" && renderContactStep()}
-      {step === "details" && renderDetailsStep()}
+      </div>
     </div>
   )
 }

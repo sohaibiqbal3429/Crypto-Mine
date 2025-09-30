@@ -37,6 +37,18 @@ export async function POST(request: NextRequest) {
       maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
       roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
     }
+    const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
+
+    if (user.depositTotal < requiredDeposit) {
+      return NextResponse.json(
+        {
+          error: `Mining requires a minimum deposit of $${requiredDeposit} USDT`,
+          requiresDeposit: true,
+          minDeposit: requiredDeposit,
+        },
+        { status: 403 },
+      )
+    }
 
     if (!balance) {
       balance = await Balance.create({
@@ -82,7 +94,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const baseAmount = Math.max(user.depositTotal, balance.staked, 30)
+    const baseAmount = Math.max(user.depositTotal, balance.staked, requiredDeposit)
     const profit = calculateMiningProfit(baseAmount, miningSettings.minPct, miningSettings.maxPct)
 
     const newRoiTotal = user.roiEarnedTotal + profit

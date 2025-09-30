@@ -43,10 +43,13 @@ export async function GET(request: NextRequest) {
       miningSession = await MiningSession.create({ userId: user._id })
     }
 
+    const requiredDeposit = settings.gating?.minDeposit ?? 30
+    const hasMinimumDeposit = user.depositTotal >= requiredDeposit
+
     const now = new Date()
-    const canMine = !miningSession.nextEligibleAt || now >= miningSession.nextEligibleAt
+    const canMine = (!miningSession.nextEligibleAt || now >= miningSession.nextEligibleAt) && hasMinimumDeposit
     const roiCapReached = hasReachedROICap(user.roiEarnedTotal, user.depositTotal, settings.mining.roiCap)
-    const baseAmount = Math.max(user.depositTotal, balance.staked, 30)
+    const baseAmount = hasMinimumDeposit ? Math.max(user.depositTotal, balance.staked, requiredDeposit) : 0
 
     let timeLeft = 0
     if (miningSession.nextEligibleAt && now < miningSession.nextEligibleAt) {
@@ -57,6 +60,8 @@ export async function GET(request: NextRequest) {
       success: true,
       canMine: canMine && !roiCapReached,
       roiCapReached,
+      requiresDeposit: !hasMinimumDeposit,
+      minDeposit: requiredDeposit,
       timeLeft,
       nextEligibleAt: miningSession.nextEligibleAt?.toISOString() || null,
       lastClickAt: miningSession.lastClickAt?.toISOString() || null,

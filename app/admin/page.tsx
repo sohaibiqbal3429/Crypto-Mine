@@ -41,10 +41,25 @@ export default function AdminPage() {
 
   const fetchData = async () => {
     try {
+      setLoading(true)
+
+      const transactionParams = new URLSearchParams()
+      if (transactionFilters.type && transactionFilters.type !== "all") {
+        transactionParams.set("type", transactionFilters.type)
+      }
+      if (transactionFilters.status && transactionFilters.status !== "all") {
+        transactionParams.set("status", transactionFilters.status)
+      }
+
+      const userParams = new URLSearchParams()
+      if (userSearch.trim().length > 0) {
+        userParams.set("search", userSearch.trim())
+      }
+
       const [userRes, transactionsRes, usersRes] = await Promise.all([
         fetch("/api/auth/me"),
-        fetch(`/api/admin/transactions?type=${transactionFilters.type}&status=${transactionFilters.status}`),
-        fetch(`/api/admin/users?search=${userSearch}`),
+        fetch(`/api/admin/transactions${transactionParams.toString() ? `?${transactionParams.toString()}` : ""}`),
+        fetch(`/api/admin/users${userParams.toString() ? `?${userParams.toString()}` : ""}`),
       ])
 
       if (userRes.ok && transactionsRes.ok && usersRes.ok) {

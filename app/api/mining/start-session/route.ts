@@ -35,7 +35,20 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Check if user can start mining (has deposit or balance)
+    const requiredDeposit = settings.gating?.minDeposit ?? 30
+    const hasMinimumDeposit = user.depositTotal >= requiredDeposit
+
+    if (!hasMinimumDeposit) {
+      return NextResponse.json(
+        {
+          error: `You need to deposit at least $${requiredDeposit} USDT before mining can start`,
+          requiresDeposit: true,
+          minDeposit: requiredDeposit,
+        },
+        { status: 403 },
+      )
+    }
+
     const canMine = user.depositTotal > 0 || balance.current > 0
     if (!canMine) {
       return NextResponse.json(
@@ -47,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate mining base amount
-    const baseAmount = Math.max(user.depositTotal, balance.staked, 30)
+    const baseAmount = Math.max(user.depositTotal, balance.staked, requiredDeposit)
 
     return NextResponse.json({
       success: true,

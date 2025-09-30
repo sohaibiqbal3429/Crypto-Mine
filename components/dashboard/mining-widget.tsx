@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,6 +14,8 @@ interface MiningWidgetProps {
     canMine: boolean
     nextEligibleAt: string
     earnedInCycle: number
+    requiresDeposit?: boolean
+    minDeposit?: number
   }
   onMiningSuccess: () => void
 }
@@ -133,6 +136,14 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
                 <Zap className="w-4 h-4 mr-2" />
                 Mining Available
               </Badge>
+            ) : mining.requiresDeposit ? (
+              <Badge
+                variant="secondary"
+                className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200 px-4 py-2"
+              >
+                <AlertCircle className="w-4 h-4 mr-2" />
+                Deposit Required
+              </Badge>
             ) : (
               <Badge
                 variant="secondary"
@@ -166,6 +177,18 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
               </>
             )}
           </Button>
+
+          {mining.requiresDeposit && (
+            <Button
+              asChild
+              variant="outline"
+              className="w-full max-w-sm h-11 border-dashed border-slate-300 text-sm font-semibold"
+            >
+              <Link href="/wallet/deposit">
+                Make a deposit (min ${mining.minDeposit?.toFixed(0) ?? 30} USDT)
+              </Link>
+            </Button>
+          )}
 
           {mining.earnedInCycle > 0 && (
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 rounded-lg p-4 border border-green-200 dark:border-green-800">

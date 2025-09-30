@@ -26,42 +26,42 @@ async function seedDatabase() {
     {
       level: 1,
       directPct: 7,
-      teamDailyPct: 1,
+      teamDailyPct: 0,
       teamRewardPct: 0,
-      activeMin: 5,
+      activeMin: 0,
       monthlyTargets: { directSale: 0, bonus: 0 },
     },
     {
       level: 2,
       directPct: 8,
-      teamDailyPct: 1,
+      teamDailyPct: 0,
+      teamRewardPct: 0,
+      activeMin: 5,
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 3,
+      directPct: 9,
+      teamDailyPct: 0,
       teamRewardPct: 0,
       activeMin: 10,
       monthlyTargets: { directSale: 0, bonus: 0 },
     },
     {
-      level: 3,
-      directPct: 8,
-      teamDailyPct: 0,
-      teamRewardPct: 2,
+      level: 4,
+      directPct: 9,
+      teamDailyPct: 1,
+      teamRewardPct: 0,
       activeMin: 15,
       monthlyTargets: { directSale: 0, bonus: 0 },
     },
     {
-      level: 4,
-      directPct: 9,
-      teamDailyPct: 0,
-      teamRewardPct: 2,
-      activeMin: 23,
-      monthlyTargets: { directSale: 2200, bonus: 200 },
-    },
-    {
       level: 5,
-      directPct: 10,
-      teamDailyPct: 0,
-      teamRewardPct: 2,
-      activeMin: 30,
-      monthlyTargets: { directSale: 4500, bonus: 0, salary: 400 },
+      directPct: 9,
+      teamDailyPct: 1,
+      teamRewardPct: 0,
+      activeMin: 25,
+      monthlyTargets: { directSale: 7000, bonus: 200, salary: 500 },
     },
   ]
 
@@ -74,7 +74,7 @@ async function seedDatabase() {
   }
 
   // Create admin user
-  const adminExists = await User.findOne({ email: "admin@cryptomining.com" })
+  const adminExists = await User.findOne({ email: "admin@cryptominingg.com" })
   if (!adminExists) {
     const passwordHash = await bcrypt.hash("admin123", 12)
     await User.create({

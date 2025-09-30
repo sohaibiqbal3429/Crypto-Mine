@@ -6,32 +6,50 @@ import Settings from "@/models/Settings"
 import Notification from "@/models/Notification"
 
 export async function calculateUserLevel(userId: string): Promise<number> {
-  const user = await User.findById(userId)
+  const [user, settings, directReferrals] = await Promise.all([
+    User.findById(userId),
+    Settings.findOne(),
+    User.find({ referredBy: userId }).select("depositTotal"),
+  ])
+
   if (!user) return 0
 
-  // Count active members (users who deposited >= 80 USDT)
-  const activeMembers = await User.countDocuments({
-    referredBy: userId,
-    depositTotal: { $gte: 80 },
-  })
+  const minDeposit = settings?.gating?.minDeposit ?? 30
+  const activeDepositThreshold = settings?.gating?.activeMinDeposit ?? 80
 
-  // Get commission rules to determine level
+  if (user.depositTotal < minDeposit) {
+    if (user.level !== 0) {
+      await User.updateOne({ _id: userId }, { level: 0 })
+    }
+    return 0
+  }
+
+  const activeDirectReferrals = directReferrals.filter((member) => member.depositTotal >= activeDepositThreshold)
+  const activeCount = activeDirectReferrals.length
+  const directSalesVolume = directReferrals.reduce((sum, member) => sum + member.depositTotal, 0)
+
   const rules = await CommissionRule.find().sort({ level: 1 })
 
-  let userLevel = 0
+  let userLevel = 1
   for (const rule of rules) {
-    if (activeMembers >= rule.activeMin) {
+    if (activeCount >= rule.activeMin) {
       userLevel = rule.level
     } else {
       break
     }
   }
 
-  // Update user level if changed
+  if (userLevel >= 5 && activeCount < 35) {
+    userLevel = 4
+  }
+
+  if (userLevel >= 5 && directSalesVolume < 7000) {
+    userLevel = 4
+  }
+
   if (user.level !== userLevel) {
     await User.updateOne({ _id: userId }, { level: userLevel })
 
-    // Create level up notification
     if (userLevel > user.level) {
       await Notification.create({
         userId,
