@@ -10,11 +10,16 @@ import { processReferralCommission } from "@/lib/utils/commission"
 export async function POST(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
-    if (!userPayload || userPayload.role !== "admin") {
+    if (!userPayload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     await dbConnect()
+
+    const adminUser = await User.findById(userPayload.userId).select("role")
+    if (!adminUser || adminUser.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const { transactionId } = await request.json()
 

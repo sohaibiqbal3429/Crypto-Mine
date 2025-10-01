@@ -30,7 +30,6 @@ interface DepositFormProps {
   onSuccess?: () => void
 }
 
-const RECEIPT_ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
 const initialState: DepositFormState = { error: null, success: null }
 
 function SubmitButton() {
@@ -76,7 +75,6 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
   })
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState("")
-  const [receiptError, setReceiptError] = useState("")
   const [receiptInputKey, setReceiptInputKey] = useState(() => Date.now())
   const [copied, setCopied] = useState(false)
 
@@ -114,10 +112,9 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
     }
   }
 
+  // ✅ No restriction on receipt file
   const handleReceiptChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0] ?? null
-
-    setReceiptError("")
 
     if (!file) {
       setReceiptFile(null)
@@ -131,24 +128,6 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
       return
     }
 
-    if (!RECEIPT_ALLOWED_TYPES.includes(file.type)) {
-      setReceiptError("Receipt must be an image (PNG, JPG, JPEG, WEBP, or GIF)")
-      event.target.value = ""
-      return
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setReceiptError("Receipt image must be smaller than 5MB")
-      event.target.value = ""
-      return
-    }
-
-    if (file.size < 80 * 1024) {
-      setReceiptError("Receipt image is too small. Please upload the full exchange confirmation screenshot")
-      event.target.value = ""
-      return
-    }
-
     setReceiptFile(file)
     setReceiptPreview((previous) => {
       if (previous) {
@@ -159,7 +138,6 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
   }
 
   const handleReceiptRemove = () => {
-    setReceiptError("")
     setReceiptFile(null)
     setReceiptPreview((previous) => {
       if (previous) {
@@ -195,6 +173,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
         </Alert>
       )}
 
+      {/* Network Selection */}
       <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
         <div className="space-y-4">
           <Label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -227,18 +206,9 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
 
         <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3 md:max-w-md">
-            <div>
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Deposit address</p>
-              <p className="text-xs text-muted-foreground">
-                Transfer only USDT using the selected network. Cross-check the address before confirming on your exchange.
-              </p>
-            </div>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Deposit address</p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Input
-                readOnly
-                value={selectedAddress}
-                className="h-12 rounded-xl bg-white font-mono text-sm shadow-inner dark:bg-slate-950"
-              />
+              <Input readOnly value={selectedAddress} className="h-12 rounded-xl bg-white font-mono text-sm shadow-inner dark:bg-slate-950" />
               <Button
                 type="button"
                 variant="secondary"
@@ -256,24 +226,16 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 )}
               </Button>
             </div>
-            <ul className="space-y-2 text-xs text-muted-foreground">
-              <li>• Use the exact transaction hash from your exchange withdrawal.</li>
-              <li>• Upload the full confirmation screenshot showing date, amount, and hash.</li>
-              <li>• Deposits are reviewed by compliance before crediting.</li>
-            </ul>
           </div>
           {selectedAddress && (
             <div className="flex shrink-0 justify-center">
-              <img
-                src={qrCodeUrl}
-                alt="Deposit address QR code"
-                className="h-44 w-44 rounded-xl border bg-white p-2 shadow-md"
-              />
+              <img src={qrCodeUrl} alt="Deposit address QR code" className="h-44 w-44 rounded-xl border bg-white p-2 shadow-md" />
             </div>
           )}
         </div>
       </section>
 
+      {/* Deposit Form */}
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-4">
@@ -335,12 +297,10 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 required
                 className="h-12 rounded-xl font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                For Binance/OKX copy the TxID from your withdrawal details page.
-              </p>
             </div>
           </div>
 
+          {/* Upload Section */}
           <div className="space-y-3">
             <Label htmlFor="transaction-receipt" className="text-sm font-semibold">
               Upload Confirmation Screenshot
@@ -350,20 +310,14 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
               id="transaction-receipt"
               name="receipt"
               type="file"
-              accept={RECEIPT_ALLOWED_TYPES.join(",")}
               onChange={handleReceiptChange}
               className="h-12 cursor-pointer rounded-xl"
             />
-            {receiptError && <p className="text-xs text-destructive">{receiptError}</p>}
 
             {receiptFile && (
               <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 p-3">
                 {receiptPreview ? (
-                  <img
-                    src={receiptPreview}
-                    alt="Transaction receipt preview"
-                    className="h-16 w-16 rounded-lg object-cover shadow-sm"
-                  />
+                  <img src={receiptPreview} alt="Transaction receipt preview" className="h-16 w-16 rounded-lg object-cover shadow-sm" />
                 ) : (
                   <div className="flex h-16 w-16 items-center justify-center rounded bg-muted text-xs">
                     Preview
@@ -380,10 +334,6 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 </Button>
               </div>
             )}
-
-            <p className="text-xs text-muted-foreground">
-              Screenshots under 80KB are automatically rejected. Ensure the exchange name, time, and transaction hash are all visible.
-            </p>
           </div>
         </div>
       </section>

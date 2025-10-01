@@ -27,11 +27,11 @@ import {
 
 const navigation = [
   { name: "Home", href: "/dashboard", icon: Home },
+  { name: "Mining", href: "/mining", icon: Pickaxe },
+  { name: "Wallet", href: "/wallet", icon: Wallet },
   { name: "Task", href: "/tasks", icon: BarChart3 },
   { name: "Team", href: "/team", icon: Users },
   { name: "List Coin", href: "/coins", icon: Coins },
-  { name: "Coin Mining", href: "/mining", icon: Pickaxe },
-  { name: "Wallet", href: "/wallet", icon: Wallet },
   { name: "E-Wallet", href: "/e-wallet", icon: CreditCard },
   { name: "History", href: "/transactions", icon: History },
   { name: "Support", href: "/support", icon: HelpCircle },

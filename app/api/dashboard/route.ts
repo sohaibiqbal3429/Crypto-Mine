@@ -15,61 +15,66 @@ export async function GET(request: NextRequest) {
 
     await dbConnect()
 
-    // Get user data
     const user = await User.findById(userPayload.userId)
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Get balance data
-    const balance = await Balance.findOne({ userId: user._id })
+    let balance = await Balance.findOne({ userId: user._id })
     if (!balance) {
-      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
+      balance = await Balance.create({
+        userId: user._id,
+        current: 0,
+        totalBalance: 0,
+        totalEarning: 0,
+        lockedCapital: 0,
+        staked: 0,
+        pendingWithdraw: 0,
+        teamRewardsAvailable: 0,
+        teamRewardsClaimed: 0,
+      })
     }
 
-    // Get mining session
-    const [miningSession, settings] = await Promise.all([
-      MiningSession.findOne({ userId: user._id }),
-      Settings.findOne(),
-    ])
+    let miningSession = await MiningSession.findOne({ userId: user._id })
+    if (!miningSession) {
+      miningSession = await MiningSession.create({ userId: user._id })
+    }
 
-    // Count active team members (users who deposited >= 80 USDT)
+    const settings = await Settings.findOne()
+
     const activeMembers = await User.countDocuments({
       referredBy: user._id,
       depositTotal: { $gte: 80 },
     })
 
-    const teamReward = balance.teamRewardsAvailable || 0
-
-    // Get next mining eligible time
     const now = new Date()
-    const nextEligibleAt = miningSession?.nextEligibleAt || now
+    const nextEligibleAt = miningSession.nextEligibleAt ?? now
     const minDeposit = settings?.gating?.minDeposit ?? 30
-    const hasMinimumDeposit = user.depositTotal >= minDeposit
+    const hasMinimumDeposit = (user.depositTotal ?? 0) >= minDeposit
     const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
     return NextResponse.json({
       kpis: {
-        totalEarning: balance.totalEarning,
-        totalBalance: balance.totalBalance,
-        currentBalance: balance.current,
+        totalEarning: balance.totalEarning ?? 0,
+        totalBalance: balance.totalBalance ?? 0,
+        currentBalance: balance.current ?? 0,
         activeMembers,
-        totalWithdraw: user.withdrawTotal,
-        pendingWithdraw: balance.pendingWithdraw,
-        teamReward,
+        totalWithdraw: user.withdrawTotal ?? 0,
+        pendingWithdraw: balance.pendingWithdraw ?? 0,
+        teamReward: balance.teamRewardsAvailable ?? 0,
       },
       mining: {
         canMine,
         requiresDeposit: !hasMinimumDeposit,
         minDeposit,
         nextEligibleAt: nextEligibleAt.toISOString(),
-        earnedInCycle: miningSession?.earnedInCycle || 0,
+        earnedInCycle: miningSession.earnedInCycle ?? 0,
       },
       user: {
-        level: user.level,
-        referralCode: user.referralCode,
-        roiEarnedTotal: user.roiEarnedTotal,
-        depositTotal: user.depositTotal,
+        level: user.level ?? 0,
+        referralCode: user.referralCode ?? "",
+        roiEarnedTotal: user.roiEarnedTotal ?? 0,
+        depositTotal: user.depositTotal ?? 0,
       },
     })
   } catch (error) {

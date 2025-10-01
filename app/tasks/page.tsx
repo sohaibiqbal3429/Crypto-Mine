@@ -36,19 +36,9 @@ export default function TasksPage() {
 
         // Mock tasks data - in real app, this would come from API
         setTasks([
+         
           {
             id: "1",
-            title: "Daily Login",
-            description: "Login to your account daily",
-            reward: 0.005,
-            type: "daily",
-            completed: true,
-            progress: 1,
-            target: 1,
-            icon: CheckCircle,
-          },
-          {
-            id: "2",
             title: "Refer 3 Friends",
             description: "Invite 3 friends to join the platform",
             reward: 2,
@@ -59,10 +49,10 @@ export default function TasksPage() {
             icon: Users,
           },
           {
-            id: "3",
+            id: "2",
             title: "First Deposit",
-            description: "Make your first deposit of $80 or more",
-            reward: 20,
+            description: "Make your first deposit of $100 or more",
+            reward: 2,
             type: "deposit",
             completed: false,
             progress: 0,
@@ -70,7 +60,7 @@ export default function TasksPage() {
             icon: DollarSign,
           },
           {
-            id: "4",
+            id: "3",
             title: "Mine 10 Times",
             description: "Complete 10 mining sessions",
             reward: 0.5,

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2019",
+    "lib": ["es2019"],
+    "allowJs": false,
+    "isolatedModules": false,
+    "emitDeclarationOnly": false,
+    "declaration": false
+  },
+  "include": ["scripts/seed-database.ts", "lib/mongodb.ts", "models/**/*.ts"],
+  "exclude": ["node_modules"]
+}

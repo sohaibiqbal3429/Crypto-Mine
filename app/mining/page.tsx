@@ -1,4 +1,4 @@
-﻿import { cookies } from "next/headers"
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
 import { verifyToken } from "@/lib/auth"
@@ -12,12 +12,15 @@ import { Progress } from "@/components/ui/progress"
 import { Zap, Clock, TrendingUp, Award } from "lucide-react"
 
 export default async function MiningPage() {
-  const cookieStore = await cookies()\n  const token = cookieStore.get("auth-token")?.value
+  // cookies() is synchronous in the app router context
+  const cookieStore = cookies()
+  const token = cookieStore.get("auth-token")?.value
   if (!token) {
     redirect("/auth/login")
   }
 
-  const session = verifyToken(token!)
+  // verifyToken returns a promise; await to validate the session
+  const session = await verifyToken(token)
   if (!session) {
     redirect("/auth/login")
   }
@@ -48,11 +51,14 @@ export default async function MiningPage() {
         <div className="p-6 space-y-8">
           <div className="space-y-2">
             <h1 className="text-3xl font-bold text-balance">P-Coin Mining</h1>
-            <p className="text-muted-foreground">Mine rewards daily and track your performance.</p>
+            <p className="text-muted-foreground">
+              Mine rewards daily and track your performance.
+            </p>
           </div>
 
           <MiningWidget mining={miningStatus} />
 
+          {/* ---- Cards ---- */}
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -94,11 +100,14 @@ export default async function MiningPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overviewStats.efficiency}%</div>
-                <p className="text-xs text-muted-foreground">Towards {miningStatus.miningSettings.roiCap}x target</p>
+                <p className="text-xs text-muted-foreground">
+                  Towards {miningStatus.miningSettings.roiCap}x target
+                </p>
               </CardContent>
             </Card>
           </section>
 
+          {/* ---- Efficiency ---- */}
           <Card>
             <CardHeader>
               <CardTitle>Mining Efficiency</CardTitle>
@@ -110,7 +119,11 @@ export default async function MiningPage() {
                   <span className="text-sm font-medium">ROI Progress</span>
                   <Badge
                     variant={
-                      overviewStats.efficiency >= 90 ? "default" : overviewStats.efficiency >= 70 ? "secondary" : "destructive"
+                      overviewStats.efficiency >= 90
+                        ? "default"
+                        : overviewStats.efficiency >= 70
+                        ? "secondary"
+                        : "destructive"
                     }
                   >
                     {overviewStats.efficiency}%
@@ -121,8 +134,8 @@ export default async function MiningPage() {
                   {overviewStats.efficiency >= 90
                     ? "Earning cap approaching. Consider preparing for reinvestment."
                     : overviewStats.efficiency >= 70
-                      ? "Solid progress. Keep mining daily."
-                      : "Grow your deposit or team to boost returns."}
+                    ? "Solid progress. Keep mining daily."
+                    : "Grow your deposit or team to boost returns."}
                 </p>
               </div>
 
@@ -134,11 +147,15 @@ export default async function MiningPage() {
                   <div className="text-muted-foreground">Mining Uptime</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="font-semibold text-lg">{miningStatus.miningSettings.minPct.toFixed(2)}%-{miningStatus.miningSettings.maxPct.toFixed(2)}%</div>
+                  <div className="font-semibold text-lg">
+                    {miningStatus.miningSettings.minPct.toFixed(2)}%-{miningStatus.miningSettings.maxPct.toFixed(2)}%
+                  </div>
                   <div className="text-muted-foreground">Daily range</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="font-semibold text-lg">${walletContext.stats.currentBalance.toFixed(2)}</div>
+                  <div className="font-semibold text-lg">
+                    ${walletContext.stats.currentBalance.toFixed(2)}
+                  </div>
                   <div className="text-muted-foreground">Available balance</div>
                 </div>
               </div>
@@ -149,3 +166,4 @@ export default async function MiningPage() {
     </div>
   )
 }
+

@@ -29,14 +29,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login", request.url))
   }
 
-  // Admin-only routes
-  if (pathname.startsWith("/admin") && user?.role !== "admin") {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-    return NextResponse.redirect(new URL("/dashboard", request.url))
-  }
-
   return NextResponse.next()
 }
 

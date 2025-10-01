@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
+import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
@@ -8,11 +9,16 @@ import { getUserFromRequest } from "@/lib/auth"
 export async function POST(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
-    if (!userPayload || userPayload.role !== "admin") {
+    if (!userPayload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     await dbConnect()
+
+    const adminUser = await User.findById(userPayload.userId).select("role")
+    if (!adminUser || adminUser.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const { transactionId, reason } = await request.json()
 

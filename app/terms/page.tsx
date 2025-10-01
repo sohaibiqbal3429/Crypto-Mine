@@ -205,7 +205,7 @@ export default function TermsPage() {
               <CardContent className="prose prose-sm max-w-none">
                 <p>For questions about these terms or the platform, please contact us at:</p>
                 <p>
-                  Email: support@mintminepro.com
+                  Email:mintminepro@mail.com
                   <br />
                   Support: Available 24/7 through the platform
                 </p>
