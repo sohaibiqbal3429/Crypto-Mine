@@ -1,0 +1,249 @@
+import bcrypt from "bcryptjs"
+
+import dbConnect from "../lib/mongodb"
+import CommissionRule from "../models/CommissionRule"
+import Settings from "../models/Settings"
+import User from "../models/User"
+
+type SettingsSeedDoc = {
+  mining: {
+    minPct: number
+    maxPct: number
+    roiCap: number
+  }
+  gating: {
+    minDeposit: number
+    minWithdraw: number
+    joinNeedsReferral: boolean
+    activeMinDeposit: number
+  }
+  joiningBonus: {
+    threshold: number
+    pct: number
+  }
+  commission: {
+    baseDirectPct: number
+    startAtDeposit: number
+  }
+}
+
+type CommissionRuleSeedDoc = {
+  level: number
+  directPct: number
+  teamDailyPct: number
+  teamRewardPct: number
+  activeMin: number
+  monthlyTargets: {
+    directSale: number
+    bonus: number
+    salary?: number
+  }
+}
+
+type UserSeedDoc = {
+  email: string
+  passwordHash: string
+  name: string
+  role: "user" | "admin"
+  referralCode: string
+}
+
+type InMemoryModel<T extends Record<string, unknown>> = {
+  data: T[]
+  findOne(filter?: Partial<T>): Promise<T | null>
+  create(doc: T): Promise<T>
+}
+
+function createMemoryModel<T extends Record<string, unknown>>(): InMemoryModel<T> {
+  const data: T[] = []
+
+  function matchesFilter(doc: T, filter: Partial<T>): boolean {
+    return Object.entries(filter).every(([key, value]) => {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const docValue = doc[key as keyof T]
+        if (docValue === null || typeof docValue !== "object") return false
+        return matchesFilter(docValue as unknown as T, value as Partial<T>)
+      }
+
+      return doc[key as keyof T] === value
+    })
+  }
+
+  return {
+    data,
+    async findOne(filter?: Partial<T>) {
+      if (!filter || Object.keys(filter).length === 0) {
+        return data[0] ?? null
+      }
+
+      return data.find((doc) => matchesFilter(doc, filter)) ?? null
+    },
+    async create(doc: T) {
+      const created = JSON.parse(JSON.stringify(doc)) as T
+      data.push(created)
+      return created
+    },
+  }
+}
+
+const inMemoryStores = {
+  settings: createMemoryModel<SettingsSeedDoc>(),
+  commissionRules: createMemoryModel<CommissionRuleSeedDoc>(),
+  users: createMemoryModel<UserSeedDoc>(),
+}
+
+interface MemoryState {
+  settings: SettingsSeedDoc[]
+  commissionRules: CommissionRuleSeedDoc[]
+  users: UserSeedDoc[]
+}
+
+export interface SeedResult {
+  createdSettings: boolean
+  createdCommissionLevels: number[]
+  createdAdmin: boolean
+  memoryState?: MemoryState
+}
+
+export async function seedDatabase(): Promise<SeedResult> {
+  const useInMemory = process.env.SEED_IN_MEMORY === "true"
+
+  const memory = useInMemory ? inMemoryStores : null
+
+  if (useInMemory) {
+    console.log("Running seed in in-memory mode (SEED_IN_MEMORY=true)")
+  } else {
+    await dbConnect()
+  }
+
+  console.log("Seeding database...")
+
+  const createdCommissionLevels: number[] = []
+  let createdSettings = false
+  let createdAdmin = false
+
+  const settingsModel = (memory?.settings ?? Settings) as {
+    findOne: (filter?: Record<string, unknown>) => Promise<SettingsSeedDoc | null>
+    create: (doc: SettingsSeedDoc) => Promise<SettingsSeedDoc>
+    data?: SettingsSeedDoc[]
+  }
+
+  const existingSettings = await settingsModel.findOne()
+  if (!existingSettings) {
+    await settingsModel.create({
+      mining: { minPct: 1.5, maxPct: 5.0, roiCap: 3 },
+      gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80 },
+      joiningBonus: { threshold: 100, pct: 5 },
+      commission: { baseDirectPct: 7, startAtDeposit: 50 },
+    })
+    createdSettings = true
+    console.log("✓ Default settings created")
+  }
+
+  const commissionRules = [
+    {
+      level: 1,
+      directPct: 7,
+      teamDailyPct: 0,
+      teamRewardPct: 0,
+      activeMin: 0,
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 2,
+      directPct: 8,
+      teamDailyPct: 0,
+      teamRewardPct: 0,
+      activeMin: 5,
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 3,
+      directPct: 9,
+      teamDailyPct: 0,
+      teamRewardPct: 0,
+      activeMin: 10,
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 4,
+      directPct: 9,
+      teamDailyPct: 1,
+      teamRewardPct: 0,
+      activeMin: 15,
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 5,
+      directPct: 9,
+      teamDailyPct: 1,
+      teamRewardPct: 0,
+      activeMin: 25,
+      monthlyTargets: { directSale: 7000, bonus: 200, salary: 500 },
+    },
+  ] as const
+
+  const commissionRuleModel = (memory?.commissionRules ?? CommissionRule) as {
+    findOne: (filter: Record<string, unknown>) => Promise<CommissionRuleSeedDoc | null>
+    create: (doc: CommissionRuleSeedDoc) => Promise<CommissionRuleSeedDoc>
+    data?: CommissionRuleSeedDoc[]
+  }
+
+  for (const rule of commissionRules) {
+    const existing = await commissionRuleModel.findOne({ level: rule.level })
+    if (!existing) {
+      await commissionRuleModel.create(rule)
+      createdCommissionLevels.push(rule.level)
+      console.log(`✓ Commission rule for level ${rule.level} created`)
+    }
+  }
+
+  const userModel = (memory?.users ?? User) as {
+    findOne: (filter: Record<string, unknown>) => Promise<UserSeedDoc | null>
+    create: (doc: UserSeedDoc) => Promise<UserSeedDoc>
+    data?: UserSeedDoc[]
+  }
+
+  const adminExists = await userModel.findOne({ email: "admin@cryptomining.com" })
+  if (!adminExists) {
+    const passwordHash = await bcrypt.hash("admin123", 12)
+    await userModel.create({
+      email: "admin@cryptomining.com",
+      passwordHash,
+      name: "Admin User",
+      role: "admin",
+      referralCode: "ADMIN001",
+    })
+    createdAdmin = true
+    console.log("✓ Admin user created (admin@cryptomining.com / admin123)")
+  }
+
+  console.log("Database seeding completed!")
+
+  const result: SeedResult = {
+    createdSettings,
+    createdCommissionLevels,
+    createdAdmin,
+  }
+
+  if (memory) {
+    result.memoryState = {
+      settings: memory.settings.data,
+      commissionRules: memory.commissionRules.data,
+      users: memory.users.data,
+    }
+  }
+
+  return result
+}
+
+if (process.argv[1]?.includes("seed-database")) {
+  seedDatabase()
+    .then(() => {
+      process.exit(0)
+    })
+    .catch((error) => {
+      console.error(error)
+      process.exit(1)
+    })
+}

@@ -54,8 +54,10 @@ pnpm install
 
 ### 4. Seed Database (Optional)
 \`\`\`bash
-npm run seed
+npm run seed:db
 \`\`\`
+
+> 💡 Want to verify the seed logic without a MongoDB instance? Run `SEED_IN_MEMORY=true npm run seed:db` to execute the script against an in-memory store.
 
 ### 5. Start Development Server
 \`\`\`bash

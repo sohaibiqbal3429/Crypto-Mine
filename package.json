@@ -6,6 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
+    "seed:build": "tsc --project tsconfig.scripts.json",
+    "seed:db": "npm run seed:build && node dist/scripts/seed-database.js",
     "start": "next start"
   },
   "dependencies": {
