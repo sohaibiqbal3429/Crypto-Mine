@@ -139,9 +139,9 @@ export function Sidebar({ user }: SidebarProps) {
       {/* Mobile sidebar */}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-20 w-20" />
-          </Button>
+         <Button  variant="ghost" size="icon" className="md:hidden ">
+  <Menu className="h-12 w-12" /> {/* aur bada */}
+</Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
           <SidebarContent />

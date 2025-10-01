@@ -10,7 +10,7 @@ export default function HomePage() {
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Image src="/images/logo.jpg" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
+            <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
             <span className="text-xl font-bold">Mintmine Pro</span>
           </div>
           <div className="flex items-center space-x-4">
