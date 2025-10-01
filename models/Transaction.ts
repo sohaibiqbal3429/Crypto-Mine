@@ -41,7 +41,7 @@ const TransactionSchema = new Schema<ITransaction>(
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
-      default: function () {
+      default: function (this: { type: ITransaction["type"] }) {
         return ["deposit", "withdraw"].includes(this.type) ? "pending" : "approved"
       },
     },

@@ -53,9 +53,6 @@ const UserSchema = new Schema<IUser>(
   },
 )
 
-UserSchema.index({ email: 1 })
-UserSchema.index({ phone: 1 }) // Added phone index
-UserSchema.index({ referralCode: 1 })
 UserSchema.index({ referredBy: 1 })
 
 export default mongoose.models.User || mongoose.model<IUser>("User", UserSchema)
