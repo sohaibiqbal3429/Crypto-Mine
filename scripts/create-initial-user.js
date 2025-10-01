@@ -29,15 +29,21 @@ const UserSchema = new mongoose.Schema(
 
 const BalanceSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    dWallet: { type: Number, default: 0 },
-    totalEarned: { type: Number, default: 0 },
-    totalWithdrawn: { type: Number, default: 0 },
-    roiEarned: { type: Number, default: 0 },
-    commissionEarned: { type: Number, default: 0 },
-    lastMiningTime: { type: Date },
-    miningStreak: { type: Number, default: 0 },
-    roiCapReached: { type: Boolean, default: false },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
+    current: { type: Number, default: 0 },
+    totalBalance: { type: Number, default: 0 },
+    totalEarning: { type: Number, default: 0 },
+    lockedCapital: { type: Number, default: 0 },
+    staked: { type: Number, default: 0 },
+    pendingWithdraw: { type: Number, default: 0 },
+    teamRewardsAvailable: { type: Number, default: 0 },
+    teamRewardsClaimed: { type: Number, default: 0 },
+    teamRewardsLastClaimedAt: { type: Date },
   },
   { timestamps: true },
 )

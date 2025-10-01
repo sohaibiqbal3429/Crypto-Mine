@@ -35,24 +35,46 @@ const UserSchema = new mongoose.Schema(
 
 const BalanceSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    dWallet: { type: Number, default: 0 },
-    totalEarned: { type: Number, default: 0 },
-    totalWithdrawn: { type: Number, default: 0 },
-    roiEarned: { type: Number, default: 0 },
-    commissionEarned: { type: Number, default: 0 },
-    lastMiningTime: { type: Date },
-    miningStreak: { type: Number, default: 0 },
-    roiCapReached: { type: Boolean, default: false },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
+    current: { type: Number, default: 0 },
+    totalBalance: { type: Number, default: 0 },
+    totalEarning: { type: Number, default: 0 },
+    lockedCapital: { type: Number, default: 0 },
+    staked: { type: Number, default: 0 },
+    pendingWithdraw: { type: Number, default: 0 },
+    teamRewardsAvailable: { type: Number, default: 0 },
+    teamRewardsClaimed: { type: Number, default: 0 },
+    teamRewardsLastClaimedAt: { type: Date },
   },
   { timestamps: true },
 )
 
 const SettingsSchema = new mongoose.Schema(
   {
-    key: { type: String, required: true, unique: true },
-    value: { type: mongoose.Schema.Types.Mixed, required: true },
-    description: String,
+    mining: {
+      minPct: { type: Number, default: 1.5 },
+      maxPct: { type: Number, default: 5.0 },
+      roiCap: { type: Number, default: 3 },
+    },
+    gating: {
+      minDeposit: { type: Number, default: 30 },
+      minWithdraw: { type: Number, default: 30 },
+      joinNeedsReferral: { type: Boolean, default: true },
+      activeMinDeposit: { type: Number, default: 80 },
+    },
+    joiningBonus: {
+      threshold: { type: Number, default: 100 },
+      pct: { type: Number, default: 5 },
+    },
+    commission: {
+      baseDirectPct: { type: Number, default: 7 },
+      startAtDeposit: { type: Number, default: 50 },
+    },
   },
   { timestamps: true },
 )
@@ -96,26 +118,34 @@ async function setupDatabase() {
     }
 
     // Create default settings
-    const defaultSettings = [
-      { key: "miningBaseAmount", value: 10, description: "Base mining amount in USD" },
-      { key: "miningMinPercent", value: 0.5, description: "Minimum mining percentage" },
-      { key: "miningMaxPercent", value: 2.0, description: "Maximum mining percentage" },
-      { key: "roiCap", value: 3.0, description: "ROI cap multiplier (3x)" },
-      { key: "minDepositAmount", value: 50, description: "Minimum deposit amount" },
-      { key: "minWithdrawAmount", value: 10, description: "Minimum withdrawal amount" },
-      {
-        key: "commissionRates",
-        value: { level1: 10, level2: 5, level3: 3, level4: 2, level5: 1 },
-        description: "Commission rates by level",
+    const defaultSettings = {
+      mining: {
+        minPct: 1.5,
+        maxPct: 5.0,
+        roiCap: 3,
       },
-    ]
+      gating: {
+        minDeposit: 30,
+        minWithdraw: 30,
+        joinNeedsReferral: true,
+        activeMinDeposit: 80,
+      },
+      joiningBonus: {
+        threshold: 100,
+        pct: 5,
+      },
+      commission: {
+        baseDirectPct: 7,
+        startAtDeposit: 50,
+      },
+    }
 
-    for (const setting of defaultSettings) {
-      const existing = await Settings.findOne({ key: setting.key })
-      if (!existing) {
-        await Settings.create(setting)
-        console.log(`✅ Created setting: ${setting.key}`)
-      }
+    const existingSettings = await Settings.findOne()
+    if (!existingSettings) {
+      await Settings.create(defaultSettings)
+      console.log("✅ Default settings document created")
+    } else {
+      console.log("✅ Settings document already exists")
     }
 
     console.log("\n🎉 Database setup completed successfully!")
