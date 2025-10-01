@@ -80,7 +80,7 @@ Visit `http://localhost:3000` to see your application!
 
 ## Default Admin Account
 After seeding, you can login with:
-- Email: `admin@cryptomine.com`
+- Email: `admin@cryptomining.com`
 - Password: `admin123`
 
 ## Need Help?

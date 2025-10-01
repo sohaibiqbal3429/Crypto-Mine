@@ -31,6 +31,4 @@ const CommissionRuleSchema = new Schema<ICommissionRule>(
   },
 )
 
-CommissionRuleSchema.index({ level: 1 })
-
 export default mongoose.models.CommissionRule || mongoose.model<ICommissionRule>("CommissionRule", CommissionRuleSchema)
