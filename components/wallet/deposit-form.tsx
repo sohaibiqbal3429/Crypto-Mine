@@ -157,7 +157,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
   }
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} encType="multipart/form-data" className="space-y-6">
       {state?.error && (
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>
