@@ -11,18 +11,21 @@ export interface DepositFormState {
   success?: string | null
 }
 
-function isFileInstance(value: unknown): value is File {
+function isFileLike(value: unknown): value is File {
   if (!value || typeof value !== "object") {
     return false
   }
 
   const candidate = value as Record<string, unknown>
-  const hasArrayBuffer = typeof candidate.arrayBuffer === "function"
-  const hasSize = typeof candidate.size === "number"
-  const hasName = typeof candidate.name === "string" && candidate.name.length > 0
-
-  return hasArrayBuffer && hasSize && hasName
+  return (
+    typeof candidate.arrayBuffer === "function" &&
+    typeof candidate.size === "number" &&
+    typeof candidate.name === "string" &&
+    candidate.name.length > 0
+  )
 }
+
+
 export async function submitDepositAction(_: DepositFormState, formData: FormData): Promise<DepositFormState> {
   const cookieStore = await cookies()
   const token = cookieStore.get("auth-token")?.value
@@ -49,7 +52,7 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
   }
 
   const receiptEntry = formData.get("receipt")
-  const receiptFile = isFileInstance(receiptEntry) ? receiptEntry : null
+  const receiptFile = isFileLike(receiptEntry) ? receiptEntry : null
 
   try {
     const result = await submitDeposit({

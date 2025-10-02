@@ -33,6 +33,15 @@ interface Transaction {
   createdAt: string
 }
 
+type ReceiptMeta = {
+  url?: string
+  originalName?: string
+  mimeType?: string
+  size?: number
+  uploadedAt?: string
+  checksum?: string
+}
+
 interface TransactionTableProps {
   transactions: Transaction[]
   onRefresh: () => void
@@ -44,6 +53,11 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
   const [rejectReason, setRejectReason] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  const receiptMeta =
+    selectedTransaction?.type === "deposit" && selectedTransaction.meta?.receipt
+      ? (selectedTransaction.meta.receipt as ReceiptMeta)
+      : null
 
   const handleApprove = async (transaction: Transaction) => {
     setLoading(true)
@@ -237,6 +251,34 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
                   <p className="text-sm">{selectedTransaction.status}</p>
                 </div>
               </div>
+              {receiptMeta?.url && (
+                <div className="space-y-2">
+                  <Label>Receipt Screenshot</Label>
+                  <div className="overflow-hidden rounded-md border bg-muted/60">
+                    <img
+                      src={receiptMeta.url}
+                      alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
+                      className="max-h-96 w-full object-contain bg-background"
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    {receiptMeta.originalName && <div>File: {receiptMeta.originalName}</div>}
+                    {typeof receiptMeta.size === "number" && <div>Size: {(receiptMeta.size / 1024 / 1024).toFixed(2)} MB</div>}
+                    {receiptMeta.uploadedAt && (
+                      <div>Uploaded: {new Date(receiptMeta.uploadedAt).toLocaleString()}</div>
+                    )}
+                  </div>
+                  <a
+                    href={receiptMeta.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    Open full receipt
+                  </a>
+                </div>
+              )}
+
               {selectedTransaction.meta && (
                 <div>
                   <Label>Additional Info</Label>

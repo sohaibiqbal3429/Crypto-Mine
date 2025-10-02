@@ -1,8 +1,8 @@
-﻿"use client"
+"use client"
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +26,11 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const [canMine, setCanMine] = useState(mining.canMine)
+
+  useEffect(() => {
+    setCanMine(mining.canMine)
+  }, [mining.canMine])
 
   const handleMining = () => {
     setFeedback({})
@@ -36,6 +41,8 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
         return
       }
       setFeedback({ success: result.success ?? "Mining successful!" })
+      setCanMine(false)
+      router.refresh()
     })
   }
 
@@ -64,7 +71,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
               <Coins className="w-6 h-6 text-primary-foreground" />
             </div>
-            {mining.canMine && (
+            {canMine && (
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
             )}
           </div>
@@ -92,19 +99,19 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
         <div className="text-center space-y-6">
           <motion.div
             className="relative mx-auto w-40 h-40 flex items-center justify-center"
-            whileHover={{ scale: mining.canMine ? 1.05 : 1 }}
-            whileTap={{ scale: mining.canMine ? 0.95 : 1 }}
+            whileHover={{ scale: canMine ? 1.05 : 1 }}
+            whileTap={{ scale: canMine ? 0.95 : 1 }}
           >
             <div
               className={`w-full h-full rounded-full flex items-center justify-center text-5xl font-bold text-white shadow-2xl relative overflow-hidden ${
-                mining.canMine
+                canMine
                   ? "bg-gradient-to-br from-primary to-accent cursor-pointer crypto-glow"
                   : "bg-gradient-to-br from-gray-400 to-gray-600 cursor-not-allowed"
               }`}
-              onClick={mining.canMine ? handleMining : undefined}
+              onClick={canMine ? handleMining : undefined}
             >
               <Coins className="w-16 h-16" />
-              {mining.canMine && (
+              {canMine && (
                 <>
                   <motion.div
                     className="absolute inset-0 rounded-full bg-gradient-to-br from-primary to-accent opacity-30"
@@ -118,7 +125,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
           </motion.div>
 
           <div className="space-y-3">
-            {mining.canMine ? (
+            {canMine ? (
               <Badge
                 variant="secondary"
                 className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-4 py-2"
@@ -151,7 +158,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
 
           <Button
             onClick={handleMining}
-            disabled={!mining.canMine || isPending}
+            disabled={!canMine || isPending}
             size="lg"
             className="w-full max-w-sm h-12 text-lg font-semibold bg-gradient-to-r from-primary to-accent hover:from-accent hover:to-primary transition-all duration-300 shadow-lg hover:shadow-xl"
           >
@@ -163,7 +170,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
             ) : (
               <>
                 <Zap className="mr-3 h-5 w-5" />
-                {mining.canMine ? "Start Mining" : "Mining Unavailable"}
+                {canMine ? "Start Mining" : "Mining Unavailable"}
               </>
             )}
           </Button>

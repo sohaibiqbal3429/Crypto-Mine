@@ -1,4 +1,4 @@
-﻿import { mkdir, unlink, writeFile } from "fs/promises"
+import { mkdir, writeFile } from "fs/promises"
 import { extname, join } from "path"
 import { createHash, randomUUID } from "crypto"
 
@@ -52,29 +52,34 @@ function isLikelyTransactionHash(hash: string): boolean {
   return HASH_PATTERNS.some((pattern) => pattern.test(hash.trim()))
 }
 
-// ✅ Updated function without file-type/size restrictions
+// ? Updated function without file-type/size restrictions
 async function persistReceipt(file: File) {
-  await mkdir(RECEIPT_UPLOAD_DIRECTORY, { recursive: true })
+  try {
+    await mkdir(RECEIPT_UPLOAD_DIRECTORY, { recursive: true })
 
-  const extension = resolveReceiptExtension(file)
-  const fileName = `${randomUUID()}${extension}`
-  const filePath = join(RECEIPT_UPLOAD_DIRECTORY, fileName)
+    const extension = resolveReceiptExtension(file)
+    const fileName = `${randomUUID()}${extension}`
+    const filePath = join(RECEIPT_UPLOAD_DIRECTORY, fileName)
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  await writeFile(filePath, buffer)
+    const buffer = Buffer.from(await file.arrayBuffer())
+    await writeFile(filePath, buffer)
 
-  const checksum = createHash("sha256").update(buffer).digest("hex")
+    const checksum = createHash("sha256").update(buffer).digest("hex")
 
-  return {
-    filePath,
-    meta: {
-      url: `/uploads/deposit-receipts/${fileName}`,
-      originalName: file.name,
-      mimeType: file.type,
-      size: file.size,
-      uploadedAt: new Date().toISOString(),
-      checksum,
-    },
+    return {
+      filePath,
+      meta: {
+        url: `/uploads/deposit-receipts/${fileName}`,
+        originalName: file.name,
+        mimeType: file.type,
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+        checksum,
+      },
+    }
+  } catch (error) {
+    console.error("Deposit receipt persistence failed", error)
+    throw new DepositSubmissionError("Unable to save receipt. Please try again.")
   }
 }
 
@@ -151,13 +156,8 @@ export async function submitDeposit(input: DepositSubmissionInput) {
 
   if (input.receiptFile) {
     receiptResult = await persistReceipt(input.receiptFile)
-
-    const duplicateProof = await Transaction.findOne({ "meta.receipt.checksum": receiptResult.meta.checksum })
-    if (duplicateProof) {
-      await unlink(receiptResult.filePath).catch(() => {})
-      throw new DepositSubmissionError("This payment receipt has already been submitted")
-    }
   }
+
 
   if (isFakeDeposit) {
     const transaction = await Transaction.create({
