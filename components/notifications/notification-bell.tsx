@@ -99,6 +99,8 @@ export function NotificationBell() {
         return "🎉"
       case "cap-reached":
         return "⚠️"
+      case "mining-reward":
+        return "⛏️"
       default:
         return "📢"
     }
