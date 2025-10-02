@@ -14,15 +14,6 @@ import { calculateUserLevel, processReferralCommission } from "@/lib/utils/commi
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
-const MIN_RECEIPT_SIZE_BYTES = 80 * 1024
-
-const RECEIPT_ALLOWED_MIME_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/jpg",
-  "image/webp",
-  "image/gif",
-])
 
 const HASH_PATTERNS = [
   /^0x[a-fA-F0-9]{64}$/,
@@ -61,19 +52,8 @@ function isLikelyTransactionHash(hash: string): boolean {
   return HASH_PATTERNS.some((pattern) => pattern.test(hash.trim()))
 }
 
+// ✅ Updated function without file-type/size restrictions
 async function persistReceipt(file: File) {
-  if (!RECEIPT_ALLOWED_MIME_TYPES.has(file.type)) {
-    throw new DepositSubmissionError("Receipt must be an image (PNG, JPG, JPEG, WEBP, or GIF)")
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    throw new DepositSubmissionError("Receipt image must be smaller than 5MB")
-  }
-
-  if (file.size < MIN_RECEIPT_SIZE_BYTES) {
-    throw new DepositSubmissionError("Receipt image is too small. Please upload the full exchange confirmation screenshot")
-  }
-
   await mkdir(RECEIPT_UPLOAD_DIRECTORY, { recursive: true })
 
   const extension = resolveReceiptExtension(file)

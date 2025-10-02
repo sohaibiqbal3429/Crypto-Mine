@@ -112,7 +112,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
     }
   }
 
-  // ✅ No restriction on receipt file
+  // ✅ Allow all image types
   const handleReceiptChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0] ?? null
 
@@ -310,6 +310,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
               id="transaction-receipt"
               name="receipt"
               type="file"
+              accept="image/*"   // ✅ now allows all image formats
               onChange={handleReceiptChange}
               className="h-12 cursor-pointer rounded-xl"
             />

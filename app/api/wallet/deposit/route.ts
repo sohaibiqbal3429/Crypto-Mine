@@ -15,6 +15,10 @@ interface ParsedDepositRequest {
   receiptFile: File | null
 }
 
+function isFileInstance(value: unknown): value is File {
+  return typeof File !== "undefined" && value instanceof File
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -75,7 +79,7 @@ async function parseDepositRequest(request: NextRequest): Promise<ParsedDepositR
     }
 
     const receiptEntry = formData.get("receipt")
-    const receiptFile = receiptEntry instanceof File && receiptEntry.size > 0 ? receiptEntry : null
+    const receiptFile = isFileInstance(receiptEntry) && receiptEntry.size > 0 ? receiptEntry : null
 
     return { payload, receiptFile }
   }

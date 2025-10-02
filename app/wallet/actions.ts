@@ -11,6 +11,10 @@ export interface DepositFormState {
   success?: string | null
 }
 
+function isFileInstance(value: unknown): value is File {
+  return typeof File !== "undefined" && value instanceof File
+}
+
 export async function submitDepositAction(_: DepositFormState, formData: FormData): Promise<DepositFormState> {
   const cookieStore = await cookies()
   const token = cookieStore.get("auth-token")?.value
@@ -37,7 +41,7 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
   }
 
   const receiptEntry = formData.get("receipt")
-  const receiptFile = receiptEntry instanceof File ? receiptEntry : null
+  const receiptFile = isFileInstance(receiptEntry) ? receiptEntry : null
 
   try {
     const result = await submitDeposit({
