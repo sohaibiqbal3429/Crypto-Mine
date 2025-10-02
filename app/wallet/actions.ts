@@ -1,4 +1,4 @@
-﻿"use server"
+"use server"
 
 import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
@@ -12,9 +12,17 @@ export interface DepositFormState {
 }
 
 function isFileInstance(value: unknown): value is File {
-  return typeof File !== "undefined" && value instanceof File
-}
+  if (!value || typeof value !== "object") {
+    return false
+  }
 
+  const candidate = value as Record<string, unknown>
+  const hasArrayBuffer = typeof candidate.arrayBuffer === "function"
+  const hasSize = typeof candidate.size === "number"
+  const hasName = typeof candidate.name === "string" && candidate.name.length > 0
+
+  return hasArrayBuffer && hasSize && hasName
+}
 export async function submitDepositAction(_: DepositFormState, formData: FormData): Promise<DepositFormState> {
   const cookieStore = await cookies()
   const token = cookieStore.get("auth-token")?.value

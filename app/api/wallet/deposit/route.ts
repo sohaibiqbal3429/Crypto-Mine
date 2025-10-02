@@ -1,4 +1,4 @@
-﻿import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 
 import { getUserFromRequest } from "@/lib/auth"
 import { submitDeposit, DepositSubmissionError } from "@/lib/services/deposit"
@@ -16,9 +16,17 @@ interface ParsedDepositRequest {
 }
 
 function isFileInstance(value: unknown): value is File {
-  return typeof File !== "undefined" && value instanceof File
-}
+  if (!value || typeof value !== "object") {
+    return false
+  }
 
+  const candidate = value as Record<string, unknown>
+  const hasArrayBuffer = typeof candidate.arrayBuffer === "function"
+  const hasSize = typeof candidate.size === "number"
+  const hasName = typeof candidate.name === "string" && candidate.name.length > 0
+
+  return hasArrayBuffer && hasSize && hasName
+}
 export async function POST(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
