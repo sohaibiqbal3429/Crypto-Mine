@@ -28,6 +28,25 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
   const router = useRouter()
   const [canMine, setCanMine] = useState(mining.canMine)
 
+  const formatTimeUntilNext = () => {
+    if (!mining.nextEligibleAt) return "Ready to mine!"
+    const now = new Date()
+    const nextTime = new Date(mining.nextEligibleAt)
+    const diff = nextTime.getTime() - now.getTime()
+
+    if (diff <= 0) return "Ready to mine!"
+
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
+      .toString()
+      .padStart(2, "0")}`
+  }
+
+  const [nextWindowDisplay, setNextWindowDisplay] = useState(() => formatTimeUntilNext())
+
   useEffect(() => {
     setCanMine(mining.canMine)
   }, [mining.canMine])
@@ -46,22 +65,28 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
     })
   }
 
-  const getTimeUntilNext = () => {
-    if (!mining.nextEligibleAt) return "Ready to mine!"
-    const now = new Date()
-    const nextTime = new Date(mining.nextEligibleAt)
-    const diff = nextTime.getTime() - now.getTime()
+  useEffect(() => {
+    const updateCountdown = () => {
+      const display = formatTimeUntilNext()
+      setNextWindowDisplay(display)
+      return display
+    }
 
-    if (diff <= 0) return "Ready to mine!"
+    const initialDisplay = updateCountdown()
 
-    const hours = Math.floor(diff / (1000 * 60 * 60))
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000)
+    if (initialDisplay === "Ready to mine!" || canMine) {
+      return
+    }
 
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
-      .toString()
-      .padStart(2, "0")}`
-  }
+    const interval = setInterval(() => {
+      const currentDisplay = updateCountdown()
+      if (currentDisplay === "Ready to mine!") {
+        clearInterval(interval)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [canMine, mining.nextEligibleAt])
 
   return (
     <Card className="col-span-full lg:col-span-2 crypto-card">
@@ -152,7 +177,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
             )}
             <div className="bg-muted rounded-lg p-3">
               <p className="text-sm font-medium text-muted-foreground">Next Mining Window</p>
-              <p className="text-lg font-mono font-bold text-foreground">{getTimeUntilNext()}</p>
+              <p className="text-lg font-mono font-bold text-foreground">{nextWindowDisplay}</p>
             </div>
           </div>
 
