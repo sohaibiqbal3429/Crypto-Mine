@@ -9,6 +9,7 @@ export interface INotification extends Document {
     | "level-up"
     | "cap-reached"
     | "team-reward-claimed"
+    | "mining-reward"
   title: string
   body: string
   read: boolean
@@ -27,6 +28,7 @@ const NotificationSchema = new Schema<INotification>(
         "level-up",
         "cap-reached",
         "team-reward-claimed",
+        "mining-reward",
       ],
       required: true,
     },
