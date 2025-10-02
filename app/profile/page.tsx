@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,15 +12,18 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Phone, Shield, Key, Copy, CheckCircle, Loader2 } from "lucide-react"
+import { User, Mail, Phone, Shield, Key, Copy, CheckCircle, Loader2, Link2 } from "lucide-react"
+// Removed: import Link from "next/link"  // Not needed here
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
   const [copied, setCopied] = useState(false)
+  const router = useRouter()
 
   const [profileData, setProfileData] = useState({
     name: "",
@@ -36,18 +40,50 @@ export default function ProfilePage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Fetch user data from /api/auth/me
         const userRes = await fetch("/api/auth/me")
+        let userData = null
+        
         if (userRes.ok) {
-          const userData = await userRes.json()
-          setUser(userData.user)
+          const response = await userRes.json()
+          userData = response.user || response
+          console.log("User data from /api/auth/me:", userData)
+        } else {
+          console.error("Failed to fetch from /api/auth/me:", userRes.status)
+        }
+
+        // If referralCode is missing, try to fetch from /api/profile/generate-link
+        if (userData && !userData.referralCode) {
+          try {
+            const profileRes = await fetch("/api/profile/generate-link")
+            if (profileRes.ok) {
+              const profileResponse = await profileRes.json()
+              const profileUser = profileResponse.user || profileResponse
+              console.log("Profile data from /api/profile/generate-link:", profileUser)
+              
+              // Merge the referralCode if it exists
+              if (profileUser.referralCode) {
+                userData.referralCode = profileUser.referralCode
+              }
+            }
+          } catch (profileError) {
+            console.error("Failed to fetch from /api/profile/generate-link:", profileError)
+          }
+        }
+
+        if (userData) {
+          setUser(userData)
           setProfileData({
-            name: userData.user.name || "",
-            email: userData.user.email || "",
-            phone: userData.user.phone || "",
+            name: userData.name || "",
+            email: userData.email || "",
+            phone: userData.phone || "",
           })
+        } else {
+          setError("Failed to load user data")
         }
       } catch (error) {
         console.error("Failed to fetch data:", error)
+        setError("Failed to load user data")
       } finally {
         setLoading(false)
       }
@@ -99,11 +135,55 @@ export default function ProfilePage() {
     }
   }
 
+  // Helper to build the auth URL with the ?ref= code.
+  // Change AUTH_PATH or the query key if your auth route expects something else (e.g., '/auth/login' or 'referral').
+  const buildAuthUrl = (referralCode: string) => {
+    const AUTH_PATH = "/auth/register" // <-- adjust to '/auth/login' or '/signup' if needed
+    const url = new URL(AUTH_PATH, window.location.origin)
+    url.searchParams.set("ref", referralCode) // or 'referral' based on your backend
+    return url.toString()
+  }
+
+  const copyReferralLink = async () => {
+    if (!user?.referralCode) {
+      setError("No referral code available")
+      return
+    }
+
+    setIsGeneratingLink(true)
+    setError("")
+
+    try {
+      const referralCode = String(user.referralCode).trim()
+      const referralLink = buildAuthUrl(referralCode)
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(referralLink)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 3000)
+
+      // Redirect to auth page with referral pre-filled
+      router.push(referralLink)
+    } catch (err) {
+      console.error("Error generating/copying referral link:", err)
+      setError("Failed to copy or open the referral link")
+    } finally {
+      setIsGeneratingLink(false)
+    }
+  }
+
   const copyReferralCode = async () => {
     if (user?.referralCode) {
-      await navigator.clipboard.writeText(user.referralCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      try {
+        await navigator.clipboard.writeText(user.referralCode)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch (error) {
+        console.error("Failed to copy to clipboard:", error)
+        setError("Failed to copy referral code")
+      }
+    } else {
+      setError("No referral code available")
     }
   }
 
@@ -150,8 +230,29 @@ export default function ProfilePage() {
                   <Label>Referral Code</Label>
                   <div className="flex gap-2">
                     <Input value={user?.referralCode || ""} readOnly className="font-mono" />
-                    <Button variant="outline" size="icon" onClick={copyReferralCode}>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={copyReferralCode}
+                      disabled={!user?.referralCode}
+                      title="Copy referral code"
+                    >
                       {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                    
+                    {/* Copy & open referral link button */}
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={copyReferralLink}
+                      disabled={!user?.referralCode || isGeneratingLink}
+                      title="Copy & open signup link"
+                    >
+                      {isGeneratingLink ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Link2 className="w-4 h-4" />
+                      )}
                     </Button>
                   </div>
                 </div>

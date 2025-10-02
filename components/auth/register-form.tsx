@@ -1,8 +1,8 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, UserPlus } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -32,6 +32,8 @@ interface RegisterFormData {
 
 export function RegisterForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [formData, setFormData] = useState<RegisterFormData>({
     name: "",
     email: "",
@@ -43,6 +45,15 @@ export function RegisterForm() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // Prefill referral code from query param (?ref= or ?referral=), once on mount / when URL changes
+  useEffect(() => {
+    const fromRef = (searchParams.get("ref") || searchParams.get("referral") || "").trim()
+    if (fromRef && !formData.referralCode) {
+      setFormData((prev) => ({ ...prev, referralCode: fromRef.toUpperCase() }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]) // don't include formData in deps to avoid unnecessary resets
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -223,13 +234,13 @@ export function RegisterForm() {
             </Label>
             <Input
               id="referralCode"
-              placeholder="Referral code"
+              type="text"
+              placeholder="Enter referral code (required)"
               value={formData.referralCode}
-              onChange={(event) =>
-                setFormData((prev) => ({ ...prev, referralCode: event.target.value.toUpperCase() }))
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, referralCode: e.target.value.toUpperCase() }))
               }
               required
-              className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
             />
           </div>
 
