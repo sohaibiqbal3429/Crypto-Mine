@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import OTP from "@/models/OTP"
 import { signToken } from "@/lib/auth"
+import { isOTPExpired } from "@/lib/utils/otp"
 import { z } from "zod"
 
 const loginWithOTPSchema = z
@@ -21,27 +22,49 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = loginWithOTPSchema.parse(body)
+    const email = validatedData.email?.toLowerCase()
+    const phone = validatedData.phone
 
     // Verify OTP first
-    const query: any = {
-      code: validatedData.otpCode,
-      purpose: "login",
-      verified: true,
+    const contactFilters: Record<string, string>[] = []
+    if (email) {
+      contactFilters.push({ email })
     }
-    if (validatedData.email) query.email = validatedData.email
-    if (validatedData.phone) query.phone = validatedData.phone
+    if (phone) {
+      contactFilters.push({ phone })
+    }
 
-    const otpRecord = await OTP.findOne(query)
-    if (!otpRecord) {
+    const otpQuery: Record<string, unknown> = { purpose: "login" }
+    if (contactFilters.length === 1) {
+      Object.assign(otpQuery, contactFilters[0])
+    } else if (contactFilters.length > 1) {
+      otpQuery.$or = contactFilters
+    }
+
+    const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
+    if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
     }
 
-    // Find user
-    const userQuery: any = {}
-    if (validatedData.email) userQuery.email = validatedData.email
-    if (validatedData.phone) userQuery.phone = validatedData.phone
+    if (isOTPExpired(otpRecord.expiresAt)) {
+      await OTP.deleteOne({ _id: otpRecord._id })
+      return NextResponse.json({ error: "OTP code has expired" }, { status: 400 })
+    }
 
-    const user = await User.findOne(userQuery)
+    if (!otpRecord.verified) {
+      otpRecord.verified = true
+      await otpRecord.save()
+    }
+
+    // Find user
+    let userQuery: Record<string, unknown> | null = null
+    if (contactFilters.length === 1) {
+      userQuery = contactFilters[0]
+    } else if (contactFilters.length > 1) {
+      userQuery = { $or: contactFilters }
+    }
+
+    const user = userQuery ? await User.findOne(userQuery) : null
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }

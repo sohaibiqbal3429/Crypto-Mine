@@ -27,16 +27,29 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = registerWithOTPSchema.parse(body)
+    const email = validatedData.email?.toLowerCase()
+    const phone = validatedData.phone
 
     // Verify OTP first – look up the most recent OTP for this contact and
     // purpose, then make sure it matches what the user supplied. This allows us
     // to accept the freshly verified record while still protecting against
     // stale/incorrect codes.
-    const baseQuery: Record<string, unknown> = { purpose: "registration" }
-    if (validatedData.email) baseQuery.email = validatedData.email
-    if (validatedData.phone) baseQuery.phone = validatedData.phone
+    const contactFilters: Record<string, string>[] = []
+    if (email) {
+      contactFilters.push({ email })
+    }
+    if (phone) {
+      contactFilters.push({ phone })
+    }
 
-    const otpRecord = await OTP.findOne(baseQuery).sort({ createdAt: -1 })
+    const otpQuery: Record<string, unknown> = { purpose: "registration" }
+    if (contactFilters.length === 1) {
+      Object.assign(otpQuery, contactFilters[0])
+    } else if (contactFilters.length > 1) {
+      otpQuery.$or = contactFilters
+    }
+
+    const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
 
     if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
@@ -53,9 +66,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email: validatedData.email }, { phone: validatedData.phone }].filter(Boolean),
-    })
+    let existingUserQuery: Record<string, unknown> | null = null
+    if (contactFilters.length === 1) {
+      existingUserQuery = contactFilters[0]
+    } else if (contactFilters.length > 1) {
+      existingUserQuery = { $or: contactFilters }
+    }
+
+    const existingUser = existingUserQuery ? await User.findOne(existingUserQuery) : null
 
     if (existingUser) {
       return NextResponse.json({ error: "User already exists with this email or phone" }, { status: 400 })
@@ -85,13 +103,13 @@ export async function POST(request: NextRequest) {
       isActive: true, // User is active since they verified their contact
     }
 
-    if (validatedData.email) {
-      userData.email = validatedData.email
+    if (email) {
+      userData.email = email
       userData.emailVerified = true
     }
 
-    if (validatedData.phone) {
-      userData.phone = validatedData.phone
+    if (phone) {
+      userData.phone = phone
       userData.phoneVerified = true
     }
 
