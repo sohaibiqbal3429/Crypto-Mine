@@ -20,37 +20,51 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = withdrawSchema.parse(body)
 
-    const [user, balance, settings] = await Promise.all([
+    const [user, balanceDoc, settings] = await Promise.all([
       User.findById(userPayload.userId),
       Balance.findOne({ userId: userPayload.userId }),
       Settings.findOne(),
     ])
 
-    if (!user || !balance || !settings) {
-      return NextResponse.json({ error: "Data not found" }, { status: 404 })
+    if (!user) {
+      return NextResponse.json({ error: "Account not found" }, { status: 404 })
+    }
+
+    const minWithdraw = Number(settings?.gating?.minWithdraw ?? 30)
+
+    if (!balanceDoc) {
+      return NextResponse.json(
+        {
+          error: "Balance information unavailable. Please contact support before requesting a withdrawal.",
+        },
+        { status: 400 },
+      )
     }
 
     // Check minimum withdrawal
-    if (validatedData.amount < settings.gating.minWithdraw) {
+    if (validatedData.amount < minWithdraw) {
       return NextResponse.json(
         {
-          error: `Minimum withdrawal is $${settings.gating.minWithdraw} USDT`,
+          error: `Minimum withdrawal is $${minWithdraw.toFixed(2)} USDT`,
         },
         { status: 400 },
       )
     }
 
     // Check available balance
-    if (validatedData.amount > balance.current) {
+    if (validatedData.amount > balanceDoc.current) {
       return NextResponse.json(
         {
           error: "Insufficient balance",
-          availableBalance: balance.current,
+          availableBalance: balanceDoc.current,
           requestedAmount: validatedData.amount,
         },
         { status: 400 },
       )
     }
+
+    const updatedCurrent = balanceDoc.current - validatedData.amount
+    const updatedPendingWithdraw = balanceDoc.pendingWithdraw + validatedData.amount
 
     const pendingWithdrawals = await Transaction.countDocuments({
       userId: userPayload.userId,
@@ -87,7 +101,7 @@ export async function POST(request: NextRequest) {
       meta: {
         walletAddress: validatedData.walletAddress,
         requestedAt: new Date(),
-        userBalance: balance.current,
+        userBalance: updatedCurrent,
         withdrawalFee: 0, // Could add withdrawal fees here
       },
     })
@@ -108,8 +122,8 @@ export async function POST(request: NextRequest) {
         createdAt: transaction.createdAt,
         walletAddress: validatedData.walletAddress,
       },
-      newBalance: balance.current - validatedData.amount,
-      pendingWithdraw: balance.pendingWithdraw + validatedData.amount,
+      newBalance: updatedCurrent,
+      pendingWithdraw: updatedPendingWithdraw,
     })
   } catch (error: any) {
     console.error("Withdrawal error:", error)

@@ -84,6 +84,17 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
   }
 }
 
+function resolveInternalUrl(path: string): string {
+  const configuredBase =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXTAUTH_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")
+
+  const baseUrl = configuredBase ? configuredBase.replace(/\/$/, "") : "http://localhost:3000"
+
+  return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
+}
+
 export async function submitWithdrawAction(_: WithdrawFormState, formData: FormData): Promise<WithdrawFormState> {
   const cookieStore = await cookies()
   const token = cookieStore.get("auth-token")?.value
@@ -112,7 +123,7 @@ export async function submitWithdrawAction(_: WithdrawFormState, formData: FormD
     .join("; ")
 
   try {
-    const response = await fetch("/api/wallet/withdraw", {
+    const response = await fetch(resolveInternalUrl("/api/wallet/withdraw"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
