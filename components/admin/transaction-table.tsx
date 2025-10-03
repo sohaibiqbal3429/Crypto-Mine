@@ -254,7 +254,7 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
                       </TableCell>
                     </TableRow>
                   )
-                ))}
+                })}
               </TableBody>
             </Table>
           </div>
