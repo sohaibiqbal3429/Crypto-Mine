@@ -154,7 +154,7 @@ export default function SupportPage() {
                     <Mail className="w-5 h-5 text-muted-foreground" />
                     <div>
                       <p className="font-medium">Email Support</p>
-                      <p className="text-sm text-muted-foreground">support@mintminepro.com</p>
+                      <p className="text-sm text-muted-foreground">Mintminepro@gmail.com</p>
                     </div>
                   </div>
 
