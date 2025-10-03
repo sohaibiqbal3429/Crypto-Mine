@@ -132,7 +132,7 @@ export function AdminDashboard({
 
       <main className="flex-1 md:ml-64 overflow-auto">
         <div className="p-6">
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mt-8 flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
               <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>

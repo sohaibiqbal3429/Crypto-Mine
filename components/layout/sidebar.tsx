@@ -142,7 +142,7 @@ export function Sidebar({ user }: SidebarProps) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
          <Button  variant="ghost" size="icon" className="md:hidden ">
-  <Menu className="h-12 w-12" /> {/* aur bada */}
+  <Menu className="h-0 w-0" /> {/* aur bada */}
 </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
