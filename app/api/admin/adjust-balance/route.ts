@@ -27,8 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     const adjustmentAmount = Number.parseFloat(amount)
-    if (Number.isNaN(adjustmentAmount)) {
+    if (Number.isNaN(adjustmentAmount) || adjustmentAmount <= 0) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400 })
+    }
+
+    const balanceDoc = await Balance.findOne({ userId })
+    if (!balanceDoc) {
+      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
     }
 
     // Update balance
@@ -40,10 +45,23 @@ export async function POST(request: NextRequest) {
         totalEarning: adjustmentAmount,
       }
     } else if (type === "subtract") {
+      if (adjustmentAmount > balanceDoc.current) {
+        return NextResponse.json(
+          {
+            error: "Insufficient balance to subtract",
+            currentBalance: balanceDoc.current,
+            requestedAmount: adjustmentAmount,
+          },
+          { status: 400 },
+        )
+      }
+
       updateFields.$inc = {
         current: -adjustmentAmount,
-        totalBalance: -adjustmentAmount,
+        totalBalance: -Math.min(adjustmentAmount, balanceDoc.totalBalance ?? 0),
       }
+    } else {
+      return NextResponse.json({ error: "Invalid adjustment type" }, { status: 400 })
     }
 
     await Balance.updateOne({ userId }, updateFields)
