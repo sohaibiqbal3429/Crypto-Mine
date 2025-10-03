@@ -52,16 +52,14 @@ export async function POST(request: NextRequest) {
       })
       console.log("[v0] Created OTP record:", otpRecord._id)
 
-      const isDevelopment = process.env.NODE_ENV === "development"
-      const hasEmailConfig = process.env.SMTP_USER && process.env.SMTP_PASS
+      const hasEmailConfig = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
 
-      if (isDevelopment && !hasEmailConfig) {
-        console.log("[v0] Development mode: Skipping email send, OTP:", otpCode)
-        return NextResponse.json({
-          success: true,
-          message: "OTP sent to your email address",
-          developmentOTP: otpCode,
-        })
+      if (!hasEmailConfig) {
+        console.error("[v0] Email configuration missing. Cannot send OTP email.")
+        return NextResponse.json(
+          { error: "Email service is not configured. Please contact support." },
+          { status: 500 },
+        )
       }
 
       try {
@@ -70,18 +68,15 @@ export async function POST(request: NextRequest) {
         console.log("[v0] Email sent successfully")
       } catch (emailError) {
         console.error("[v0] Email sending failed:", emailError)
-        return NextResponse.json({
-          success: true,
-          message: "OTP sent to your email address",
-          ...(isDevelopment && { developmentOTP: otpCode }),
-          warning: isDevelopment ? "Email sending failed, using development mode" : undefined,
-        })
+        return NextResponse.json(
+          { error: "Failed to send verification email. Please try again later." },
+          { status: 500 },
+        )
       }
 
       return NextResponse.json({
         success: true,
         message: "OTP sent to your email address",
-        ...(isDevelopment && { developmentOTP: otpCode }),
       })
     }
 
@@ -112,16 +107,14 @@ export async function POST(request: NextRequest) {
       })
       console.log("[v0] Created phone OTP record:", otpRecord._id)
 
-      const isDevelopment = process.env.NODE_ENV === "development"
-      const hasSMSConfig = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
+      const hasSMSConfig = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
 
-      if (isDevelopment && !hasSMSConfig) {
-        console.log("[v0] Development mode: Skipping SMS send, OTP:", otpCode)
-        return NextResponse.json({
-          success: true,
-          message: "OTP sent to your phone number",
-          developmentOTP: otpCode,
-        })
+      if (!hasSMSConfig) {
+        console.error("[v0] SMS configuration missing. Cannot send OTP SMS.")
+        return NextResponse.json(
+          { error: "SMS service is not configured. Please use email verification." },
+          { status: 500 },
+        )
       }
 
       try {
@@ -130,18 +123,15 @@ export async function POST(request: NextRequest) {
         console.log("[v0] SMS sent successfully")
       } catch (smsError) {
         console.error("[v0] SMS sending failed:", smsError)
-        return NextResponse.json({
-          success: true,
-          message: "OTP sent to your phone number",
-          ...(isDevelopment && { developmentOTP: otpCode }),
-          warning: isDevelopment ? "SMS sending failed, using development mode" : undefined,
-        })
+        return NextResponse.json(
+          { error: "Failed to send verification code via SMS. Please try again later." },
+          { status: 500 },
+        )
       }
 
       return NextResponse.json({
         success: true,
         message: "OTP sent to your phone number",
-        ...(isDevelopment && { developmentOTP: otpCode }),
       })
     }
 

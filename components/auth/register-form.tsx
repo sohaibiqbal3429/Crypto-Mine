@@ -51,7 +51,6 @@ export function RegisterForm() {
   const [otpValue, setOtpValue] = useState("")
   const [otpCountdown, setOtpCountdown] = useState(0)
   const [isResending, setIsResending] = useState(false)
-  const [developmentOTP, setDevelopmentOTP] = useState<string | null>(null)
 
   // Prefill referral code from query param (?ref= or ?referral=), once on mount / when URL changes
   useEffect(() => {
@@ -83,7 +82,6 @@ export function RegisterForm() {
     setOtpValue("")
     setOtpCountdown(0)
     setIsResending(false)
-    setDevelopmentOTP(null)
     setInfoMessage("")
   }
 
@@ -124,10 +122,7 @@ export function RegisterForm() {
           return
         }
 
-        setInfoMessage("Verification code sent to your email. Enter it below to finish signing up.")
-        if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
-          setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
-        }
+        setInfoMessage("Verification code sent to your email. Enter it below to verify your account.")
         setStep("otp")
         setOtpValue("")
         setOtpCountdown(60)
@@ -220,9 +215,6 @@ export function RegisterForm() {
       }
 
       setInfoMessage("A new verification code has been sent to your email.")
-      if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
-        setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
-      }
       setOtpValue("")
       setOtpCountdown(60)
     } catch (resendError) {
@@ -442,9 +434,6 @@ export function RegisterForm() {
                   )}
                 </Button>
               </div>
-              {developmentOTP && (
-                <p className="text-center text-xs font-medium text-primary">Development OTP: {developmentOTP}</p>
-              )}
             </div>
           )}
 

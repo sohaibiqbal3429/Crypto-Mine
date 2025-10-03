@@ -27,7 +27,6 @@ export default function ForgotPasswordPage() {
   const [verifiedCode, setVerifiedCode] = useState<string | null>(null)
   const [otpCountdown, setOtpCountdown] = useState(0)
   const [isResending, setIsResending] = useState(false)
-  const [developmentOTP, setDevelopmentOTP] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -53,7 +52,6 @@ export default function ForgotPasswordPage() {
     setVerifiedCode(null)
     setOtpCountdown(0)
     setIsResending(false)
-    setDevelopmentOTP(null)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -82,9 +80,6 @@ export default function ForgotPasswordPage() {
         }
 
         setSuccess("Verification code sent to your email. Enter it below to verify your account.")
-        if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
-          setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
-        }
         setStep("verify")
         setOtpValue("")
         setOtpCountdown(60)
@@ -206,9 +201,6 @@ export default function ForgotPasswordPage() {
       }
 
       setSuccess("A new verification code has been sent to your email.")
-      if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
-        setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
-      }
       setOtpValue("")
       setOtpCountdown(60)
       setVerifiedCode(null)
@@ -299,9 +291,6 @@ export default function ForgotPasswordPage() {
                     )}
                   </Button>
                 </div>
-                {developmentOTP && (
-                  <p className="text-center text-xs font-medium text-primary">Development OTP: {developmentOTP}</p>
-                )}
               </div>
             )}
 
