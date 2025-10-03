@@ -32,11 +32,22 @@ export async function POST(request: NextRequest) {
     // purpose, then make sure it matches what the user supplied. This allows us
     // to accept the freshly verified record while still protecting against
     // stale/incorrect codes.
-    const baseQuery: Record<string, unknown> = { purpose: "registration" }
-    if (validatedData.email) baseQuery.email = validatedData.email
-    if (validatedData.phone) baseQuery.phone = validatedData.phone
+    const contactFilters: Record<string, string>[] = []
+    if (validatedData.email) {
+      contactFilters.push({ email: validatedData.email })
+    }
+    if (validatedData.phone) {
+      contactFilters.push({ phone: validatedData.phone })
+    }
 
-    const otpRecord = await OTP.findOne(baseQuery).sort({ createdAt: -1 })
+    const otpQuery: Record<string, unknown> = { purpose: "registration" }
+    if (contactFilters.length === 1) {
+      Object.assign(otpQuery, contactFilters[0])
+    } else if (contactFilters.length > 1) {
+      otpQuery.$or = contactFilters
+    }
+
+    const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
 
     if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
