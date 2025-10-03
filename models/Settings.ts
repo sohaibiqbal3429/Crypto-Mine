@@ -19,6 +19,8 @@ export interface ISettings extends Document {
   commission: {
     baseDirectPct: number
     startAtDeposit: number
+    highTierPct: number
+    highTierStartAt: number
   }
 }
 
@@ -42,6 +44,8 @@ const SettingsSchema = new Schema<ISettings>(
     commission: {
       baseDirectPct: { type: Number, default: 7 },
       startAtDeposit: { type: Number, default: 50 },
+      highTierPct: { type: Number, default: 5 },
+      highTierStartAt: { type: Number, default: 100 },
     },
   },
   {
