@@ -104,15 +104,15 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="w-full max-w-2xl rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
-      <div className="bg-black text-white text-center py-4">
+    <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors">
+      <div className="bg-gradient-to-r from-primary to-accent py-4 text-center text-primary-foreground">
         <h1 className="text-lg font-semibold tracking-wide">Referral Signup System</h1>
       </div>
 
-      <div className="px-6 sm:px-8 py-6 space-y-6">
+      <div className="space-y-6 px-6 py-6 sm:px-8">
         <div className="flex justify-center">
-          <div className="w-14 h-14 rounded-full border border-slate-300 flex items-center justify-center text-slate-600">
-            <UserPlus className="w-8 h-8" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border/60 bg-background/80 text-primary shadow-sm">
+            <UserPlus className="h-8 w-8" />
           </div>
         </div>
 
@@ -125,7 +125,7 @@ export function RegisterForm() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="name" className="text-sm font-semibold text-foreground/90">
                 Name
               </Label>
               <Input
@@ -134,12 +134,12 @@ export function RegisterForm() {
                 value={formData.name}
                 onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
                 required
-                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="email" className="text-sm font-semibold text-foreground/90">
                 Email
               </Label>
               <Input
@@ -149,13 +149,13 @@ export function RegisterForm() {
                 value={formData.email}
                 onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
                 required
-                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">
+            <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
               Phone Number
             </Label>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -163,7 +163,7 @@ export function RegisterForm() {
                 value={formData.countryCode}
                 onValueChange={(value) => setFormData((prev) => ({ ...prev, countryCode: value }))}
               >
-                <SelectTrigger className="sm:w-40 h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700">
+                <SelectTrigger className="h-11 rounded-md sm:w-40">
                   <SelectValue placeholder="Country" />
                 </SelectTrigger>
                 <SelectContent className="max-h-64">
@@ -184,7 +184,7 @@ export function RegisterForm() {
                   setFormData((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, "") }))
                 }
                 required
-                className="h-11 flex-1 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11 flex-1"
               />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -194,7 +194,7 @@ export function RegisterForm() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
                 Password
               </Label>
               <Input
@@ -205,12 +205,12 @@ export function RegisterForm() {
                 onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
                 required
                 minLength={6}
-                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-foreground/90">
                 Re-enter Password
               </Label>
               <Input
@@ -223,13 +223,13 @@ export function RegisterForm() {
                 }
                 required
                 minLength={6}
-                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="referralCode" className="text-sm font-semibold text-slate-700">
+            <Label htmlFor="referralCode" className="text-sm font-semibold text-foreground/90">
               Referral Code
             </Label>
             <Input
@@ -244,17 +244,12 @@ export function RegisterForm() {
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="sm:w-auto h-11 border-black text-black hover:bg-black/10"
-              onClick={() => router.push("/auth/forgot")}
-            >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <Button type="button" variant="outline" className="h-11 sm:w-auto" onClick={() => router.push("/auth/forgot")}>
               Forgot Password?
             </Button>
 
-            <Button type="submit" className="h-11 flex-1 sm:flex-none bg-black hover:bg-black/90" disabled={isLoading}>
+            <Button type="submit" className="h-11 flex-1 sm:flex-none shadow-lg shadow-primary/20" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -267,9 +262,9 @@ export function RegisterForm() {
           </div>
         </form>
 
-        <p className="text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/auth/login" className="font-semibold text-black hover:underline">
+          <Link href="/auth/login" className="font-semibold text-primary hover:underline">
             Login instead
           </Link>
         </p>

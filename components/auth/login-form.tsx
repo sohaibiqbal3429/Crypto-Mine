@@ -94,15 +94,15 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-lg rounded-2xl overflow-hidden shadow-xl border border-slate-200 bg-white">
-      <div className="bg-black text-white text-center py-4">
+    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors">
+      <div className="bg-gradient-to-r from-primary to-accent py-4 text-center text-primary-foreground">
         <h1 className="text-lg font-semibold tracking-wide">User Referral Login System</h1>
       </div>
 
-      <div className="px-6 sm:px-8 py-6 space-y-6">
+      <div className="space-y-6 px-6 py-6 sm:px-8">
         <div className="flex justify-center">
-          <div className="w-14 h-14 rounded-full border border-slate-300 flex items-center justify-center text-slate-600">
-            <UserRoundPlus className="w-8 h-8" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border/60 bg-background/80 text-primary shadow-sm">
+            <UserRoundPlus className="h-8 w-8" />
           </div>
         </div>
 
@@ -127,7 +127,7 @@ export function LoginForm() {
             </TabsList>
 
             <TabsContent value="email" className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="email" className="text-sm font-semibold text-foreground/90">
                 Email Address
               </Label>
               <Input
@@ -136,12 +136,12 @@ export function LoginForm() {
                 placeholder="Enter your email"
                 value={formData.email}
                 onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
-                className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                className="h-11"
               />
             </TabsContent>
 
             <TabsContent value="phone" className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">
+              <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
                 Phone Number
               </Label>
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -149,7 +149,7 @@ export function LoginForm() {
                   value={formData.countryCode}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, countryCode: value }))}
                 >
-                  <SelectTrigger className="sm:w-40 h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700">
+                  <SelectTrigger className="h-11 rounded-md sm:w-40">
                     <SelectValue placeholder="Country" />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
@@ -168,7 +168,7 @@ export function LoginForm() {
                   onChange={(event) =>
                     setFormData((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, "") }))
                   }
-                  className="h-11 flex-1 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+                  className="h-11 flex-1"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -178,7 +178,7 @@ export function LoginForm() {
           </Tabs>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-semibold text-slate-700">
+            <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
               Password
             </Label>
             <Input
@@ -188,26 +188,24 @@ export function LoginForm() {
               value={formData.password}
               onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
               required
-              className="h-11 rounded-md border-slate-300 bg-slate-50 text-slate-700 placeholder:text-slate-400"
+              className="h-11"
             />
           </div>
 
           <div className="flex items-center justify-end text-sm">
-            <Link href="/auth/forgot" className="text-slate-600 hover:text-black font-medium underline-offset-4 hover:underline">
+            <Link
+              href="/auth/forgot"
+              className="font-medium text-primary underline-offset-4 transition-colors hover:text-primary/80 hover:underline"
+            >
               Forgot Password?
             </Link>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 h-11 border-black text-black hover:bg-black/10"
-              onClick={() => router.push("/auth/register")}
-            >
+            <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => router.push("/auth/register")}>
               (Create Account)
             </Button>
-            <Button type="submit" className="flex-1 h-11 bg-black hover:bg-black/90" disabled={isLoading}>
+            <Button type="submit" className="flex-1 h-11 shadow-lg shadow-primary/20" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
