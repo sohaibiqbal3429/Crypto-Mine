@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { NotificationBell } from "@/components/notifications/notification-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
 import Image from "next/image"
 import {
   Home,
@@ -70,8 +71,9 @@ export function Sidebar({ user }: SidebarProps) {
           <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
           <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
         </div>
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2">
           <NotificationBell />
+          <ThemeToggle />
         </div>
       </div>
 
@@ -153,8 +155,9 @@ export function Sidebar({ user }: SidebarProps) {
         <SidebarContent />
       </div>
 
-      <div className="hidden md:block fixed top-4 right-6 z-50">
+      <div className="fixed top-4 right-6 z-50 hidden items-center gap-3 md:flex">
         <NotificationBell />
+        <ThemeToggle />
       </div>
     </>
   )

@@ -5,20 +5,20 @@ import Image from "next/image"
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-50 to-amber-100">
+    <div className="min-h-screen bg-gradient-to-br from-[hsl(var(--background))] via-[hsl(var(--secondary))] to-[hsl(var(--muted))] text-foreground transition-colors dark:from-[#050505] dark:via-[#0c0c0c] dark:to-[#161616]">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="border-b border-border/60 bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/60 dark:bg-[#101010]/80">
+        <div className="container mx-auto flex items-center justify-between px-4 py-4">
           <div className="flex items-center space-x-2">
             <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
             <span className="text-xl font-bold">Mintmine Pro</span>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <Link href="/auth/login">
               <Button variant="ghost">Sign In</Button>
             </Link>
             <Link href="/auth/register">
-              <Button>Get Started</Button>
+              <Button className="shadow-lg shadow-primary/20">Get Started</Button>
             </Link>
           </div>
         </div>
@@ -26,28 +26,28 @@ export default function HomePage() {
 
       {/* Hero Section */}
       <main className="container mx-auto px-4 py-16">
-        <div className="text-center max-w-4xl mx-auto">
-          <h1 className="text-5xl font-bold text-balance mb-6">
+        <div className="mx-auto max-w-4xl text-center">
+          <h1 className="text-balance text-5xl font-bold leading-tight sm:text-6xl">
             Next-Generation
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-amber-700">
+            <span className="bg-gradient-to-r from-primary via-accent to-primary/80 bg-clip-text text-transparent">
               {" "}
               Crypto Mining{" "}
             </span>
             Platform
           </h1>
-          <p className="text-xl text-muted-foreground text-balance mb-8">
+          <p className="mt-6 text-balance text-lg text-muted-foreground sm:text-xl">
             Join our innovative mining ecosystem with referral rewards, team building, and sustainable earning
             opportunities.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
             <Link href="/auth/register">
-              <Button size="lg" className="text-lg px-8">
+              <Button size="lg" className="px-8 text-lg shadow-lg shadow-primary/25">
                 Start Mining Today
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
             <Link href="/auth/login">
-              <Button size="lg" variant="outline" className="text-lg px-8 bg-transparent">
+              <Button size="lg" variant="outline" className="px-8 text-lg">
                 Sign In
               </Button>
             </Link>
@@ -55,31 +55,31 @@ export default function HomePage() {
         </div>
 
         {/* Features */}
-        <div className="grid md:grid-cols-3 gap-8 mt-20">
-          <div className="text-center p-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Zap className="w-8 h-8 text-white" />
+        <div className="mt-20 grid gap-8 md:grid-cols-3">
+          <div className="group rounded-3xl border border-border/60 bg-card/80 p-6 shadow-lg shadow-primary/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/30">
+              <Zap className="h-8 w-8" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">Easy Mining</h3>
-            <p className="text-muted-foreground">
+            <h3 className="text-xl font-semibold">Easy Mining</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
               Simple one-click mining with daily rewards and automated profit distribution.
             </p>
           </div>
-          <div className="text-center p-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-white" />
+          <div className="group rounded-3xl border border-border/60 bg-card/80 p-6 shadow-lg shadow-primary/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/30">
+              <Users className="h-8 w-8" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">Team Building</h3>
-            <p className="text-muted-foreground">
+            <h3 className="text-xl font-semibold">Team Building</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
               Build your network with referral rewards and multi-level commission structure.
             </p>
           </div>
-          <div className="text-center p-6">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Shield className="w-8 h-8 text-white" />
+          <div className="group rounded-3xl border border-border/60 bg-card/80 p-6 shadow-lg shadow-primary/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/30">
+              <Shield className="h-8 w-8" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">Secure Platform</h3>
-            <p className="text-muted-foreground">
+            <h3 className="text-xl font-semibold">Secure Platform</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
               Advanced security measures with transparent transaction tracking and admin oversight.
             </p>
           </div>

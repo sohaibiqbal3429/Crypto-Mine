@@ -165,8 +165,8 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
       )}
 
       {state?.success && (
-        <Alert className="border-green-200 bg-green-50">
-          <div className="flex items-center gap-2 text-green-700">
+        <Alert className="border border-emerald-400/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200">
+          <div className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>{state.success}</AlertDescription>
           </div>
@@ -174,9 +174,9 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
       )}
 
       {/* Network Selection */}
-      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-100 p-5 shadow-sm dark:from-slate-900 dark:via-slate-900/60 dark:to-slate-900">
+      <section className="rounded-3xl border border-border/80 bg-card/90 p-5 shadow-lg shadow-primary/10 transition-colors">
         <div className="space-y-4">
-          <Label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+          <Label className="text-sm font-semibold text-foreground/90">
             Select Network
           </Label>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -187,15 +187,15 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                   key={option.id}
                   type="button"
                   onClick={() => setSelectedOptionId(option.id)}
-                  className={`rounded-xl border p-4 text-left transition-shadow ${
+                  className={`rounded-xl border p-4 text-left transition-all ${
                     isSelected
-                      ? "border-emerald-500 bg-emerald-50 shadow-md dark:bg-emerald-950"
-                      : "border-slate-200 hover:shadow"
+                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/30"
+                      : "border-border/70 bg-background/70 hover:border-primary/60 hover:shadow"
                   }`}
                 >
                   <p className="text-xs uppercase text-muted-foreground">{option.network}</p>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{option.label}</p>
-                  <p className="mt-2 break-all font-mono text-xs text-slate-600 dark:text-slate-300">
+                  <p className="text-sm font-semibold text-foreground">{option.label}</p>
+                  <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
                     {option.address}
                   </p>
                 </button>
@@ -206,14 +206,18 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
 
         <div className="mt-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3 md:max-w-md">
-            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Deposit address</p>
+            <p className="text-sm font-semibold text-muted-foreground">Deposit address</p>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Input readOnly value={selectedAddress} className="h-12 rounded-xl bg-white font-mono text-sm shadow-inner dark:bg-slate-950" />
+              <Input
+                readOnly
+                value={selectedAddress}
+                className="h-12 rounded-xl bg-background/80 font-mono text-sm shadow-inner dark:bg-input/40"
+              />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleCopy}
-                className="h-12 rounded-xl border-slate-300 text-sm font-semibold shadow-sm"
+                className="h-12 rounded-xl border border-border/60 text-sm font-semibold shadow-sm"
               >
                 {copied ? (
                   <>
@@ -229,18 +233,22 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
           </div>
           {selectedAddress && (
             <div className="flex shrink-0 justify-center">
-              <img src={qrCodeUrl} alt="Deposit address QR code" className="h-44 w-44 rounded-xl border bg-white p-2 shadow-md" />
+              <img
+                src={qrCodeUrl}
+                alt="Deposit address QR code"
+                className="h-44 w-44 rounded-xl border border-border/60 bg-card p-2 shadow-md"
+              />
             </div>
           )}
         </div>
       </section>
 
       {/* Deposit Form */}
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+      <section className="rounded-3xl border border-border/80 bg-card p-5 shadow-lg shadow-primary/5">
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="deposit-amount" className="text-sm font-semibold">
+              <Label htmlFor="deposit-amount" className="text-sm font-semibold text-foreground/90">
                 Amount (USDT)
               </Label>
               <Input
@@ -260,7 +268,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Exchange</Label>
+              <Label className="text-sm font-semibold text-foreground/90">Exchange</Label>
               <Select
                 value={formState.exchangePlatform}
                 onValueChange={(value) =>
@@ -282,7 +290,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="transaction-number" className="text-sm font-semibold">
+              <Label htmlFor="transaction-number" className="text-sm font-semibold text-foreground/90">
                 Transaction Hash
               </Label>
               <Input
@@ -302,7 +310,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
 
           {/* Upload Section */}
           <div className="space-y-3">
-            <Label htmlFor="transaction-receipt" className="text-sm font-semibold">
+            <Label htmlFor="transaction-receipt" className="text-sm font-semibold text-foreground/90">
               Upload Confirmation Screenshot
             </Label>
             <Input
@@ -316,7 +324,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
             />
 
             {receiptFile && (
-              <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 p-3">
+              <div className="flex items-center gap-3 rounded-xl border border-dashed border-border/70 bg-background/80 p-3">
                 {receiptPreview ? (
                   <img src={receiptPreview} alt="Transaction receipt preview" className="h-16 w-16 rounded-lg object-cover shadow-sm" />
                 ) : (
