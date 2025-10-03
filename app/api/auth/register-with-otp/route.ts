@@ -5,6 +5,7 @@ import Balance from "@/models/Balance"
 import OTP from "@/models/OTP"
 import { hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
+import { isOTPExpired } from "@/lib/utils/otp"
 import { z } from "zod"
 
 const registerWithOTPSchema = z
@@ -27,18 +28,39 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = registerWithOTPSchema.parse(body)
 
-    // Verify OTP first
-    const query: any = {
-      code: validatedData.otpCode,
-      purpose: "registration",
-      verified: true,
+    // Verify OTP first – look up the most recent OTP for this contact and
+    // purpose, then make sure it matches what the user supplied. This allows us
+    // to accept the freshly verified record while still protecting against
+    // stale/incorrect codes.
+    const contactFilters: Record<string, string>[] = []
+    if (validatedData.email) {
+      contactFilters.push({ email: validatedData.email })
     }
-    if (validatedData.email) query.email = validatedData.email
-    if (validatedData.phone) query.phone = validatedData.phone
+    if (validatedData.phone) {
+      contactFilters.push({ phone: validatedData.phone })
+    }
 
-    const otpRecord = await OTP.findOne(query)
-    if (!otpRecord) {
+    const otpQuery: Record<string, unknown> = { purpose: "registration" }
+    if (contactFilters.length === 1) {
+      Object.assign(otpQuery, contactFilters[0])
+    } else if (contactFilters.length > 1) {
+      otpQuery.$or = contactFilters
+    }
+
+    const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
+
+    if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
+    }
+
+    if (isOTPExpired(otpRecord.expiresAt)) {
+      await OTP.deleteOne({ _id: otpRecord._id })
+      return NextResponse.json({ error: "OTP code has expired" }, { status: 400 })
+    }
+
+    if (!otpRecord.verified) {
+      otpRecord.verified = true
+      await otpRecord.save()
     }
 
     // Check if user already exists

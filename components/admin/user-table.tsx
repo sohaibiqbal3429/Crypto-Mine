@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,12 +42,21 @@ interface User {
   }
 }
 
+interface PaginationMeta {
+  page: number
+  pages: number
+  limit: number
+  total: number
+}
+
 interface UserTableProps {
   users: User[]
+  pagination: PaginationMeta
+  onPageChange: (page: number) => void
   onRefresh: () => void
 }
 
-export function UserTable({ users, onRefresh }: UserTableProps) {
+export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTableProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [showAdjustDialog, setShowAdjustDialog] = useState(false)
   const [adjustForm, setAdjustForm] = useState({
@@ -57,6 +66,29 @@ export function UserTable({ users, onRefresh }: UserTableProps) {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  const paginationStart = useMemo(() => {
+    if (pagination.total === 0) return 0
+    return (pagination.page - 1) * pagination.limit + 1
+  }, [pagination.limit, pagination.page, pagination.total])
+
+  const paginationEnd = useMemo(() => {
+    if (pagination.total === 0) return 0
+    return Math.min(pagination.page * pagination.limit, pagination.total)
+  }, [pagination.limit, pagination.page, pagination.total])
+  const hasNextPage = pagination.page < pagination.pages || users.length === pagination.limit
+
+  const goToPreviousPage = () => {
+    if (pagination.page > 1) {
+      onPageChange(pagination.page - 1)
+    }
+  }
+
+  const goToNextPage = () => {
+    if (hasNextPage) {
+      onPageChange(pagination.page + 1)
+    }
+  }
 
   const handleAdjustBalance = async () => {
     if (!selectedUser) return
@@ -119,42 +151,68 @@ export function UserTable({ users, onRefresh }: UserTableProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user._id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{user.name}</div>
-                        <div className="text-sm text-muted-foreground">{user.email}</div>
-                        <div className="text-xs font-mono">{user.referralCode}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.level > 0 ? "default" : "secondary"}>Level {user.level}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono">${user.depositTotal.toFixed(2)}</TableCell>
-                    <TableCell className="font-mono">${user.balance.current.toFixed(2)}</TableCell>
-                    <TableCell className="font-mono text-green-600">${user.balance.totalEarning.toFixed(2)}</TableCell>
-                    <TableCell>
-                      <Badge variant={user.isActive ? "default" : "secondary"}>
-                        {user.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedUser(user)
-                          setShowAdjustDialog(true)
-                        }}
-                      >
-                        <Settings className="h-4 w-4" />
-                      </Button>
+                {users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                      No users found for the current search.
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  users.map((user) => (
+                    <TableRow key={user._id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{user.name}</div>
+                          <div className="text-sm text-muted-foreground">{user.email}</div>
+                          <div className="text-xs font-mono">{user.referralCode}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.level > 0 ? "default" : "secondary"}>Level {user.level}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono">${user.depositTotal.toFixed(2)}</TableCell>
+                      <TableCell className="font-mono">${user.balance.current.toFixed(2)}</TableCell>
+                      <TableCell className="font-mono text-green-600">${user.balance.totalEarning.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <Badge variant={user.isActive ? "default" : "secondary"}>
+                          {user.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser(user)
+                            setShowAdjustDialog(true)
+                          }}
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
+          </div>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {pagination.total > 0
+                ? `Showing ${paginationStart.toLocaleString()}-${paginationEnd.toLocaleString()} of ${pagination.total.toLocaleString()} users`
+                : "No users to display"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={pagination.page <= 1}>
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {Math.min(pagination.page, pagination.pages).toLocaleString()} of {Math.max(pagination.pages, 1).toLocaleString()}
+              </span>
+              <Button variant="outline" size="sm" onClick={goToNextPage} disabled={!hasNextPage}>
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

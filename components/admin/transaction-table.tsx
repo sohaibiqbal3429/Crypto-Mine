@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,17 +47,27 @@ type ReceiptMeta = {
   checksum?: string
 }
 
+interface PaginationMeta {
+  page: number
+  pages: number
+  limit: number
+  total: number
+}
+
 interface TransactionTableProps {
   transactions: Transaction[]
+  pagination: PaginationMeta
+  onPageChange: (page: number) => void
   onRefresh: () => void
 }
 
-export function TransactionTable({ transactions, onRefresh }: TransactionTableProps) {
+export function TransactionTable({ transactions, pagination, onPageChange, onRefresh }: TransactionTableProps) {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [imageError, setImageError] = useState(false)
 
   const receiptMeta =
     selectedTransaction?.type === "deposit" && selectedTransaction.meta?.receipt
@@ -70,6 +80,38 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
       : null
 
   const selectedAmount = selectedTransaction ? Number(selectedTransaction.amount) : Number.NaN
+
+  const resolvedReceiptUrl = useMemo(() => {
+    if (!receiptMeta?.url || typeof receiptMeta.url !== "string") {
+      return null
+    }
+
+    if (/^https?:\/\//i.test(receiptMeta.url)) {
+      return receiptMeta.url
+    }
+
+    return receiptMeta.url.startsWith("/") ? receiptMeta.url : `/${receiptMeta.url}`
+  }, [receiptMeta?.url])
+
+  useEffect(() => {
+    setImageError(false)
+  }, [resolvedReceiptUrl])
+
+  const paginationStart = (pagination.page - 1) * pagination.limit + 1
+  const paginationEnd = Math.min(pagination.page * pagination.limit, pagination.total)
+  const hasNextPage = pagination.page < pagination.pages || transactions.length === pagination.limit
+
+  const handlePreviousPage = () => {
+    if (pagination.page > 1) {
+      onPageChange(pagination.page - 1)
+    }
+  }
+
+  const handleNextPage = () => {
+    if (hasNextPage) {
+      onPageChange(pagination.page + 1)
+    }
+  }
 
   const handleApprove = async (transaction: Transaction) => {
     setLoading(true)
@@ -99,6 +141,12 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
   const handleReject = async () => {
     if (!selectedTransaction) return
 
+    const trimmedReason = rejectReason.trim()
+    if (!trimmedReason) {
+      setError("Please provide a reason for rejecting the transaction.")
+      return
+    }
+
     setLoading(true)
     setError("")
 
@@ -108,7 +156,7 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transactionId: selectedTransaction._id,
-          reason: rejectReason,
+          reason: trimmedReason,
         }),
       })
 
@@ -183,80 +231,107 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((transaction) => {
-                  const userRecord =
-                    transaction.userId && typeof transaction.userId === "object"
-                      ? transaction.userId
-                      : null
+                {transactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                      No transactions found for the selected filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  transactions.map((transaction) => {
+                    const userRecord =
+                      transaction.userId && typeof transaction.userId === "object"
+                        ? transaction.userId
+                        : null
 
-                  const amountValue = Number(transaction.amount)
-                  const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : null
-                  const fallbackIdentifier =
-                    userRecord?._id || (typeof transaction.userId === "string" ? transaction.userId : undefined)
-                  const isPending = transaction.status === "pending"
+                    const amountValue = Number(transaction.amount)
+                    const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : null
+                    const fallbackIdentifier =
+                      userRecord?._id || (typeof transaction.userId === "string" ? transaction.userId : undefined)
+                    const isPending = transaction.status === "pending"
 
-                  return (
-                    <TableRow key={transaction._id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {userRecord?.name || "Deleted user"}
+                    return (
+                      <TableRow key={transaction._id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {userRecord?.name || "Deleted user"}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {userRecord?.email || "User record unavailable"}
+                            </div>
+                            <div className="text-xs font-mono">
+                              {userRecord?.referralCode || fallbackIdentifier || "—"}
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            {userRecord?.email || "User record unavailable"}
+                        </TableCell>
+                        <TableCell>{getTypeBadge(transaction.type)}</TableCell>
+                        <TableCell className="font-mono">
+                          {Number.isFinite(amountValue) ? `$${amountValue.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                        <TableCell>
+                          {createdAt && !Number.isNaN(createdAt.getTime())
+                            ? createdAt.toLocaleDateString()
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedTransaction(transaction)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {isPending && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleApprove(transaction)}
+                                  disabled={loading}
+                                  className="text-green-600 hover:text-green-700"
+                                >
+                                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedTransaction(transaction)
+                                    setShowRejectDialog(true)
+                                  }}
+                                  disabled={loading}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
-                          <div className="text-xs font-mono">
-                            {userRecord?.referralCode || fallbackIdentifier || "—"}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getTypeBadge(transaction.type)}</TableCell>
-                      <TableCell className="font-mono">
-                        {Number.isFinite(amountValue) ? `$${amountValue.toFixed(2)}` : "—"}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                      <TableCell>
-                        {createdAt && !Number.isNaN(createdAt.getTime())
-                          ? createdAt.toLocaleDateString()
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Button variant="ghost" size="sm" onClick={() => setSelectedTransaction(transaction)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {isPending && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleApprove(transaction)}
-                                disabled={loading}
-                                className="text-green-600 hover:text-green-700"
-                              >
-                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedTransaction(transaction)
-                                  setShowRejectDialog(true)
-                                }}
-                                disabled={loading}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
               </TableBody>
             </Table>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {pagination.total > 0
+                ? `Showing ${paginationStart.toLocaleString()}-${paginationEnd.toLocaleString()} of ${pagination.total.toLocaleString()} transactions`
+                : "No transactions to display"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handlePreviousPage} disabled={pagination.page <= 1}>
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {Math.min(pagination.page, pagination.pages).toLocaleString()} of {Math.max(pagination.pages, 1).toLocaleString()}
+              </span>
+              <Button variant="outline" size="sm" onClick={handleNextPage} disabled={!hasNextPage}>
+                Next
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -295,28 +370,39 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
               {receiptMeta?.url && (
                 <div className="space-y-2">
                   <Label>Receipt Screenshot</Label>
-                  <div className="overflow-hidden rounded-md border bg-muted/60">
-                    <img
-                      src={receiptMeta.url}
-                      alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
-                      className="max-h-96 w-full object-contain bg-background"
-                    />
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-1">
+                  {resolvedReceiptUrl && !imageError ? (
+                    <div className="overflow-hidden rounded-md border bg-muted/60">
+                      <img
+                        src={resolvedReceiptUrl}
+                        alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
+                        className="max-h-96 w-full bg-background object-contain"
+                        onError={() => setImageError(true)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-md border bg-muted/60 p-4 text-sm text-muted-foreground">
+                      Receipt preview unavailable. Use the link below to view the original file.
+                    </div>
+                  )}
+                  <div className="space-y-1 text-xs text-muted-foreground">
                     {receiptMeta.originalName && <div>File: {receiptMeta.originalName}</div>}
-                    {typeof receiptMeta.size === "number" && <div>Size: {(receiptMeta.size / 1024 / 1024).toFixed(2)} MB</div>}
+                    {typeof receiptMeta.size === "number" && (
+                      <div>Size: {(receiptMeta.size / 1024 / 1024).toFixed(2)} MB</div>
+                    )}
                     {receiptMeta.uploadedAt && (
                       <div>Uploaded: {new Date(receiptMeta.uploadedAt).toLocaleString()}</div>
                     )}
                   </div>
-                  <a
-                    href={receiptMeta.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    Open full receipt
-                  </a>
+                  {resolvedReceiptUrl && (
+                    <a
+                      href={resolvedReceiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      Open full receipt
+                    </a>
+                  )}
                 </div>
               )}
 
@@ -355,7 +441,7 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleReject} disabled={loading || !rejectReason}>
+            <Button variant="destructive" onClick={handleReject} disabled={loading || !rejectReason.trim()}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Reject Transaction
             </Button>

@@ -10,7 +10,15 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, RefreshCw, Users, DollarSign, Clock } from "lucide-react"
+import {
+  Bell,
+  Clock,
+  DollarSign,
+  Loader2,
+  RefreshCw,
+  SunMedium,
+  Users,
+} from "lucide-react"
 import type {
   AdminStats,
   AdminSessionUser,
@@ -42,6 +50,7 @@ export function AdminDashboard({
   initialStats,
   initialError = null,
 }: AdminDashboardProps) {
+  const PAGE_SIZE = 20
   const [user, setUser] = useState(initialUser)
   const [transactions, setTransactions] = useState(initialTransactions)
   const [users, setUsers] = useState(initialUsers)
@@ -55,19 +64,42 @@ export function AdminDashboard({
     status: "all",
   })
   const [userSearch, setUserSearch] = useState("")
+  const [transactionPagination, setTransactionPagination] = useState({
+    page: 1,
+    pages: Math.max(1, Math.ceil(initialTransactions.length / PAGE_SIZE) || 1),
+    limit: PAGE_SIZE,
+    total: initialTransactions.length,
+  })
+  const [userPagination, setUserPagination] = useState({
+    page: 1,
+    pages: Math.max(1, Math.ceil(initialUsers.length / PAGE_SIZE) || 1),
+    limit: PAGE_SIZE,
+    total: initialUsers.length,
+  })
 
   useEffect(() => {
     if (initialError) {
-      fetchData()
+      fetchData({ transactionPage: 1, userPage: 1 })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const fetchData = async () => {
+  const fetchData = async ({
+    transactionPage,
+    userPage,
+  }: {
+    transactionPage?: number
+    userPage?: number
+  } = {}) => {
     try {
       setLoading(true)
       setPageError(null)
 
       const transactionParams = new URLSearchParams()
+      const nextTransactionPage = transactionPage ?? transactionPagination.page
+      const nextUserPage = userPage ?? userPagination.page
+
+      transactionParams.set("page", nextTransactionPage.toString())
+      transactionParams.set("limit", PAGE_SIZE.toString())
       if (transactionFilters.type !== "all") {
         transactionParams.set("type", transactionFilters.type)
       }
@@ -76,8 +108,11 @@ export function AdminDashboard({
       }
 
       const userParams = new URLSearchParams()
-      if (userSearch.trim().length > 0) {
-        userParams.set("search", userSearch.trim())
+      userParams.set("page", nextUserPage.toString())
+      userParams.set("limit", PAGE_SIZE.toString())
+      const sanitizedSearch = userSearch.trim()
+      if (sanitizedSearch.length > 0) {
+        userParams.set("search", sanitizedSearch)
       }
 
       const [userRes, transactionsRes, usersRes] = await Promise.all([
@@ -103,9 +138,27 @@ export function AdminDashboard({
       const usersData = await usersRes.json()
 
       setUser(userData.user)
-      setTransactions(transactionsData.transactions)
-      setUsers(usersData.users)
-      setStats(computeStats(usersData.users, transactionsData.transactions))
+      setTransactions(transactionsData.transactions || [])
+      setUsers(usersData.users || [])
+      setStats(computeStats(usersData.users || [], transactionsData.transactions || []))
+      if (transactionsData.pagination) {
+        const { page, pages, limit, total } = transactionsData.pagination
+        setTransactionPagination({
+          page: Math.max(1, page || nextTransactionPage),
+          pages: Math.max(1, pages || 1),
+          limit: limit || PAGE_SIZE,
+          total: total || 0,
+        })
+      }
+      if (usersData.pagination) {
+        const { page, pages, limit, total } = usersData.pagination
+        setUserPagination({
+          page: Math.max(1, page || nextUserPage),
+          pages: Math.max(1, pages || 1),
+          limit: limit || PAGE_SIZE,
+          total: total || 0,
+        })
+      }
     } catch (error: any) {
       console.error("Failed to fetch admin data:", error)
       setPageError(error?.message || "Failed to refresh admin data")
@@ -114,8 +167,12 @@ export function AdminDashboard({
     }
   }
 
-  const handleFilterChange = () => {
-    fetchData()
+  const handleApplyTransactionFilters = () => {
+    fetchData({ transactionPage: 1 })
+  }
+
+  const handleApplyUserSearch = () => {
+    fetchData({ userPage: 1 })
   }
 
   if (loading && !transactions.length && !users.length) {
@@ -132,15 +189,43 @@ export function AdminDashboard({
 
       <main className="flex-1 md:ml-64 overflow-auto">
         <div className="p-6">
-          <div className="mt-8 flex items-center justify-between">
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-6">
             <div>
               <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
               <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
             </div>
-            <Button onClick={fetchData} variant="outline" disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Refresh
-            </Button>
+
+            <div className="flex flex-col items-end gap-4">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
+                    10
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
+                  aria-label="Toggle theme"
+                >
+                  <SunMedium className="h-5 w-5" />
+                </button>
+              </div>
+
+              <Button
+                onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
+                variant="secondary"
+                className="flex items-center gap-2 rounded-2xl border border-border bg-card px-6 py-5 text-base font-semibold shadow-sm hover:bg-muted"
+                disabled={loading}
+              >
+                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {pageError && (
@@ -243,13 +328,18 @@ export function AdminDashboard({
                   </SelectContent>
                 </Select>
 
-                <Button onClick={handleFilterChange} disabled={loading}>
+                <Button onClick={handleApplyTransactionFilters} disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Apply Filters
                 </Button>
               </div>
 
-              <TransactionTable transactions={transactions} onRefresh={fetchData} />
+              <TransactionTable
+                transactions={transactions}
+                pagination={transactionPagination}
+                onPageChange={(page) => fetchData({ transactionPage: page })}
+                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
+              />
             </TabsContent>
 
             <TabsContent value="users" className="space-y-6">
@@ -260,15 +350,21 @@ export function AdminDashboard({
                   onChange={(event) => setUserSearch(event.target.value)}
                   className="max-w-sm"
                 />
-                <Button onClick={handleFilterChange} disabled={loading}>
+                <Button onClick={handleApplyUserSearch} disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Search
                 </Button>
               </div>
 
-              <UserTable users={users} onRefresh={fetchData} />
+              <UserTable
+                users={users}
+                pagination={userPagination}
+                onPageChange={(page) => fetchData({ userPage: page })}
+                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
+              />
             </TabsContent>
           </Tabs>
+
         </div>
       </main>
     </div>
