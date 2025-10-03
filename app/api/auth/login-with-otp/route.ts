@@ -23,15 +23,27 @@ export async function POST(request: NextRequest) {
     const validatedData = loginWithOTPSchema.parse(body)
 
     // Verify OTP first
-    const query: any = {
+    const contactFilters: Record<string, string>[] = []
+    if (validatedData.email) {
+      contactFilters.push({ email: validatedData.email })
+    }
+    if (validatedData.phone) {
+      contactFilters.push({ phone: validatedData.phone })
+    }
+
+    const otpQuery: Record<string, unknown> = {
       code: validatedData.otpCode,
       purpose: "login",
       verified: true,
     }
-    if (validatedData.email) query.email = validatedData.email
-    if (validatedData.phone) query.phone = validatedData.phone
 
-    const otpRecord = await OTP.findOne(query)
+    if (contactFilters.length === 1) {
+      Object.assign(otpQuery, contactFilters[0])
+    } else if (contactFilters.length > 1) {
+      otpQuery.$or = contactFilters
+    }
+
+    const otpRecord = await OTP.findOne(otpQuery)
     if (!otpRecord) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
     }
