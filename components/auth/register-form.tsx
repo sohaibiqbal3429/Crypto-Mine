@@ -1,9 +1,9 @@
 "use client"
 
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Loader2, UserPlus } from "lucide-react"
+import { Loader2, RefreshCw, UserPlus } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SORTED_COUNTRY_DIAL_CODES } from "@/lib/constants/country-codes"
+import { OTPInput } from "@/components/auth/otp-input"
 
 const PHONE_REGEX = /^\+[1-9]\d{7,14}$/
 
@@ -45,6 +46,11 @@ export function RegisterForm() {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [infoMessage, setInfoMessage] = useState("")
+  const [step, setStep] = useState<"details" | "otp">("details")
+  const [otpValue, setOtpValue] = useState("")
+  const [otpCountdown, setOtpCountdown] = useState(0)
+  const [isResending, setIsResending] = useState(false)
 
   // Prefill referral code from query param (?ref= or ?referral=), once on mount / when URL changes
   useEffect(() => {
@@ -55,51 +61,167 @@ export function RegisterForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]) // don't include formData in deps to avoid unnecessary resets
 
+  useEffect(() => {
+    if (otpCountdown <= 0) return
+
+    const timer = setInterval(() => {
+      setOtpCountdown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [otpCountdown])
+
+  const normalizedEmail = useMemo(() => formData.email.trim().toLowerCase(), [formData.email])
+  const normalizedPhone = useMemo(() => {
+    const cleanedPhone = formData.phone.replace(/\D/g, "")
+    return `${formData.countryCode}${cleanedPhone}`
+  }, [formData.countryCode, formData.phone])
+
+  const resetOTPState = () => {
+    setStep("details")
+    setOtpValue("")
+    setOtpCountdown(0)
+    setIsResending(false)
+    setInfoMessage("")
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError("")
+    if (step !== "otp") {
+      setInfoMessage("")
+    }
 
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match")
+    if (step === "details") {
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match")
+        return
+      }
+
+      if (!PHONE_REGEX.test(normalizedPhone)) {
+        setError("Please enter a valid international phone number")
+        return
+      }
+
+      setIsLoading(true)
+
+      try {
+        const response = await fetch("/api/auth/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            purpose: "registration",
+          }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          setError((data as { error?: string }).error || "Failed to send verification code")
+          return
+        }
+
+        setInfoMessage("Verification code sent to your email. Enter it below to verify your account.")
+        setStep("otp")
+        setOtpValue("")
+        setOtpCountdown(60)
+      } catch (submitError) {
+        console.error("Send OTP error", submitError)
+        setError("Network error. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+
       return
     }
 
-    const cleanedPhone = formData.phone.replace(/\D/g, "")
-    const normalizedPhone = `${formData.countryCode}${cleanedPhone}`
-
-    if (!PHONE_REGEX.test(normalizedPhone)) {
-      setError("Please enter a valid international phone number")
+    if (otpValue.length !== 6) {
+      setError("Please enter the 6-digit verification code")
       return
     }
 
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/auth/register", {
+      const verifyResponse = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: otpValue,
+          email: normalizedEmail,
+          purpose: "registration",
+        }),
+      })
+
+      const verifyData = await verifyResponse.json().catch(() => ({}))
+
+      if (!verifyResponse.ok) {
+        setError((verifyData as { error?: string }).error || "Verification failed")
+        return
+      }
+
+      const registerResponse = await fetch("/api/auth/register-with-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
+          email: normalizedEmail,
           phone: normalizedPhone,
           password: formData.password,
           referralCode: formData.referralCode.trim().toUpperCase(),
+          otpCode: otpValue,
+        }),
+      })
+
+      const registerData = await registerResponse.json().catch(() => ({}))
+
+      if (!registerResponse.ok) {
+        setError((registerData as { error?: string }).error || "Registration failed")
+        return
+      }
+
+      router.push("/dashboard")
+    } catch (submitError) {
+      console.error("Registration with OTP error", submitError)
+      setError("Network error. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendOTP = async () => {
+    if (isResending || step !== "otp") return
+
+    setError("")
+    setInfoMessage("")
+    setIsResending(true)
+
+    try {
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          purpose: "registration",
         }),
       })
 
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        setError((data as { error?: string }).error || "Registration failed")
+        setError((data as { error?: string }).error || "Failed to resend code")
         return
       }
 
-      router.push("/dashboard")
-    } catch (submitError) {
-      console.error("Registration error", submitError)
+      setInfoMessage("A new verification code has been sent to your email.")
+      setOtpValue("")
+      setOtpCountdown(60)
+    } catch (resendError) {
+      console.error("Resend OTP error", resendError)
       setError("Network error. Please try again.")
     } finally {
-      setIsLoading(false)
+      setIsResending(false)
     }
   }
 
@@ -122,6 +244,12 @@ export function RegisterForm() {
           </Alert>
         )}
 
+        {infoMessage && (
+          <Alert>
+            <AlertDescription>{infoMessage}</AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -132,7 +260,12 @@ export function RegisterForm() {
                 id="name"
                 placeholder="Enter name"
                 value={formData.name}
-                onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
+                onChange={(event) => {
+                  setFormData((prev) => ({ ...prev, name: event.target.value }))
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
                 required
                 className="h-11"
               />
@@ -147,9 +280,15 @@ export function RegisterForm() {
                 type="email"
                 placeholder="Enter email"
                 value={formData.email}
-                onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
+                onChange={(event) => {
+                  setFormData((prev) => ({ ...prev, email: event.target.value }))
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
                 required
                 className="h-11"
+                disabled={step === "otp"}
               />
             </div>
           </div>
@@ -158,10 +297,16 @@ export function RegisterForm() {
             <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
               Phone Number
             </Label>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Select
                 value={formData.countryCode}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, countryCode: value }))}
+                onValueChange={(value) => {
+                  setFormData((prev) => ({ ...prev, countryCode: value }))
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
+                disabled={step === "otp"}
               >
                 <SelectTrigger className="h-11 rounded-md sm:w-40">
                   <SelectValue placeholder="Country" />
@@ -180,11 +325,15 @@ export function RegisterForm() {
                 inputMode="tel"
                 placeholder="123456789"
                 value={formData.phone}
-                onChange={(event) =>
+                onChange={(event) => {
                   setFormData((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, "") }))
-                }
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
                 required
                 className="h-11 flex-1"
+                disabled={step === "otp"}
               />
             </div>
             <p className="text-xs text-muted-foreground">
@@ -202,10 +351,16 @@ export function RegisterForm() {
                 type="password"
                 placeholder="Enter password"
                 value={formData.password}
-                onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
+                onChange={(event) => {
+                  setFormData((prev) => ({ ...prev, password: event.target.value }))
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
                 required
                 minLength={6}
                 className="h-11"
+                disabled={step === "otp"}
               />
             </div>
 
@@ -218,12 +373,16 @@ export function RegisterForm() {
                 type="password"
                 placeholder="Re-enter password"
                 value={formData.confirmPassword}
-                onChange={(event) =>
+                onChange={(event) => {
                   setFormData((prev) => ({ ...prev, confirmPassword: event.target.value }))
-                }
+                  if (step === "otp") {
+                    resetOTPState()
+                  }
+                }}
                 required
                 minLength={6}
                 className="h-11"
+                disabled={step === "otp"}
               />
             </div>
           </div>
@@ -237,26 +396,64 @@ export function RegisterForm() {
               type="text"
               placeholder="Enter referral code (required)"
               value={formData.referralCode}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, referralCode: e.target.value.toUpperCase() }))
-              }
+              onChange={(event) => {
+                setFormData((prev) => ({ ...prev, referralCode: event.target.value.toUpperCase() }))
+                if (step === "otp") {
+                  resetOTPState()
+                }
+              }}
               required
+              disabled={step === "otp"}
             />
           </div>
 
+          {step === "otp" && (
+            <div className="space-y-3">
+              <div className="space-y-2 text-center">
+                <Label className="text-sm font-semibold text-foreground/90">Enter the 6-digit code</Label>
+                <OTPInput value={otpValue} onChange={setOtpValue} disabled={isLoading} />
+              </div>
+              <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground sm:flex-row">
+                <span>
+                  {otpCountdown > 0 ? `You can request a new code in ${otpCountdown}s` : "Didn't get the code?"}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResendOTP}
+                  disabled={isResending || otpCountdown > 0}
+                  className="h-8 px-2"
+                >
+                  {isResending ? (
+                    <>
+                      <RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Resending...
+                    </>
+                  ) : (
+                    "Resend code"
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Button type="button" variant="outline" className="h-11 sm:w-auto" onClick={() => router.push("/auth/forgot")}>
-              Forgot Password?
-            </Button>
+            {step === "details" && (
+              <Button type="button" variant="outline" className="h-11 sm:w-auto" onClick={() => router.push("/auth/forgot")}>
+                Forgot Password?
+              </Button>
+            )}
 
             <Button type="submit" className="h-11 flex-1 sm:flex-none shadow-lg shadow-primary/20" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Registering...
+                  {step === "details" ? "Sending Code..." : "Verifying..."}
                 </>
+              ) : step === "details" ? (
+                "Send Verification Code"
               ) : (
-                "Register"
+                "Verify & Create Account"
               )}
             </Button>
           </div>

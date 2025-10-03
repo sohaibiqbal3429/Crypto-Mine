@@ -24,12 +24,12 @@ export async function POST(request: NextRequest) {
 
     const { code, email, phone, purpose } = validatedData
 
-    // Find OTP record
-    const query: any = { code, purpose, verified: false }
-    if (email) query.email = email
-    if (phone) query.phone = phone
+    const baseQuery: Record<string, unknown> = { purpose }
+    if (email) baseQuery.email = email
+    if (phone) baseQuery.phone = phone
 
-    const otpRecord = await OTP.findOne(query)
+    // Always look up the latest OTP for this contact + purpose
+    const otpRecord = await OTP.findOne(baseQuery).sort({ createdAt: -1 })
 
     if (!otpRecord) {
       return NextResponse.json({ error: "Invalid or expired OTP code" }, { status: 400 })
@@ -41,26 +41,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "OTP code has expired" }, { status: 400 })
     }
 
+    // If the OTP was already verified (e.g. registration failed later), allow the
+    // user to continue without forcing them to request a new code as long as the
+    // submitted code matches.
+    if (otpRecord.verified) {
+      if (otpRecord.code === code) {
+        return NextResponse.json({
+          success: true,
+          message: "OTP verified successfully",
+        })
+      }
+
+      return NextResponse.json({ error: "Invalid or expired OTP code" }, { status: 400 })
+    }
+
     // Check attempt limit
     if (otpRecord.attempts >= 5) {
       await OTP.deleteOne({ _id: otpRecord._id })
       return NextResponse.json({ error: "Too many failed attempts. Please request a new code." }, { status: 400 })
     }
 
-    // Increment attempts
-    otpRecord.attempts += 1
-
     // Verify code
     if (otpRecord.code !== code) {
+      otpRecord.attempts += 1
       await otpRecord.save()
       return NextResponse.json(
-        { error: `Invalid OTP code. ${5 - otpRecord.attempts} attempts remaining.` },
+        { error: `Invalid OTP code. ${Math.max(0, 5 - otpRecord.attempts)} attempts remaining.` },
         { status: 400 },
       )
     }
 
-    // Mark as verified
+    // Mark as verified and persist the successful attempt
     otpRecord.verified = true
+    otpRecord.attempts += 1
     await otpRecord.save()
 
     return NextResponse.json({
