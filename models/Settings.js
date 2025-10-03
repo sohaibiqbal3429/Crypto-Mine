@@ -20,6 +20,8 @@ const SettingsSchema = new mongoose.Schema(
     commission: {
       baseDirectPct: { type: Number, default: 7 },
       startAtDeposit: { type: Number, default: 50 },
+      highTierPct: { type: Number, default: 5 },
+      highTierStartAt: { type: Number, default: 100 },
     },
   },
   {

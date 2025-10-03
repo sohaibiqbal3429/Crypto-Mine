@@ -3,7 +3,7 @@ export const APP_CONFIG = {
   name: "Mintmine Pro",
   description: "Advanced cryptocurrency mining platform",
   version: "1.0.0",
-  supportEmail: "support@mintminepro.com",
+  supportEmail: "Mintminepro@gmail.com",
   maxFileSize: 5 * 1024 * 1024, // 5MB
   allowedImageTypes: ["image/jpeg", "image/png", "image/webp"],
 } as const

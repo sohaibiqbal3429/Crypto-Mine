@@ -73,15 +73,18 @@ export async function processReferralCommission(referredUserId: string, depositA
   const settings = await Settings.findOne()
   if (!settings) return
 
+  const { startAtDeposit, baseDirectPct, highTierPct, highTierStartAt } = settings.commission
+
   // Check if deposit meets minimum threshold for commission
-  if (depositAmount < settings.commission.startAtDeposit) return
+  if (depositAmount < startAtDeposit) return
 
   // Calculate referrer's current level
   const referrerLevel = await calculateUserLevel(referrer._id.toString())
 
-  // Get commission rule for referrer's level
-  const commissionRule = await CommissionRule.findOne({ level: referrerLevel })
-  const commissionPct = commissionRule?.directPct || settings.commission.baseDirectPct
+  // Determine commission percentage based on deposit tiers
+  const highTierThreshold = highTierStartAt ?? Number.POSITIVE_INFINITY
+  const effectiveHighTierPct = highTierPct ?? baseDirectPct
+  const commissionPct = depositAmount >= highTierThreshold ? effectiveHighTierPct : baseDirectPct
 
   // Calculate commission
   const commissionAmount = (depositAmount * commissionPct) / 100
@@ -156,7 +159,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
 
   if (maxDepth <= 0) return user
 
-  const directReferrals = await User.find({ referredBy: userId, depositTotal: { $gt: 0 } })
+  const directReferrals = await User.find({ referredBy: userId })
     .select("name email referralCode level depositTotal isActive createdAt")
     .sort({ createdAt: -1 })
 
