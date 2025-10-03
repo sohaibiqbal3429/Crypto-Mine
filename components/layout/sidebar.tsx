@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -54,6 +54,10 @@ export function Sidebar({ user }: SidebarProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
 
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" })
@@ -80,7 +84,8 @@ export function Sidebar({ user }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
             <Link
               key={item.name}
@@ -102,7 +107,7 @@ export function Sidebar({ user }: SidebarProps) {
           <Link
             href="/admin"
             className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              pathname === "/admin"
+              pathname === "/admin" || pathname.startsWith("/admin/")
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             }`}
@@ -125,7 +130,10 @@ export function Sidebar({ user }: SidebarProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleLogout}
+            onClick={() => {
+              setOpen(false)
+              void handleLogout()
+            }}
             className="w-full justify-start text-sidebar-foreground "
           >
             <LogOut className="mr-2 h-4 w-4" />

@@ -102,8 +102,9 @@ export function AdminDashboard({
       const userParams = new URLSearchParams()
       userParams.set("page", nextUserPage.toString())
       userParams.set("limit", PAGE_SIZE.toString())
-      if (userSearch.trim().length > 0) {
-        userParams.set("search", userSearch.trim())
+      const sanitizedSearch = userSearch.trim()
+      if (sanitizedSearch.length > 0) {
+        userParams.set("search", sanitizedSearch)
       }
 
       const [userRes, transactionsRes, usersRes] = await Promise.all([

@@ -141,6 +141,12 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
   const handleReject = async () => {
     if (!selectedTransaction) return
 
+    const trimmedReason = rejectReason.trim()
+    if (!trimmedReason) {
+      setError("Please provide a reason for rejecting the transaction.")
+      return
+    }
+
     setLoading(true)
     setError("")
 
@@ -150,7 +156,7 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transactionId: selectedTransaction._id,
-          reason: rejectReason,
+          reason: trimmedReason,
         }),
       })
 
@@ -435,7 +441,7 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleReject} disabled={loading || !rejectReason}>
+            <Button variant="destructive" onClick={handleReject} disabled={loading || !rejectReason.trim()}>
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Reject Transaction
             </Button>
