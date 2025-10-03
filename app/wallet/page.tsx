@@ -5,8 +5,9 @@ import { verifyToken } from "@/lib/auth"
 import { fetchWalletContext } from "@/lib/services/wallet"
 import { getDepositWalletOptions } from "@/lib/config/wallet"
 import { Sidebar } from "@/components/layout/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DepositForm } from "@/components/wallet/deposit-form"
+import { WithdrawForm } from "@/components/wallet/withdraw-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 
@@ -87,15 +88,49 @@ export default async function WalletPage() {
             </Card>
           </section>
 
-          {walletOptions.length === 0 ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Deposit wallets are not configured. Please contact support.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <DepositForm options={walletOptions} minDeposit={context.minDeposit} />
-          )}
+          <section className="grid gap-6 xl:grid-cols-2">
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ArrowDownLeft className="h-5 w-5 text-emerald-500" />
+                  Deposit USDT
+                </CardTitle>
+                <CardDescription>
+                  Transfer funds to one of the approved wallets and submit your receipt for review.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pb-6">
+                {walletOptions.length === 0 ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>
+                      Deposit wallets are not configured. Please contact support.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <DepositForm options={walletOptions} minDeposit={context.minDeposit} />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="h-full">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <ArrowUpRight className="h-5 w-5 text-sky-500" />
+                  Withdraw Funds
+                </CardTitle>
+                <CardDescription>
+                  Request a withdrawal to a saved wallet or provide a new USDT address.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pb-6">
+                <WithdrawForm
+                  minWithdraw={context.withdrawConfig.minWithdraw}
+                  currentBalance={context.stats.currentBalance}
+                  pendingWithdraw={context.stats.pendingWithdraw}
+                />
+              </CardContent>
+            </Card>
+          </section>
         </div>
       </main>
     </div>
