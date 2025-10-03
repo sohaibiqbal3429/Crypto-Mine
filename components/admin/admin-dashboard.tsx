@@ -42,6 +42,7 @@ export function AdminDashboard({
   initialStats,
   initialError = null,
 }: AdminDashboardProps) {
+  const PAGE_SIZE = 20
   const [user, setUser] = useState(initialUser)
   const [transactions, setTransactions] = useState(initialTransactions)
   const [users, setUsers] = useState(initialUsers)
@@ -55,19 +56,42 @@ export function AdminDashboard({
     status: "all",
   })
   const [userSearch, setUserSearch] = useState("")
+  const [transactionPagination, setTransactionPagination] = useState({
+    page: 1,
+    pages: Math.max(1, Math.ceil(initialTransactions.length / PAGE_SIZE) || 1),
+    limit: PAGE_SIZE,
+    total: initialTransactions.length,
+  })
+  const [userPagination, setUserPagination] = useState({
+    page: 1,
+    pages: Math.max(1, Math.ceil(initialUsers.length / PAGE_SIZE) || 1),
+    limit: PAGE_SIZE,
+    total: initialUsers.length,
+  })
 
   useEffect(() => {
     if (initialError) {
-      fetchData()
+      fetchData({ transactionPage: 1, userPage: 1 })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const fetchData = async () => {
+  const fetchData = async ({
+    transactionPage,
+    userPage,
+  }: {
+    transactionPage?: number
+    userPage?: number
+  } = {}) => {
     try {
       setLoading(true)
       setPageError(null)
 
       const transactionParams = new URLSearchParams()
+      const nextTransactionPage = transactionPage ?? transactionPagination.page
+      const nextUserPage = userPage ?? userPagination.page
+
+      transactionParams.set("page", nextTransactionPage.toString())
+      transactionParams.set("limit", PAGE_SIZE.toString())
       if (transactionFilters.type !== "all") {
         transactionParams.set("type", transactionFilters.type)
       }
@@ -76,6 +100,8 @@ export function AdminDashboard({
       }
 
       const userParams = new URLSearchParams()
+      userParams.set("page", nextUserPage.toString())
+      userParams.set("limit", PAGE_SIZE.toString())
       if (userSearch.trim().length > 0) {
         userParams.set("search", userSearch.trim())
       }
@@ -103,9 +129,27 @@ export function AdminDashboard({
       const usersData = await usersRes.json()
 
       setUser(userData.user)
-      setTransactions(transactionsData.transactions)
-      setUsers(usersData.users)
-      setStats(computeStats(usersData.users, transactionsData.transactions))
+      setTransactions(transactionsData.transactions || [])
+      setUsers(usersData.users || [])
+      setStats(computeStats(usersData.users || [], transactionsData.transactions || []))
+      if (transactionsData.pagination) {
+        const { page, pages, limit, total } = transactionsData.pagination
+        setTransactionPagination({
+          page: Math.max(1, page || nextTransactionPage),
+          pages: Math.max(1, pages || 1),
+          limit: limit || PAGE_SIZE,
+          total: total || 0,
+        })
+      }
+      if (usersData.pagination) {
+        const { page, pages, limit, total } = usersData.pagination
+        setUserPagination({
+          page: Math.max(1, page || nextUserPage),
+          pages: Math.max(1, pages || 1),
+          limit: limit || PAGE_SIZE,
+          total: total || 0,
+        })
+      }
     } catch (error: any) {
       console.error("Failed to fetch admin data:", error)
       setPageError(error?.message || "Failed to refresh admin data")
@@ -114,8 +158,12 @@ export function AdminDashboard({
     }
   }
 
-  const handleFilterChange = () => {
-    fetchData()
+  const handleApplyTransactionFilters = () => {
+    fetchData({ transactionPage: 1 })
+  }
+
+  const handleApplyUserSearch = () => {
+    fetchData({ userPage: 1 })
   }
 
   if (loading && !transactions.length && !users.length) {
@@ -132,13 +180,18 @@ export function AdminDashboard({
 
       <main className="flex-1 md:ml-64 overflow-auto">
         <div className="p-6">
-          <div className="mb-8 flex items-center justify-between">
-            <div>
+          <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
               <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
               <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
             </div>
-            <Button onClick={fetchData} variant="outline" disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            <Button
+              onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
+              variant="outline"
+              disabled={loading}
+              className="h-12 w-full gap-3 text-sm font-semibold sm:w-auto"
+            >
+              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
               Refresh
             </Button>
           </div>
@@ -158,7 +211,7 @@ export function AdminDashboard({
 
             <TabsContent value="overview" className="space-y-6">
               {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 lg:gap-8">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -243,13 +296,18 @@ export function AdminDashboard({
                   </SelectContent>
                 </Select>
 
-                <Button onClick={handleFilterChange} disabled={loading}>
+                <Button onClick={handleApplyTransactionFilters} disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Apply Filters
                 </Button>
               </div>
 
-              <TransactionTable transactions={transactions} onRefresh={fetchData} />
+              <TransactionTable
+                transactions={transactions}
+                pagination={transactionPagination}
+                onPageChange={(page) => fetchData({ transactionPage: page })}
+                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
+              />
             </TabsContent>
 
             <TabsContent value="users" className="space-y-6">
@@ -260,13 +318,18 @@ export function AdminDashboard({
                   onChange={(event) => setUserSearch(event.target.value)}
                   className="max-w-sm"
                 />
-                <Button onClick={handleFilterChange} disabled={loading}>
+                <Button onClick={handleApplyUserSearch} disabled={loading}>
                   {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Search
                 </Button>
               </div>
 
-              <UserTable users={users} onRefresh={fetchData} />
+              <UserTable
+                users={users}
+                pagination={userPagination}
+                onPageChange={(page) => fetchData({ userPage: page })}
+                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
+              />
             </TabsContent>
           </Tabs>
         </div>

@@ -71,7 +71,7 @@ export function Sidebar({ user }: SidebarProps) {
           <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
           <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
         </div>
-        <div className="md:hidden flex items-center gap-2">
+        <div className="md:hidden mt-2 flex items-center gap-2">
           <NotificationBell />
           <ThemeToggle />
         </div>
@@ -141,11 +141,15 @@ export function Sidebar({ user }: SidebarProps) {
       {/* Mobile sidebar */}
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-         <Button  variant="ghost" size="icon" className="md:hidden ">
-  <Menu className="h-12 w-12" /> {/* aur bada */}
-</Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden h-16 w-16 rounded-2xl border border-border shadow-sm"
+          >
+            <Menu className="h-12 w-12" />
+          </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0">
+        <SheetContent side="left" hideClose className="w-64 p-0">
           <SidebarContent />
         </SheetContent>
       </Sheet>
@@ -155,7 +159,7 @@ export function Sidebar({ user }: SidebarProps) {
         <SidebarContent />
       </div>
 
-      <div className="fixed top-4 right-6 z-50 hidden items-center gap-3 md:flex">
+      <div className="fixed top-8 right-6 z-50 hidden items-center gap-3 md:flex">
         <NotificationBell />
         <ThemeToggle />
       </div>
