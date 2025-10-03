@@ -6,6 +6,9 @@ import OTP from "@/models/OTP"
 import { hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
 import { isOTPExpired } from "@/lib/utils/otp"
+import { buildContactQuery, normalizeContact } from "@/lib/utils/contact"
+import type { IOTP } from "@/models/OTP"
+import type { IUser } from "@/models/User"
 import { z } from "zod"
 
 const registerWithOTPSchema = z
@@ -27,31 +30,23 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = registerWithOTPSchema.parse(body)
-    const email = validatedData.email?.toLowerCase()
-    const phone = validatedData.phone
+    const contact = normalizeContact(validatedData.email, validatedData.phone)
+    const { email, phone } = contact
+    const otpCode = validatedData.otpCode.trim()
 
     // Verify OTP first – look up the most recent OTP for this contact and
     // purpose, then make sure it matches what the user supplied. This allows us
     // to accept the freshly verified record while still protecting against
     // stale/incorrect codes.
-    const contactFilters: Record<string, string>[] = []
-    if (email) {
-      contactFilters.push({ email })
-    }
-    if (phone) {
-      contactFilters.push({ phone })
-    }
-
     const otpQuery: Record<string, unknown> = { purpose: "registration" }
-    if (contactFilters.length === 1) {
-      Object.assign(otpQuery, contactFilters[0])
-    } else if (contactFilters.length > 1) {
-      otpQuery.$or = contactFilters
+    const otpContactQuery = buildContactQuery<IOTP>(contact)
+    if (otpContactQuery) {
+      Object.assign(otpQuery, otpContactQuery)
     }
 
     const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
 
-    if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
+    if (!otpRecord || otpRecord.code !== otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
     }
 
@@ -66,13 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    let existingUserQuery: Record<string, unknown> | null = null
-    if (contactFilters.length === 1) {
-      existingUserQuery = contactFilters[0]
-    } else if (contactFilters.length > 1) {
-      existingUserQuery = { $or: contactFilters }
-    }
-
+    const existingUserQuery = buildContactQuery<IUser>(contact)
     const existingUser = existingUserQuery ? await User.findOne(existingUserQuery) : null
 
     if (existingUser) {

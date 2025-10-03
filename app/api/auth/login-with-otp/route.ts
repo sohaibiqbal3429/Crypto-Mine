@@ -4,6 +4,9 @@ import User from "@/models/User"
 import OTP from "@/models/OTP"
 import { signToken } from "@/lib/auth"
 import { isOTPExpired } from "@/lib/utils/otp"
+import { buildContactQuery, normalizeContact } from "@/lib/utils/contact"
+import type { IOTP } from "@/models/OTP"
+import type { IUser } from "@/models/User"
 import { z } from "zod"
 
 const loginWithOTPSchema = z
@@ -22,27 +25,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = loginWithOTPSchema.parse(body)
-    const email = validatedData.email?.toLowerCase()
-    const phone = validatedData.phone
+    const contact = normalizeContact(validatedData.email, validatedData.phone)
+    const otpCode = validatedData.otpCode.trim()
 
     // Verify OTP first
-    const contactFilters: Record<string, string>[] = []
-    if (email) {
-      contactFilters.push({ email })
-    }
-    if (phone) {
-      contactFilters.push({ phone })
-    }
-
     const otpQuery: Record<string, unknown> = { purpose: "login" }
-    if (contactFilters.length === 1) {
-      Object.assign(otpQuery, contactFilters[0])
-    } else if (contactFilters.length > 1) {
-      otpQuery.$or = contactFilters
+    const otpContactQuery = buildContactQuery<IOTP>(contact)
+    if (otpContactQuery) {
+      Object.assign(otpQuery, otpContactQuery)
     }
 
     const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
-    if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
+    if (!otpRecord || otpRecord.code !== otpCode) {
       return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
     }
 
@@ -57,14 +51,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user
-    let userQuery: Record<string, unknown> | null = null
-    if (contactFilters.length === 1) {
-      userQuery = contactFilters[0]
-    } else if (contactFilters.length > 1) {
-      userQuery = { $or: contactFilters }
-    }
-
-    const user = userQuery ? await User.findOne(userQuery) : null
+    const userContactQuery = buildContactQuery<IUser>(contact)
+    const user = userContactQuery ? await User.findOne(userContactQuery) : null
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
