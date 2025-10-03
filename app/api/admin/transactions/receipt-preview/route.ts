@@ -3,6 +3,9 @@ import { getUserFromRequest } from "@/lib/auth"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -48,6 +51,7 @@ export async function GET(request: NextRequest) {
     const response = await fetch(targetUrl.toString(), {
       cache: "no-store",
       headers: forwardedHeaders,
+      redirect: "follow",
     })
 
     if (!response.ok) {

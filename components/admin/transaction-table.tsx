@@ -39,12 +39,12 @@ interface Transaction {
 }
 
 type ReceiptMeta = {
-  url?: string
-  originalName?: string
-  mimeType?: string
-  size?: number
-  uploadedAt?: string
-  checksum?: string
+  url?: string | null
+  originalName?: string | null
+  mimeType?: string | null
+  size?: number | null
+  uploadedAt?: string | null
+  checksum?: string | null
 }
 
 interface PaginationMeta {
@@ -69,12 +69,42 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
   const [error, setError] = useState("")
   const [imageError, setImageError] = useState(false)
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null)
+  const [receiptPreviewContentType, setReceiptPreviewContentType] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
-  const receiptMeta =
-    selectedTransaction?.type === "deposit" && selectedTransaction.meta?.receipt
-      ? (selectedTransaction.meta.receipt as ReceiptMeta)
-      : null
+  const receiptMeta = useMemo<ReceiptMeta | null>(() => {
+    if (!selectedTransaction || selectedTransaction.type !== "deposit") {
+      return null
+    }
+
+    const rawReceipt = selectedTransaction.meta?.receipt
+    if (typeof rawReceipt === "string") {
+      return { url: rawReceipt }
+    }
+
+    if (rawReceipt && typeof rawReceipt === "object") {
+      return {
+        url: typeof rawReceipt.url === "string" ? rawReceipt.url : null,
+        originalName:
+          typeof rawReceipt.originalName === "string" ? rawReceipt.originalName : null,
+        mimeType: typeof rawReceipt.mimeType === "string" ? rawReceipt.mimeType : null,
+        size: typeof rawReceipt.size === "number" ? rawReceipt.size : null,
+        uploadedAt: typeof rawReceipt.uploadedAt === "string" ? rawReceipt.uploadedAt : null,
+        checksum: typeof rawReceipt.checksum === "string" ? rawReceipt.checksum : null,
+      }
+    }
+
+    const fallbackUrl =
+      typeof selectedTransaction.meta?.receiptUrl === "string"
+        ? selectedTransaction.meta.receiptUrl
+        : null
+
+    if (fallbackUrl) {
+      return { url: fallbackUrl }
+    }
+
+    return null
+  }, [selectedTransaction])
 
   const selectedUser =
     selectedTransaction && typeof selectedTransaction.userId === "object"
@@ -98,9 +128,11 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
   useEffect(() => {
     let isCancelled = false
     let objectUrl: string | null = null
+    let abortController: AbortController | null = null
 
     if (!resolvedReceiptUrl) {
       setReceiptPreviewUrl(null)
+      setReceiptPreviewContentType(null)
       setImageError(false)
       setPreviewLoading(false)
       return () => {
@@ -110,12 +142,21 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
 
     const fetchPreview = async () => {
       setReceiptPreviewUrl(null)
+      setReceiptPreviewContentType(null)
       setPreviewLoading(true)
       setImageError(false)
 
       try {
+        abortController = new AbortController()
         const params = new URLSearchParams({ url: resolvedReceiptUrl })
-        const response = await fetch(`/api/admin/transactions/receipt-preview?${params.toString()}`)
+        const response = await fetch(
+          `/api/admin/transactions/receipt-preview?${params.toString()}`,
+          {
+            credentials: "include",
+            cache: "no-store",
+            signal: abortController.signal,
+          },
+        )
 
         if (!response.ok) {
           throw new Error("Failed to load preview")
@@ -126,10 +167,14 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
 
         objectUrl = URL.createObjectURL(blob)
         setReceiptPreviewUrl(objectUrl)
+        setReceiptPreviewContentType(response.headers.get("content-type"))
       } catch (error) {
         if (!isCancelled) {
-          setReceiptPreviewUrl(null)
-          setImageError(true)
+          if ((error as Error)?.name !== "AbortError") {
+            setReceiptPreviewUrl(null)
+            setReceiptPreviewContentType(null)
+            setImageError(true)
+          }
         }
       } finally {
         if (!isCancelled) {
@@ -142,11 +187,25 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
 
     return () => {
       isCancelled = true
+      if (abortController) {
+        abortController.abort()
+      }
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl)
       }
     }
   }, [resolvedReceiptUrl])
+
+  const previewKind = useMemo(() => {
+    const mime = receiptPreviewContentType || receiptMeta?.mimeType || ""
+    if (mime.startsWith("image/")) {
+      return "image"
+    }
+    if (mime.includes("pdf")) {
+      return "pdf"
+    }
+    return mime ? "other" : null
+  }, [receiptPreviewContentType, receiptMeta?.mimeType])
 
   const paginationStart = (pagination.page - 1) * pagination.limit + 1
   const paginationEnd = Math.min(pagination.page * pagination.limit, pagination.total)
@@ -382,7 +441,17 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
       </Card>
 
       {/* Transaction Details Dialog */}
-      <Dialog open={!!selectedTransaction && !showRejectDialog} onOpenChange={() => setSelectedTransaction(null)}>
+      <Dialog
+        open={!!selectedTransaction && !showRejectDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedTransaction(null)
+            setReceiptPreviewUrl(null)
+            setReceiptPreviewContentType(null)
+            setImageError(false)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Transaction Details</DialogTitle>
@@ -423,13 +492,36 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
                       </div>
                     </div>
                   ) : receiptPreviewUrl && !imageError ? (
-                    <div className="overflow-hidden rounded-md border bg-muted/60">
-                      <img
-                        src={receiptPreviewUrl}
-                        alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
-                        className="max-h-96 w-full bg-background object-contain"
-                      />
-                    </div>
+                    previewKind === "pdf" ? (
+                      <div className="overflow-hidden rounded-md border bg-muted/60">
+                        <iframe
+                          src={receiptPreviewUrl}
+                          title={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
+                          className="h-[30rem] w-full bg-background"
+                        />
+                      </div>
+                    ) : previewKind === "image" || previewKind === null ? (
+                      <div className="overflow-hidden rounded-md border bg-muted/60">
+                        <img
+                          src={receiptPreviewUrl}
+                          alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
+                          className="max-h-96 w-full bg-background object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-md border bg-muted/60 p-4 text-sm text-muted-foreground">
+                        <p>Unsupported preview format. Use the link below to download the receipt.</p>
+                        {receiptPreviewUrl && (
+                          <a
+                            href={receiptPreviewUrl}
+                            download={receiptMeta.originalName ?? undefined}
+                            className="mt-2 inline-flex items-center text-primary hover:underline"
+                          >
+                            Download receipt
+                          </a>
+                        )}
+                      </div>
+                    )
                   ) : (
                     <div className="rounded-md border bg-muted/60 p-4 text-sm text-muted-foreground">
                       Receipt preview unavailable. Use the link below to view the original file.
@@ -437,6 +529,7 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
                   )}
                   <div className="space-y-1 text-xs text-muted-foreground">
                     {receiptMeta.originalName && <div>File: {receiptMeta.originalName}</div>}
+                    {receiptMeta.mimeType && <div>Type: {receiptMeta.mimeType}</div>}
                     {typeof receiptMeta.size === "number" && (
                       <div>Size: {(receiptMeta.size / 1024 / 1024).toFixed(2)} MB</div>
                     )}
