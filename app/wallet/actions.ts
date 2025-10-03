@@ -11,6 +11,11 @@ export interface DepositFormState {
   success?: string | null
 }
 
+export interface WithdrawFormState {
+  error?: string | null
+  success?: string | null
+}
+
 function isFileLike(value: unknown): value is File {
   if (!value || typeof value !== "object") {
     return false
@@ -76,5 +81,82 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
 
     console.error("Deposit submission failed", error)
     return { error: "Unable to submit deposit. Please try again." }
+  }
+}
+
+function resolveInternalUrl(path: string): string {
+  const configuredBase =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXTAUTH_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "")
+
+  const baseUrl = configuredBase ? configuredBase.replace(/\/$/, "") : "http://localhost:3000"
+
+  return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
+}
+
+export async function submitWithdrawAction(_: WithdrawFormState, formData: FormData): Promise<WithdrawFormState> {
+  const cookieStore = await cookies()
+  const token = cookieStore.get("auth-token")?.value
+  if (!token) {
+    return { error: "You must be signed in to submit a withdrawal." }
+  }
+
+  const user = verifyToken(token)
+  if (!user) {
+    return { error: "Session expired. Please sign in again." }
+  }
+
+  const amountValue = Number.parseFloat(String(formData.get("amount") ?? ""))
+  if (!Number.isFinite(amountValue) || amountValue <= 0) {
+    return { error: "Enter a valid withdrawal amount" }
+  }
+
+  const walletAddress = String(formData.get("walletAddress") ?? "").trim()
+  if (!walletAddress) {
+    return { error: "Enter or select a wallet address" }
+  }
+
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join("; ")
+
+  try {
+    const response = await fetch(resolveInternalUrl("/api/wallet/withdraw"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+      },
+      body: JSON.stringify({
+        amount: amountValue,
+        walletAddress,
+      }),
+      cache: "no-store",
+    })
+
+    const data = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      const message =
+        data?.error ||
+        (Array.isArray(data?.details) && data.details.length > 0 && data.details[0]?.message) ||
+        "Withdrawal request failed. Please try again."
+
+      return { error: message }
+    }
+
+    revalidatePath("/wallet")
+
+    return {
+      success:
+        typeof data?.transaction?.amount === "number"
+          ? `Withdrawal request for $${Number(data.transaction.amount).toFixed(2)} submitted successfully.`
+          : "Withdrawal request submitted successfully.",
+    }
+  } catch (error) {
+    console.error("Withdrawal submission failed", error)
+    return { error: "Unable to submit withdrawal. Please try again." }
   }
 }

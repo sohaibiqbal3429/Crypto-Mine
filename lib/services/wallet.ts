@@ -18,6 +18,9 @@ export interface WalletContext {
     staked: number
   }
   minDeposit: number
+  withdrawConfig: {
+    minWithdraw: number
+  }
 }
 
 export async function fetchWalletContext(userId: string): Promise<WalletContext | null> {
@@ -40,6 +43,9 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
   }
 
   const minDeposit = Number(settingsDoc?.gating?.minDeposit ?? 30)
+  const withdrawConfig = {
+    minWithdraw: Number(settingsDoc?.gating?.minWithdraw ?? 30),
+  }
 
   return {
     user: {
@@ -50,5 +56,6 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
     },
     stats,
     minDeposit,
+    withdrawConfig,
   }
 }

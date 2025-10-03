@@ -20,12 +20,17 @@ import { Loader2, Check, X, Eye } from "lucide-react"
 
 interface Transaction {
   _id: string
-  userId: {
-    _id: string
-    name: string
-    email: string
-    referralCode: string
-  }
+  userId:
+    | {
+        _id: string
+        name?: string
+        email?: string
+        referralCode?: string
+        toString?: () => string
+      }
+    | string
+    | null
+    | undefined
   type: string
   amount: number
   status: string
@@ -58,6 +63,13 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
     selectedTransaction?.type === "deposit" && selectedTransaction.meta?.receipt
       ? (selectedTransaction.meta.receipt as ReceiptMeta)
       : null
+
+  const selectedUser =
+    selectedTransaction && typeof selectedTransaction.userId === "object"
+      ? selectedTransaction.userId
+      : null
+
+  const selectedAmount = selectedTransaction ? Number(selectedTransaction.amount) : Number.NaN
 
   const handleApprove = async (transaction: Transaction) => {
     setLoading(true)
@@ -171,53 +183,78 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.map((transaction) => (
-                  <TableRow key={transaction._id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{transaction.userId.name}</div>
-                        <div className="text-sm text-muted-foreground">{transaction.userId.email}</div>
-                        <div className="text-xs font-mono">{transaction.userId.referralCode}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getTypeBadge(transaction.type)}</TableCell>
-                    <TableCell className="font-mono">${transaction.amount.toFixed(2)}</TableCell>
-                    <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                    <TableCell>{new Date(transaction.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <Button variant="ghost" size="sm" onClick={() => setSelectedTransaction(transaction)}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {transaction.status === "pending" && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleApprove(transaction)}
-                              disabled={loading}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedTransaction(transaction)
-                                setShowRejectDialog(true)
-                              }}
-                              disabled={loading}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {transactions.map((transaction) => {
+                  const userRecord =
+                    transaction.userId && typeof transaction.userId === "object"
+                      ? transaction.userId
+                      : null
+
+                  const amountValue = Number(transaction.amount)
+                  const createdAt = transaction.createdAt ? new Date(transaction.createdAt) : null
+                  const fallbackIdentifier =
+                    userRecord?._id || (typeof transaction.userId === "string" ? transaction.userId : undefined)
+                  const isPending = transaction.status === "pending"
+
+                  return (
+                    <TableRow key={transaction._id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            {userRecord?.name || "Deleted user"}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {userRecord?.email || "User record unavailable"}
+                          </div>
+                          <div className="text-xs font-mono">
+                            {userRecord?.referralCode || fallbackIdentifier || "—"}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{getTypeBadge(transaction.type)}</TableCell>
+                      <TableCell className="font-mono">
+                        {Number.isFinite(amountValue) ? `$${amountValue.toFixed(2)}` : "—"}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                      <TableCell>
+                        {createdAt && !Number.isNaN(createdAt.getTime())
+                          ? createdAt.toLocaleDateString()
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center space-x-2">
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedTransaction(transaction)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {isPending && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleApprove(transaction)}
+                                disabled={loading}
+                                className="text-green-600 hover:text-green-700"
+                              >
+                                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedTransaction(transaction)
+                                  setShowRejectDialog(true)
+                                }}
+                                disabled={loading}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
@@ -235,8 +272,10 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>User</Label>
-                  <p className="text-sm">{selectedTransaction.userId.name}</p>
-                  <p className="text-xs text-muted-foreground">{selectedTransaction.userId.email}</p>
+                  <p className="text-sm">{selectedUser?.name || "Deleted user"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedUser?.email || "User record unavailable"}
+                  </p>
                 </div>
                 <div>
                   <Label>Type</Label>
@@ -244,7 +283,9 @@ export function TransactionTable({ transactions, onRefresh }: TransactionTablePr
                 </div>
                 <div>
                   <Label>Amount</Label>
-                  <p className="text-sm font-mono">${selectedTransaction.amount.toFixed(2)}</p>
+                  <p className="text-sm font-mono">
+                    {Number.isFinite(selectedAmount) ? `$${selectedAmount.toFixed(2)}` : "—"}
+                  </p>
                 </div>
                 <div>
                   <Label>Status</Label>
