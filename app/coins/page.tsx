@@ -1,176 +1,256 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Sidebar } from "@/components/layout/sidebar"
-import { Card, CardContent } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Minus, Loader2 } from "lucide-react"
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react"
 
-interface Coin {
-  id: string
-  name: string
-  symbol: string
-  price: number
-  change24h: number
-  marketCap: number
-  volume24h: number
-  logo: string
+import { Sidebar } from "@/components/layout/sidebar"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+
+interface ListingHighlight {
+  title: string
+  description: string
+  stat: string
+  helper: string
 }
+
+interface UpcomingListing {
+  name: string
+  stage: string
+  description: string
+  launch: string
+  interest: string
+}
+
+interface TimeLeft {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
+const LISTING_HIGHLIGHTS: ListingHighlight[] = [
+  {
+    title: "Presales",
+    description: "Curated access to the hottest early-stage token sales.",
+    stat: "12",
+    helper: "Live this quarter",
+  },
+  {
+    title: "Airdrops",
+    description: "Stay ahead with verified reward campaigns and quests.",
+    stat: "28",
+    helper: "Opportunities now",
+  },
+  {
+    title: "DEX/CEX Listings",
+    description: "Track centralized and decentralized launch partners.",
+    stat: "7",
+    helper: "Exchanges confirmed",
+  },
+  {
+    title: "Launchpad",
+    description: "Secure allocations with tiered staking advantages.",
+    stat: "4",
+    helper: "Upcoming cohorts",
+  },
+]
+
+const UPCOMING_LISTINGS: UpcomingListing[] = [
+  {
+    name: "NebulaX Protocol",
+    stage: "Presale",
+    description: "AI-enhanced liquidity routing with deflationary tokenomics and governance staking.",
+    launch: "Q3 · 2024",
+    interest: "18.4k joined",
+  },
+  {
+    name: "HarborFi",
+    stage: "DEX Launch",
+    description: "Cross-chain stablecoin vaults bringing real-world yield to DeFi users worldwide.",
+    launch: "Q4 · 2024",
+    interest: "12.1k joined",
+  },
+  {
+    name: "Arcadia Nodes",
+    stage: "Airdrop",
+    description: "Validator incentives for powering a privacy-first smart contract network.",
+    launch: "Q1 · 2025",
+    interest: "9.7k joined",
+  },
+]
+
+const MILLISECONDS_IN_SECOND = 1000
+const MILLISECONDS_IN_MINUTE = 60 * MILLISECONDS_IN_SECOND
+const MILLISECONDS_IN_HOUR = 60 * MILLISECONDS_IN_MINUTE
+const MILLISECONDS_IN_DAY = 24 * MILLISECONDS_IN_HOUR
 
 export default function CoinsPage() {
   const [user, setUser] = useState<any>(null)
-  const [coins, setCoins] = useState<Coin[]>([])
-  const [loading, setLoading] = useState(true)
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => ({
+    days: 90,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  }))
+
+  const launchTargetRef = useRef<number>()
+
+  if (!launchTargetRef.current) {
+    launchTargetRef.current = Date.now() + 90 * MILLISECONDS_IN_DAY
+  }
+
+  const calculateTimeLeft = useCallback((target: number): TimeLeft => {
+    const difference = Math.max(target - Date.now(), 0)
+
+    const days = Math.floor(difference / MILLISECONDS_IN_DAY)
+    const hours = Math.floor((difference % MILLISECONDS_IN_DAY) / MILLISECONDS_IN_HOUR)
+    const minutes = Math.floor((difference % MILLISECONDS_IN_HOUR) / MILLISECONDS_IN_MINUTE)
+    const seconds = Math.floor((difference % MILLISECONDS_IN_MINUTE) / MILLISECONDS_IN_SECOND)
+
+    return { days, hours, minutes, seconds }
+  }, [])
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchUser = async () => {
       try {
         const userRes = await fetch("/api/auth/me")
         if (userRes.ok) {
           const userData = await userRes.json()
           setUser(userData.user)
         }
-
-        // Mock coin data - in real app, this would come from crypto API
-        setCoins([
-          {
-            id: "bitcoin",
-            name: "Bitcoin",
-            symbol: "BTC",
-            price: 43250.75,
-            change24h: 2.45,
-            marketCap: 847000000000,
-            volume24h: 15600000000,
-            logo: "₿",
-          },
-          {
-            id: "ethereum",
-            name: "Ethereum",
-            symbol: "ETH",
-            price: 2650.3,
-            change24h: -1.23,
-            marketCap: 318000000000,
-            volume24h: 8900000000,
-            logo: "Ξ",
-          },
-          {
-            id: "pcoin",
-            name: "P-Coin",
-            symbol: "PCN",
-            price: 0.85,
-            change24h: 5.67,
-            marketCap: 85000000,
-            volume24h: 2300000,
-            logo: "P",
-          },
-          {
-            id: "usdt",
-            name: "Tether",
-            symbol: "USDT",
-            price: 1.0,
-            change24h: 0.01,
-            marketCap: 95000000000,
-            volume24h: 25000000000,
-            logo: "₮",
-          },
-        ])
       } catch (error) {
-        console.error("Failed to fetch data:", error)
-      } finally {
-        setLoading(false)
+        console.error("Failed to fetch user:", error)
       }
     }
 
-    fetchData()
+    fetchUser()
   }, [])
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: price < 1 ? 4 : 2,
-    }).format(price)
-  }
+  useEffect(() => {
+    const updateCountdown = () => {
+      if (!launchTargetRef.current) return
+      setTimeLeft(calculateTimeLeft(launchTargetRef.current))
+    }
 
-  const formatMarketCap = (marketCap: number) => {
-    if (marketCap >= 1e12) return `$${(marketCap / 1e12).toFixed(2)}T`
-    if (marketCap >= 1e9) return `$${(marketCap / 1e9).toFixed(2)}B`
-    if (marketCap >= 1e6) return `$${(marketCap / 1e6).toFixed(2)}M`
-    return `$${marketCap.toLocaleString()}`
-  }
+    updateCountdown()
+    const timer = setInterval(updateCountdown, 1000)
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+    return () => clearInterval(timer)
+  }, [calculateTimeLeft])
+
+  const handleJoinWaitlist = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Sidebar user={user} />
 
-      <main className="flex-1 md:ml-64 overflow-auto">
-        <div className="p-6">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-balance">Cryptocurrency Prices</h1>
-            <p className="text-muted-foreground">Live cryptocurrency market data</p>
+      <main className="flex-1 overflow-auto md:ml-64">
+        <div className="px-6 py-12 lg:px-12">
+          <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
+            <Badge variant="outline" className="mb-6 border-primary/40 bg-primary/5 text-primary">
+              Launching Soon
+            </Badge>
+            <h1 className="text-balance text-4xl font-semibold tracking-tight sm:text-5xl lg:text-6xl">
+              Coin Listings &amp; Launchpad
+            </h1>
+            <p className="mt-6 max-w-2xl text-balance text-lg text-muted-foreground sm:text-xl">
+              Discover upcoming tokens, presales, and exchange listings. We&apos;re finalizing the platform—join the
+              waitlist for day one access and instant alerts.
+            </p>
+
+            <form
+              onSubmit={handleJoinWaitlist}
+              className="mt-10 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-center"
+            >
+              <Input
+                type="email"
+                placeholder="you@example.com"
+                className="h-12 rounded-full border-muted bg-background/80 px-5 text-base shadow-sm"
+                aria-label="Email address"
+              />
+              <Button type="submit" className="h-12 rounded-full px-8 text-base font-semibold shadow-lg">
+                Notify me
+              </Button>
+            </form>
+
+            <p className="mt-4 text-sm text-muted-foreground">No spam—just alpha when we go live.</p>
+
+            <div className="mt-10 grid w-full max-w-3xl grid-cols-2 gap-4 sm:grid-cols-4">
+              {Object.entries(timeLeft).map(([label, value]) => (
+                <Card key={label} className="border-muted/50 bg-background/80 shadow-sm backdrop-blur">
+                  <CardContent className="flex flex-col items-center gap-1 py-6">
+                    <span className="text-3xl font-semibold tabular-nums sm:text-4xl">{value.toString().padStart(2, "0")}</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                      {label}
+                    </span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
 
-          <div className="grid gap-4">
-            {coins.map((coin) => {
-              const isPositive = coin.change24h > 0
-              const isNegative = coin.change24h < 0
-              const TrendIcon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus
-
-              return (
-                <Card key={coin.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                          {coin.logo}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-lg">{coin.name}</h3>
-                          <p className="text-muted-foreground">{coin.symbol}</p>
-                        </div>
+          <div className="mx-auto mt-16 grid max-w-6xl gap-6 lg:grid-cols-[1.2fr_1fr]">
+            <div className="space-y-6">
+              {UPCOMING_LISTINGS.map((listing) => (
+                <Card
+                  key={listing.name}
+                  className="border-muted/60 bg-background/90 shadow-sm transition-colors hover:border-primary/40 hover:shadow-md"
+                >
+                  <CardContent className="flex flex-col gap-4 p-6 text-left sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-semibold">
+                          {listing.stage}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">{listing.launch}</span>
                       </div>
-
-                      <div className="text-right">
-                        <div className="text-2xl font-bold">{formatPrice(coin.price)}</div>
-                        <div className="flex items-center gap-1">
-                          <TrendIcon
-                            className={`w-4 h-4 ${
-                              isPositive ? "text-green-600" : isNegative ? "text-red-600" : "text-gray-600"
-                            }`}
-                          />
-                          <span
-                            className={`text-sm font-medium ${
-                              isPositive ? "text-green-600" : isNegative ? "text-red-600" : "text-gray-600"
-                            }`}
-                          >
-                            {isPositive ? "+" : ""}
-                            {coin.change24h.toFixed(2)}%
-                          </span>
-                        </div>
-                      </div>
+                      <h3 className="mt-3 text-xl font-semibold tracking-tight">{listing.name}</h3>
+                      <p className="mt-2 text-sm text-muted-foreground sm:max-w-md">{listing.description}</p>
                     </div>
-
-                    <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Market Cap</p>
-                        <p className="font-semibold">{formatMarketCap(coin.marketCap)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">24h Volume</p>
-                        <p className="font-semibold">{formatMarketCap(coin.volume24h)}</p>
-                      </div>
+                    <div className="flex flex-col items-start gap-3 sm:items-end">
+                      <span className="text-sm font-medium text-muted-foreground">{listing.interest}</span>
+                      <Button variant="secondary" className="rounded-full px-6">
+                        Join waitlist
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              )
-            })}
+              ))}
+            </div>
+
+            <Card className="h-full border-muted/60 bg-background/90 shadow-sm backdrop-blur">
+              <CardContent className="flex h-full flex-col justify-between p-6">
+                <div>
+                  <h2 className="text-2xl font-semibold tracking-tight">Stay listing-ready</h2>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Tailor alerts to your strategy—filter by chain, sale stage, or exchange partners, and never miss an
+                    allocation window again.
+                  </p>
+                </div>
+                <div className="mt-8 space-y-4">
+                  {LISTING_HIGHLIGHTS.map((highlight) => (
+                    <div key={highlight.title} className="rounded-xl border border-muted/40 bg-background/60 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                            {highlight.title}
+                          </h3>
+                          <p className="mt-2 text-sm text-muted-foreground/80">{highlight.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-3xl font-semibold text-primary">{highlight.stat}</span>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground">{highlight.helper}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </main>
