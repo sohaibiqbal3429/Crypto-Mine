@@ -47,17 +47,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Balance not found" }, { status: 404 })
     }
 
-    const available = balance.teamRewardsAvailable || 0
+    const available = balance.teamRewardsAvailable ?? 0
     if (available <= 0) {
       return NextResponse.json({ error: "No team rewards available to claim" }, { status: 400 })
     }
 
     const claimDate = new Date()
 
-    balance.current += available
-    balance.totalBalance += available
-    balance.totalEarning += available
-    balance.teamRewardsClaimed += available
+    balance.current = (balance.current ?? 0) + available
+    balance.totalBalance = (balance.totalBalance ?? 0) + available
+    balance.totalEarning = (balance.totalEarning ?? 0) + available
+    balance.teamRewardsClaimed = (balance.teamRewardsClaimed ?? 0) + available
     balance.teamRewardsAvailable = 0
     balance.teamRewardsLastClaimedAt = claimDate
 
