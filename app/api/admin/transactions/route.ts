@@ -19,15 +19,15 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get("type")
-    const status = searchParams.get("status")
-    const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "20")
+    const typeParam = searchParams.get("type")
+    const statusParam = searchParams.get("status")
+    const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1"))
+    const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") || "20")))
 
     // Build query
     const query: any = {}
-    if (type) query.type = type
-    if (status) query.status = status
+    if (typeParam && typeParam !== "all") query.type = typeParam
+    if (statusParam && statusParam !== "all") query.status = statusParam
 
     // Get transactions with user data
     const transactions = await Transaction.find(query)
