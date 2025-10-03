@@ -3,12 +3,13 @@
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Loader2, LockKeyhole } from "lucide-react"
+import { Loader2, LockKeyhole, RefreshCw } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { OTPInput } from "@/components/auth/otp-input"
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
@@ -21,6 +22,12 @@ export default function ForgotPasswordPage() {
   const [success, setSuccess] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const redirectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [step, setStep] = useState<"request" | "verify" | "reset">("request")
+  const [otpValue, setOtpValue] = useState("")
+  const [verifiedCode, setVerifiedCode] = useState<string | null>(null)
+  const [otpCountdown, setOtpCountdown] = useState(0)
+  const [isResending, setIsResending] = useState(false)
+  const [developmentOTP, setDevelopmentOTP] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -30,13 +37,113 @@ export default function ForgotPasswordPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (otpCountdown <= 0) return
+
+    const timer = setInterval(() => {
+      setOtpCountdown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [otpCountdown])
+
+  const resetFlow = () => {
+    setStep("request")
+    setOtpValue("")
+    setVerifiedCode(null)
+    setOtpCountdown(0)
+    setIsResending(false)
+    setDevelopmentOTP(null)
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError("")
-    setSuccess("")
+
+    if (step === "request") {
+      setSuccess("")
+      setIsLoading(true)
+
+      try {
+        const response = await fetch("/api/auth/send-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: formData.email.trim().toLowerCase(),
+            purpose: "password_reset",
+          }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          setError((data as { error?: string }).error || "Unable to send verification code")
+          return
+        }
+
+        setSuccess("Verification code sent to your email. Enter it below to verify your account.")
+        if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
+          setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
+        }
+        setStep("verify")
+        setOtpValue("")
+        setOtpCountdown(60)
+      } catch (submitError) {
+        console.error("Forgot password OTP error", submitError)
+        setError("Network error. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+
+      return
+    }
+
+    if (step === "verify") {
+      if (otpValue.length !== 6) {
+        setError("Please enter the 6-digit verification code")
+        return
+      }
+
+      setIsLoading(true)
+
+      try {
+        const response = await fetch("/api/auth/verify-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: otpValue,
+            email: formData.email.trim().toLowerCase(),
+            purpose: "password_reset",
+          }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          setError((data as { error?: string }).error || "Verification failed")
+          return
+        }
+
+        setSuccess("Code verified. Set your new password below.")
+        setVerifiedCode(otpValue)
+        setStep("reset")
+      } catch (verifyError) {
+        console.error("Verify OTP error", verifyError)
+        setError("Network error. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+
+      return
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
+      return
+    }
+
+    if (!verifiedCode) {
+      setError("Verification code is missing. Please verify again.")
       return
     }
 
@@ -47,28 +154,70 @@ export default function ForgotPasswordPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: formData.email,
+          email: formData.email.trim().toLowerCase(),
           password: formData.password,
+          otpCode: verifiedCode,
         }),
       })
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        setError(data.error || "Unable to reset password")
+        setError((data as { error?: string }).error || "Unable to reset password")
         return
       }
 
       setSuccess("Password updated successfully. Redirecting to login...")
+      setFormData({ email: formData.email, password: "", confirmPassword: "" })
+      resetFlow()
       redirectTimeout.current = setTimeout(() => {
         router.push("/auth/login")
       }, 1500)
-      setFormData({ email: "", password: "", confirmPassword: "" })
     } catch (error) {
       console.error("Forgot password error", error)
       setError("Network error. Please try again.")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleResendOTP = async () => {
+    if (isResending || step === "request") return
+
+    setError("")
+    setSuccess("")
+    setIsResending(true)
+
+    try {
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email.trim().toLowerCase(),
+          purpose: "password_reset",
+        }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        setError((data as { error?: string }).error || "Unable to resend verification code")
+        return
+      }
+
+      setSuccess("A new verification code has been sent to your email.")
+      if (typeof (data as { developmentOTP?: string }).developmentOTP === "string") {
+        setDevelopmentOTP((data as { developmentOTP: string }).developmentOTP)
+      }
+      setOtpValue("")
+      setOtpCountdown(60)
+      setVerifiedCode(null)
+      setStep("verify")
+    } catch (resendError) {
+      console.error("Resend OTP error", resendError)
+      setError("Network error. Please try again.")
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -110,45 +259,89 @@ export default function ForgotPasswordPage() {
                 type="email"
                 placeholder="Enter your registered email"
                 value={formData.email}
-                onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setFormData((prev) => ({ ...prev, email: value }))
+                  if (step !== "request") {
+                    resetFlow()
+                  }
+                }}
                 required
                 className="h-11"
+                disabled={step !== "request"}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
-                New Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter new password"
-                value={formData.password}
-                onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
-                required
-                minLength={6}
-                className="h-11"
-              />
-            </div>
+            {step !== "request" && (
+              <div className="space-y-3">
+                <div className="space-y-2 text-center">
+                  <Label className="text-sm font-semibold text-foreground/90">Enter the 6-digit code</Label>
+                  <OTPInput value={otpValue} onChange={setOtpValue} disabled={isLoading || step === "reset"} />
+                </div>
+                <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground sm:flex-row">
+                  <span>
+                    {otpCountdown > 0 ? `You can request a new code in ${otpCountdown}s` : "Didn't receive the code?"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResendOTP}
+                    disabled={isResending || otpCountdown > 0}
+                    className="h-8 px-2"
+                  >
+                    {isResending ? (
+                      <>
+                        <RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Sending...
+                      </>
+                    ) : (
+                      "Resend code"
+                    )}
+                  </Button>
+                </div>
+                {developmentOTP && (
+                  <p className="text-center text-xs font-medium text-primary">Development OTP: {developmentOTP}</p>
+                )}
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-foreground/90">
-                Confirm Password
-              </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Re-enter new password"
-                value={formData.confirmPassword}
-                onChange={(event) =>
-                  setFormData((prev) => ({ ...prev, confirmPassword: event.target.value }))
-                }
-                required
-                minLength={6}
-                className="h-11"
-              />
-            </div>
+            {step === "reset" && (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
+                    New Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter new password"
+                    value={formData.password}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
+                    required
+                    minLength={6}
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword" className="text-sm font-semibold text-foreground/90">
+                    Confirm Password
+                  </Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="Re-enter new password"
+                    value={formData.confirmPassword}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                    }
+                    required
+                    minLength={6}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <Button type="button" variant="outline" className="h-11 sm:w-auto" onClick={() => router.push("/auth/login")}>
@@ -159,8 +352,12 @@ export default function ForgotPasswordPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
+                    {step === "request" ? "Sending Code..." : step === "verify" ? "Verifying..." : "Updating..."}
                   </>
+                ) : step === "request" ? (
+                  "Send Verification Code"
+                ) : step === "verify" ? (
+                  "Verify Code"
                 ) : (
                   "Reset Password"
                 )}

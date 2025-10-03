@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
+import OTP from "@/models/OTP"
 import { resetPasswordSchema } from "@/lib/validations/auth"
 import { hashPassword } from "@/lib/auth"
 
@@ -10,9 +11,21 @@ export async function POST(request: NextRequest) {
     await dbConnect()
 
     const body = await request.json()
-    const { email, password } = resetPasswordSchema.parse(body)
+    const { email, password, otpCode } = resetPasswordSchema.parse(body)
 
     const normalizedEmail = email.toLowerCase()
+
+    const otpRecord = await OTP.findOne({
+      email: normalizedEmail,
+      code: otpCode,
+      purpose: "password_reset",
+      verified: true,
+    })
+
+    if (!otpRecord) {
+      return NextResponse.json({ error: "Invalid or unverified verification code" }, { status: 400 })
+    }
+
     const user = await User.findOne({ email: normalizedEmail })
 
     if (!user) {
@@ -22,6 +35,8 @@ export async function POST(request: NextRequest) {
     const passwordHash = await hashPassword(password)
     user.passwordHash = passwordHash
     await user.save()
+
+    await OTP.deleteOne({ _id: otpRecord._id })
 
     return NextResponse.json({
       success: true,
