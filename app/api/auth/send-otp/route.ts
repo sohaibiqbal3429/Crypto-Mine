@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
-import { generateOTP, getOTPExpiry, formatPhoneNumber, validatePhoneNumber } from "@/lib/utils/otp"
+import { generateOTP, getOTPExpiry, validatePhoneNumber } from "@/lib/utils/otp"
 import { sendOTPEmail } from "@/lib/utils/email"
 import { sendOTPSMS } from "@/lib/utils/sms"
+import { normalizeContact } from "@/lib/utils/contact"
 import { z } from "zod"
 
 const sendOTPSchema = z
@@ -28,7 +29,9 @@ export async function POST(request: NextRequest) {
     const validatedData = sendOTPSchema.parse(body)
     console.log("[v0] Data validated:", validatedData)
 
-    const { email, phone, purpose } = validatedData
+    const { purpose } = validatedData
+    const contact = normalizeContact(validatedData.email, validatedData.phone)
+    const { email, phone } = contact
 
     // Generate OTP
     const otpCode = generateOTP(6)
@@ -90,16 +93,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid phone number format" }, { status: 400 })
       }
 
-      const formattedPhone = formatPhoneNumber(phone)
-      console.log("[v0] Formatted phone:", formattedPhone)
+      console.log("[v0] Normalized phone:", phone)
 
       // Delete any existing OTPs for this phone
-      await OTP.deleteMany({ phone: formattedPhone, purpose, verified: false })
+      await OTP.deleteMany({ phone, purpose, verified: false })
       console.log("[v0] Deleted existing phone OTPs")
 
       // Create new OTP record
       const otpRecord = await OTP.create({
-        phone: formattedPhone,
+        phone,
         code: otpCode,
         type: "sms",
         purpose,
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Send SMS
-        await sendOTPSMS(formattedPhone, otpCode, purpose)
+        await sendOTPSMS(phone, otpCode, purpose)
         console.log("[v0] SMS sent successfully")
       } catch (smsError) {
         console.error("[v0] SMS sending failed:", smsError)

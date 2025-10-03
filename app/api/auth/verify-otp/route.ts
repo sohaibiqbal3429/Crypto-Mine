@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
 import { isOTPExpired } from "@/lib/utils/otp"
+import { buildContactQuery, normalizeContact } from "@/lib/utils/contact"
+import type { IOTP } from "@/models/OTP"
 import { z } from "zod"
 
 const verifyOTPSchema = z
@@ -22,14 +24,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = verifyOTPSchema.parse(body)
 
-    const { code, email, phone, purpose } = validatedData
+    const contact = normalizeContact(validatedData.email, validatedData.phone)
+    const { purpose } = validatedData
+    const otpCode = validatedData.code.trim()
 
-    const baseQuery: Record<string, unknown> = { purpose }
-    if (email) baseQuery.email = email
-    if (phone) baseQuery.phone = phone
+    const otpQuery: Record<string, unknown> = { purpose }
+    const contactQuery = buildContactQuery<IOTP>(contact)
+    if (contactQuery) {
+      Object.assign(otpQuery, contactQuery)
+    }
 
     // Always look up the latest OTP for this contact + purpose
-    const otpRecord = await OTP.findOne(baseQuery).sort({ createdAt: -1 })
+    const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
 
     if (!otpRecord) {
       return NextResponse.json({ error: "Invalid or expired OTP code" }, { status: 400 })
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
     // user to continue without forcing them to request a new code as long as the
     // submitted code matches.
     if (otpRecord.verified) {
-      if (otpRecord.code === code) {
+      if (otpRecord.code === otpCode) {
         return NextResponse.json({
           success: true,
           message: "OTP verified successfully",
@@ -62,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify code
-    if (otpRecord.code !== code) {
+    if (otpRecord.code !== otpCode) {
       otpRecord.attempts += 1
       await otpRecord.save()
       return NextResponse.json(

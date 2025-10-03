@@ -1,4 +1,5 @@
 import type { FilterQuery } from "mongoose"
+import { formatPhoneNumber } from "./otp"
 
 type ContactFilters = Array<Record<string, string>>
 
@@ -20,7 +21,7 @@ export function normalizeContact(email?: string | null, phone?: string | null): 
   }
 
   if (normalizedPhone) {
-    contact.phone = normalizedPhone
+    contact.phone = formatPhoneNumber(normalizedPhone)
   }
 
   return contact
