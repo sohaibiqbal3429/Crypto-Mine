@@ -67,7 +67,7 @@ export default async function MiningPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${overviewStats.totalMined.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">All time earnings (USDT)</p>
+                <p className="text-xs text-muted-foreground">Min earning</p>
               </CardContent>
             </Card>
 
@@ -78,7 +78,7 @@ export default async function MiningPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${overviewStats.todayMined.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Last mining reward</p>
+                <p className="text-xs text-muted-foreground">Original</p>
               </CardContent>
             </Card>
 
@@ -89,7 +89,7 @@ export default async function MiningPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${overviewStats.miningPower.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Current eligible principal</p>
+                <p className="text-xs text-muted-foreground">Real</p>
               </CardContent>
             </Card>
 
@@ -100,9 +100,7 @@ export default async function MiningPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{overviewStats.efficiency}%</div>
-                <p className="text-xs text-muted-foreground">
-                  Towards {miningStatus.miningSettings.roiCap}x target
-                </p>
+                <p className="text-xs text-muted-foreground">Lowest</p>
               </CardContent>
             </Card>
           </section>
