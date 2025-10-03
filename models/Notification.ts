@@ -6,6 +6,8 @@ export interface INotification extends Document {
     | "referral-joined"
     | "deposit-approved"
     | "withdraw-approved"
+    | "withdraw-requested"
+    | "withdraw-cancelled"
     | "level-up"
     | "cap-reached"
     | "team-reward-claimed"
@@ -25,6 +27,8 @@ const NotificationSchema = new Schema<INotification>(
         "referral-joined",
         "deposit-approved",
         "withdraw-approved",
+        "withdraw-requested",
+        "withdraw-cancelled",
         "level-up",
         "cap-reached",
         "team-reward-claimed",

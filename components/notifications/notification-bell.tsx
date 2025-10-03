@@ -95,6 +95,10 @@ export function NotificationBell() {
         return "💰"
       case "withdraw-approved":
         return "💸"
+      case "withdraw-requested":
+        return "📝"
+      case "withdraw-cancelled":
+        return "↩️"
       case "level-up":
         return "🎉"
       case "cap-reached":
