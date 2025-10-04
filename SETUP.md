@@ -1,4 +1,4 @@
-# CryptoMine Platform Setup Guide
+# Apple Mine Platform Setup Guide
 
 ## Quick Setup Instructions
 

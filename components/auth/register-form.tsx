@@ -225,15 +225,24 @@ export function RegisterForm() {
     }
   }
 
+  const inputClasses = "h-12 rounded-xl border-emerald-400/30 bg-black/40"
+
   return (
-    <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors">
-      <div className="bg-gradient-to-r from-primary to-accent py-4 text-center text-primary-foreground">
-        <h1 className="text-lg font-semibold tracking-wide">Referral Signup System</h1>
+    <div className="w-full max-w-3xl overflow-hidden rounded-[2.75rem] border border-white/10 bg-black/60 shadow-[0_25px_80px_rgba(34,197,94,0.22)]">
+      <div className="relative overflow-hidden px-10 py-10 text-center text-emerald-950">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/80 via-lime-400/60 to-amber-300/60" />
+        <div className="relative space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-950/80">Ignite your orchard identity</p>
+          <h1 className="text-2xl font-bold uppercase tracking-[0.2em]">Apple Mine Enrollment</h1>
+          <p className="text-sm font-medium text-emerald-950/80">
+            Set up your Apple Mine profile to unlock collaborative orchard mining and layered rewards
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-6 px-6 py-6 sm:px-8">
+      <div className="space-y-6 px-8 py-10 sm:px-12">
         <div className="flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border/60 bg-background/80 text-primary shadow-sm">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-400/15 text-emerald-200 shadow-[0_15px_30px_rgba(34,197,94,0.25)]">
             <UserPlus className="h-8 w-8" />
           </div>
         </div>
@@ -245,15 +254,15 @@ export function RegisterForm() {
         )}
 
         {infoMessage && (
-          <Alert>
+          <Alert className="border-emerald-400/40 bg-emerald-400/10 text-emerald-100">
             <AlertDescription>{infoMessage}</AlertDescription>
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-sm font-semibold text-foreground/90">
+              <Label htmlFor="name" className="text-sm font-semibold text-emerald-100/90">
                 Name
               </Label>
               <Input
@@ -267,12 +276,13 @@ export function RegisterForm() {
                   }
                 }}
                 required
-                className="h-11"
+                className={inputClasses}
+                disabled={step === "otp"}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold text-foreground/90">
+              <Label htmlFor="email" className="text-sm font-semibold text-emerald-100/90">
                 Email
               </Label>
               <Input
@@ -287,14 +297,14 @@ export function RegisterForm() {
                   }
                 }}
                 required
-                className="h-11"
+                className={inputClasses}
                 disabled={step === "otp"}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
+            <Label htmlFor="phone" className="text-sm font-semibold text-emerald-100/90">
               Phone Number
             </Label>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -308,7 +318,7 @@ export function RegisterForm() {
                 }}
                 disabled={step === "otp"}
               >
-                <SelectTrigger className="h-11 rounded-md sm:w-40">
+                <SelectTrigger className={`${inputClasses} sm:w-40`}>
                   <SelectValue placeholder="Country" />
                 </SelectTrigger>
                 <SelectContent className="max-h-64">
@@ -332,18 +342,16 @@ export function RegisterForm() {
                   }
                 }}
                 required
-                className="h-11 flex-1"
+                className={`${inputClasses} flex-1`}
                 disabled={step === "otp"}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Include your full phone number. Country code is added automatically.
-            </p>
+            <p className="text-xs text-emerald-100/70">Include your full phone number. Country code is added automatically.</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
+              <Label htmlFor="password" className="text-sm font-semibold text-emerald-100/90">
                 Password
               </Label>
               <Input
@@ -359,13 +367,13 @@ export function RegisterForm() {
                 }}
                 required
                 minLength={6}
-                className="h-11"
+                className={inputClasses}
                 disabled={step === "otp"}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-foreground/90">
+              <Label htmlFor="confirmPassword" className="text-sm font-semibold text-emerald-100/90">
                 Re-enter Password
               </Label>
               <Input
@@ -381,14 +389,14 @@ export function RegisterForm() {
                 }}
                 required
                 minLength={6}
-                className="h-11"
+                className={inputClasses}
                 disabled={step === "otp"}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="referralCode" className="text-sm font-semibold text-foreground/90">
+            <Label htmlFor="referralCode" className="text-sm font-semibold text-emerald-100/90">
               Referral Code
             </Label>
             <Input
@@ -403,27 +411,26 @@ export function RegisterForm() {
                 }
               }}
               required
+              className={inputClasses}
               disabled={step === "otp"}
             />
           </div>
 
           {step === "otp" && (
-            <div className="space-y-3">
+            <div className="rounded-3xl border border-emerald-400/25 bg-emerald-400/10 p-6">
               <div className="space-y-2 text-center">
-                <Label className="text-sm font-semibold text-foreground/90">Enter the 6-digit code</Label>
+                <Label className="text-sm font-semibold text-emerald-100/90">Enter the 6-digit code</Label>
                 <OTPInput value={otpValue} onChange={setOtpValue} disabled={isLoading} />
               </div>
-              <div className="flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground sm:flex-row">
-                <span>
-                  {otpCountdown > 0 ? `You can request a new code in ${otpCountdown}s` : "Didn't get the code?"}
-                </span>
+              <div className="mt-4 flex flex-col items-center justify-center gap-2 text-xs text-emerald-100/70 sm:flex-row">
+                <span>{otpCountdown > 0 ? `You can request a new code in ${otpCountdown}s` : "Didn't get the code?"}</span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={handleResendOTP}
                   disabled={isResending || otpCountdown > 0}
-                  className="h-8 px-2"
+                  className="h-8 px-3 text-emerald-200 hover:text-emerald-100"
                 >
                   {isResending ? (
                     <>
@@ -438,13 +445,22 @@ export function RegisterForm() {
           )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {step === "details" && (
-              <Button type="button" variant="outline" className="h-11 sm:w-auto" onClick={() => router.push("/auth/forgot")}>
-                Forgot Password?
-              </Button>
+            {step === "details" ? (
+              <Link
+                href="/auth/forgot"
+                className="text-sm font-semibold text-emerald-200 underline-offset-4 hover:text-emerald-100 hover:underline"
+              >
+                Need to reset your password?
+              </Link>
+            ) : (
+              <p className="text-sm text-emerald-100/70">Check your inbox for the Apple Mine verification code.</p>
             )}
 
-            <Button type="submit" className="h-11 flex-1 sm:flex-none shadow-lg shadow-primary/20" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="h-12 flex-1 rounded-xl bg-gradient-to-r from-emerald-400 via-lime-400 to-amber-300 text-base font-semibold text-emerald-950 shadow-[0_20px_40px_rgba(34,197,94,0.25)] hover:from-emerald-300 hover:via-lime-300 hover:to-amber-200 sm:flex-none sm:px-8"
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -459,9 +475,9 @@ export function RegisterForm() {
           </div>
         </form>
 
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/auth/login" className="font-semibold text-primary hover:underline">
+        <p className="text-center text-sm text-emerald-100/70">
+          Already cultivating with Apple Mine?{" "}
+          <Link href="/auth/login" className="font-semibold text-emerald-200 underline-offset-4 hover:underline">
             Login instead
           </Link>
         </p>

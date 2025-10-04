@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Loader2, Mail, Smartphone, RefreshCw } from "lucide-react"
-import Image from "next/image"
 
 interface OTPVerificationProps {
   email?: string
@@ -97,16 +96,17 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 w-16 h-16 relative">
-          <Image src="/images/mintmine-logo.png" alt="Mintmine Pro" fill className="object-contain" />
+    <Card className="w-full max-w-md overflow-hidden rounded-[2rem] border border-white/10 bg-black/60 shadow-[0_20px_45px_rgba(34,197,94,0.25)]">
+      <CardHeader className="relative space-y-3 text-center">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-emerald-400/20 via-lime-400/10 to-amber-300/20" />
+        <div className="mx-auto mt-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/40 bg-emerald-400/15 text-3xl">
+          🍏
         </div>
-        <CardTitle className="text-2xl font-bold">Verify Your Account</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-2xl font-bold text-white">Confirm Your Apple Mine Identity</CardTitle>
+        <CardDescription className="text-emerald-100/80">
           We've sent a 6-digit code to {email ? "your email" : "your phone"}
           <br />
-          <span className="font-medium text-foreground">{email || phone}</span>
+          <span className="font-medium text-white/90">{email || phone}</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -119,18 +119,22 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
         <div className="space-y-4">
           <div className="flex justify-center">
             <InputOTP maxLength={6} value={otp} onChange={(value) => setOtp(value)}>
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
+              <InputOTPGroup className="gap-3">
+                <InputOTPSlot index={0} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
+                <InputOTPSlot index={1} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
+                <InputOTPSlot index={2} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
+                <InputOTPSlot index={3} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
+                <InputOTPSlot index={4} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
+                <InputOTPSlot index={5} className="h-14 w-12 rounded-xl border-emerald-400/40 bg-black/40 text-xl" />
               </InputOTPGroup>
             </InputOTP>
           </div>
 
-          <Button onClick={handleVerify} className="w-full" disabled={isLoading || otp.length !== 6}>
+          <Button
+            onClick={handleVerify}
+            className="h-12 w-full rounded-xl bg-gradient-to-r from-emerald-400 via-lime-400 to-amber-300 text-base font-semibold text-emerald-950 shadow-[0_12px_24px_rgba(34,197,94,0.25)] hover:from-emerald-300 hover:via-lime-300 hover:to-amber-200"
+            disabled={isLoading || otp.length !== 6}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -142,9 +146,14 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
           </Button>
         </div>
 
-        <div className="text-center space-y-2">
-          <p className="text-sm text-muted-foreground">Didn't receive the code?</p>
-          <Button variant="ghost" onClick={handleResend} disabled={!canResend || isResending} className="text-sm">
+        <div className="space-y-2 text-center">
+          <p className="text-sm text-emerald-100/70">Didn't receive the code?</p>
+          <Button
+            variant="ghost"
+            onClick={handleResend}
+            disabled={!canResend || isResending}
+            className="text-sm text-emerald-200 hover:text-emerald-100"
+          >
             {isResending ? (
               <>
                 <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
@@ -160,8 +169,11 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
             )}
           </Button>
         </div>
-
-        <Button variant="outline" onClick={onBack} className="w-full bg-transparent">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="h-12 w-full rounded-xl border-emerald-400/40 bg-transparent text-emerald-100 hover:bg-emerald-400/10"
+        >
           Back to Registration
         </Button>
       </CardContent>

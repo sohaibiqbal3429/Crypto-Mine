@@ -8,7 +8,7 @@ export async function sendOTPSMS(phone: string, otp: string, purpose = "registra
   }
 
   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-  const message = `Your Mintmine Pro verification code for ${purpose} is: ${otp}. This code expires in 10 minutes. Do not share this code.`
+  const message = `Your Apple Mine verification code for ${purpose} is: ${otp}. This code expires in 10 minutes. Do not share this code.`
 
   try {
     await client.messages.create({

@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "CryptoMine - Next-Generation Mining Platform",
+  title: "Apple Mine – Immersive Digital Mining Collective",
   description:
-    "Join our innovative mining ecosystem with referral rewards, team building, and sustainable earning opportunities.",
-    generator: 'v0.app'
+    "Experience Apple Mine's orchard-inspired mining hub with collaborative rewards, layered security, and beautifully designed dashboards.",
+  generator: "v0.app",
 }
 
 export default function RootLayout({

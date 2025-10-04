@@ -4,76 +4,76 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Enhanced crypto-focused color scheme with better contrast and modern aesthetics */
-  --background: oklch(0.98 0.005 240);
-  --foreground: oklch(0.15 0.02 240);
+  /* Orchard-inspired palette for Apple Mine */
+  --background: oklch(0.98 0.015 135);
+  --foreground: oklch(0.18 0.022 145);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 240);
+  --card-foreground: oklch(0.19 0.022 145);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 240);
-  --primary: oklch(0.55 0.18 45); /* Crypto gold/amber */
-  --primary-foreground: oklch(0.98 0.005 240);
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.25 0.02 240);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.55 0.02 240);
-  --accent: oklch(0.55 0.18 45);
-  --accent-foreground: oklch(0.98 0.005 240);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.98 0.005 240);
-  --border: oklch(0.92 0.01 240);
-  --input: oklch(0.92 0.01 240);
-  --ring: oklch(0.55 0.18 45);
-  --chart-1: oklch(0.55 0.18 45); /* Crypto gold */
-  --chart-2: oklch(0.45 0.15 200); /* Crypto blue */
-  --chart-3: oklch(0.35 0.12 280); /* Crypto purple */
-  --chart-4: oklch(0.65 0.15 120); /* Crypto green */
-  --chart-5: oklch(0.5 0.2 15); /* Crypto orange */
+  --popover-foreground: oklch(0.18 0.022 145);
+  --primary: oklch(0.76 0.12 136); /* fresh apple green */
+  --primary-foreground: oklch(0.14 0.02 150);
+  --secondary: oklch(0.95 0.02 170);
+  --secondary-foreground: oklch(0.28 0.02 160);
+  --muted: oklch(0.96 0.015 160);
+  --muted-foreground: oklch(0.55 0.018 160);
+  --accent: oklch(0.84 0.16 95); /* citrus glow */
+  --accent-foreground: oklch(0.18 0.022 145);
+  --destructive: oklch(0.54 0.19 25);
+  --destructive-foreground: oklch(0.99 0.004 160);
+  --border: oklch(0.9 0.012 155);
+  --input: oklch(0.9 0.012 155);
+  --ring: oklch(0.76 0.12 136);
+  --chart-1: oklch(0.76 0.12 136);
+  --chart-2: oklch(0.68 0.13 180);
+  --chart-3: oklch(0.7 0.16 95);
+  --chart-4: oklch(0.64 0.14 125);
+  --chart-5: oklch(0.72 0.17 55);
   --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.005 240);
-  --sidebar-foreground: oklch(0.15 0.02 240);
-  --sidebar-primary: oklch(0.55 0.18 45);
-  --sidebar-primary-foreground: oklch(0.98 0.005 240);
-  --sidebar-accent: oklch(0.96 0.01 240);
-  --sidebar-accent-foreground: oklch(0.25 0.02 240);
-  --sidebar-border: oklch(0.92 0.01 240);
-  --sidebar-ring: oklch(0.55 0.18 45);
+  --sidebar: oklch(0.98 0.015 135);
+  --sidebar-foreground: oklch(0.19 0.022 145);
+  --sidebar-primary: oklch(0.76 0.12 136);
+  --sidebar-primary-foreground: oklch(0.14 0.02 150);
+  --sidebar-accent: oklch(0.95 0.02 170);
+  --sidebar-accent-foreground: oklch(0.28 0.02 160);
+  --sidebar-border: oklch(0.9 0.012 155);
+  --sidebar-ring: oklch(0.76 0.12 136);
 }
 
 .dark {
-  /* Enhanced dark theme with better crypto aesthetics and improved contrast */
-  --background: oklch(0.08 0.01 240);
-  --foreground: oklch(0.95 0.005 240);
-  --card: oklch(0.12 0.01 240);
-  --card-foreground: oklch(0.95 0.005 240);
-  --popover: oklch(0.12 0.01 240);
-  --popover-foreground: oklch(0.95 0.005 240);
-  --primary: oklch(0.65 0.2 45); /* Brighter crypto gold for dark mode */
-  --primary-foreground: oklch(0.08 0.01 240);
-  --secondary: oklch(0.18 0.01 240);
-  --secondary-foreground: oklch(0.95 0.005 240);
-  --muted: oklch(0.18 0.01 240);
-  --muted-foreground: oklch(0.65 0.01 240);
-  --accent: oklch(0.65 0.2 45);
-  --accent-foreground: oklch(0.08 0.01 240);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.95 0.005 240);
-  --border: oklch(0.18 0.01 240);
-  --input: oklch(0.18 0.01 240);
-  --ring: oklch(0.65 0.2 45);
-  --chart-1: oklch(0.65 0.2 45); /* Bright crypto gold */
-  --chart-2: oklch(0.55 0.18 200); /* Bright crypto blue */
-  --chart-3: oklch(0.45 0.15 280); /* Bright crypto purple */
-  --chart-4: oklch(0.75 0.18 120); /* Bright crypto green */
-  --chart-5: oklch(0.6 0.22 15); /* Bright crypto orange */
-  --sidebar: oklch(0.1 0.01 240);
-  --sidebar-foreground: oklch(0.95 0.005 240);
-  --sidebar-primary: oklch(0.65 0.2 45);
-  --sidebar-primary-foreground: oklch(0.08 0.01 240);
-  --sidebar-accent: oklch(0.18 0.01 240);
-  --sidebar-accent-foreground: oklch(0.95 0.005 240);
-  --sidebar-border: oklch(0.18 0.01 240);
-  --sidebar-ring: oklch(0.65 0.2 45);
+  /* Deep orchard night palette */
+  --background: oklch(0.11 0.018 150);
+  --foreground: oklch(0.94 0.008 150);
+  --card: oklch(0.15 0.02 150);
+  --card-foreground: oklch(0.94 0.008 150);
+  --popover: oklch(0.15 0.02 150);
+  --popover-foreground: oklch(0.94 0.008 150);
+  --primary: oklch(0.7 0.13 136);
+  --primary-foreground: oklch(0.13 0.022 155);
+  --secondary: oklch(0.24 0.02 160);
+  --secondary-foreground: oklch(0.94 0.008 150);
+  --muted: oklch(0.24 0.02 160);
+  --muted-foreground: oklch(0.67 0.01 160);
+  --accent: oklch(0.77 0.15 95);
+  --accent-foreground: oklch(0.13 0.022 155);
+  --destructive: oklch(0.54 0.19 25);
+  --destructive-foreground: oklch(0.98 0.006 150);
+  --border: oklch(0.24 0.02 160);
+  --input: oklch(0.24 0.02 160);
+  --ring: oklch(0.7 0.13 136);
+  --chart-1: oklch(0.7 0.13 136);
+  --chart-2: oklch(0.62 0.12 190);
+  --chart-3: oklch(0.64 0.14 95);
+  --chart-4: oklch(0.58 0.13 125);
+  --chart-5: oklch(0.66 0.16 55);
+  --sidebar: oklch(0.14 0.018 150);
+  --sidebar-foreground: oklch(0.94 0.008 150);
+  --sidebar-primary: oklch(0.7 0.13 136);
+  --sidebar-primary-foreground: oklch(0.13 0.022 155);
+  --sidebar-accent: oklch(0.24 0.02 160);
+  --sidebar-accent-foreground: oklch(0.94 0.008 150);
+  --sidebar-border: oklch(0.24 0.02 160);
+  --sidebar-ring: oklch(0.7 0.13 136);
 }
 
 @theme inline {

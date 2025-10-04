@@ -53,7 +53,7 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  By accessing and using Mintmine Pro ("the Platform"), you accept and agree to be bound by the terms
+                  By accessing and using Apple Mine ("the Platform"), you accept and agree to be bound by the terms
                   and provision of this agreement. If you do not agree to abide by the above, please do not use this
                   service.
                 </p>
@@ -65,7 +65,7 @@ export default function TermsPage() {
                 <CardTitle>2. Platform Description</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
-                <p>Mintmine Pro is a cryptocurrency mining and investment platform that allows users to:</p>
+                <p>Apple Mine is a cryptocurrency mining and investment platform that allows users to:</p>
                 <ul className="list-disc pl-6 space-y-1">
                   <li>Participate in P-Coin mining activities</li>
                   <li>Stake cryptocurrencies for rewards</li>
@@ -178,7 +178,7 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Mintmine Pro shall not be liable for any direct, indirect, incidental, special, or consequential
+                  Apple Mine shall not be liable for any direct, indirect, incidental, special, or consequential
                   damages resulting from the use or inability to use the platform, even if advised of the possibility of
                   such damages.
                 </p>

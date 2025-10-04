@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
-import Image from "next/image"
 import {
   Home,
   BarChart3,
@@ -71,9 +70,14 @@ export function Sidebar({ user }: SidebarProps) {
     <div className="flex h-full flex-col bg-sidebar">
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
-        <div className="flex items-center space-x-2">
-          <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
-          <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
+        <div className="flex items-center space-x-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-lime-400 to-amber-300 text-lg font-bold text-emerald-900 shadow-[0_10px_25px_rgba(34,197,94,0.25)]">
+            🍏
+          </div>
+          <div>
+            <span className="text-lg font-bold text-sidebar-foreground">Apple Mine</span>
+            <p className="text-xs font-medium uppercase tracking-[0.35em] text-sidebar-foreground/70">Orchard Network</p>
+          </div>
         </div>
         <div className="md:hidden mt-2 flex items-center gap-2">
           <NotificationBell />

@@ -18,7 +18,7 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
   }
 
   const transporter = createTransporter()
-  const subject = `Your Mintmine Pro Verification Code`
+  const subject = `Your Apple Mine Verification Code`
 
   const html = `
     <!DOCTYPE html>
@@ -29,13 +29,13 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
     </head>
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="text-align: center; margin-bottom: 30px;">
-        <div style="background: #f59e0b; color: white; width: 60px; height: 60px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold;">
-          M
+        <div style="background: linear-gradient(135deg, #4ade80, #a3e635, #facc15); color: #064e3b; width: 64px; height: 64px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 28px; font-weight: bold;">
+          🍏
         </div>
       </div>
       
       <div style="background: #f8f9fa; padding: 30px; border-radius: 10px; text-align: center;">
-        <h2 style="color: #1e40af; margin-bottom: 20px;">Verification Code</h2>
+        <h2 style="color: #047857; margin-bottom: 20px;">Apple Mine Verification Code</h2>
         <p style="font-size: 16px; color: #374151; margin-bottom: 25px;">
           Your verification code for ${purpose} is:
         </p>
@@ -46,9 +46,9 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
           This code will expire in 10 minutes. Do not share this code with anyone.
         </p>
       </div>
-      
+
       <div style="text-align: center; margin-top: 30px; font-size: 12px; color: #9ca3af;">
-        <p>© 2025 Mintmine Pro. All rights reserved.</p>
+        <p>© 2025 Apple Mine. All rights reserved.</p>
       </div>
     </body>
     </html>
@@ -56,7 +56,7 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
 
   try {
     await transporter.sendMail({
-      from: `"Mintmine Pro" <${process.env.SMTP_USER}>`,
+      from: `"Apple Mine" <${process.env.SMTP_USER}>`,
       to: email,
       subject,
       html,
