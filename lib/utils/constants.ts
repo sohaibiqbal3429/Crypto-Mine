@@ -1,9 +1,9 @@
 // Application constants
 export const APP_CONFIG = {
-  name: "Mintmine Pro",
-  description: "Advanced cryptocurrency mining platform",
+  name: "Apple Mine",
+  description: "Luminous mining habitat with adaptive yield engines and cinematic dashboards",
   version: "1.0.0",
-  supportEmail: "Mintminepro@gmail.com",
+  supportEmail: "support@applemine.co",
   maxFileSize: 5 * 1024 * 1024, // 5MB
   allowedImageTypes: ["image/jpeg", "image/png", "image/webp"],
 } as const

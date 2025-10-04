@@ -1,4 +1,4 @@
-# CryptoMine Platform Setup Guide
+# Apple Mine Habitat Setup Guide
 
 ## Quick Setup Instructions
 
@@ -64,16 +64,16 @@ npm run seed:db
 npm run dev
 \`\`\`
 
-Visit `http://localhost:3000` to see your application!
+Visit `http://localhost:3000` to explore the luminous habitat!
 
 ## Features Included
-- ✅ User authentication with referral system
-- ✅ Mining dashboard with KPI cards
-- ✅ Wallet management (D-Wallet & E-Wallet)
-- ✅ Team structure and commission system
-- ✅ Admin panel for approvals
-- ✅ Transaction history and notifications
-- ✅ Mobile-first responsive design
+- ✅ Spectral authentication rituals with dual-factor support
+- ✅ Cinematic mining dashboards and live reactor telemetry
+- ✅ Vault management with layered safeguards
+- ✅ Alliance structure and transparent commission matrix
+- ✅ Admin deck for approvals and oversight
+- ✅ Transaction history with contextual storytelling
+- ✅ Mobile-first, motion-rich interface
 - ✅ MongoDB integration with Mongoose
 - ✅ JWT-based authentication
 - ✅ Role-based access control

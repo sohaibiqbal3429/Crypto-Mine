@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
-import { Loader2, Mail, Smartphone, RefreshCw } from "lucide-react"
-import Image from "next/image"
+import { Loader2, Mail, RefreshCw, Smartphone } from "lucide-react"
 
 interface OTPVerificationProps {
   email?: string
@@ -27,9 +26,9 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000)
       return () => clearTimeout(timer)
-    } else {
-      setCanResend(true)
     }
+
+    setCanResend(true)
   }, [countdown])
 
   const handleVerify = async () => {
@@ -97,63 +96,65 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-4 w-16 h-16 relative">
-          <Image src="/images/mintmine-logo.png" alt="Mintmine Pro" fill className="object-contain" />
+    <Card className="w-full max-w-lg overflow-hidden rounded-[2.5rem] border border-white/15 bg-black/50 shadow-[0_30px_90px_rgba(59,130,246,0.25)]">
+      <CardHeader className="relative space-y-4 text-center text-white">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.25),_transparent_70%)]" />
+        <div className="mx-auto mt-6 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-2xl">
+          🍏
         </div>
-        <CardTitle className="text-2xl font-bold">Verify Your Account</CardTitle>
-        <CardDescription>
-          We've sent a 6-digit code to {email ? "your email" : "your phone"}
-          <br />
-          <span className="font-medium text-foreground">{email || phone}</span>
+        <CardTitle className="text-3xl font-bold">Verify your Apple Mine ritual</CardTitle>
+        <CardDescription className="text-white/70">
+          {email ? "We sent a code to" : "We sent a code via SMS to"}{" "}
+          <span className="font-semibold text-white">{email || phone}</span>. Enter it below to activate your habitat.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 text-white">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="space-y-4">
-          <div className="flex justify-center">
-            <InputOTP maxLength={6} value={otp} onChange={(value) => setOtp(value)}>
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
-              </InputOTPGroup>
-            </InputOTP>
-          </div>
-
-          <Button onClick={handleVerify} className="w-full" disabled={isLoading || otp.length !== 6}>
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              "Verify Code"
-            )}
-          </Button>
+        <div className="flex justify-center">
+          <InputOTP maxLength={6} value={otp} onChange={(value) => setOtp(value)}>
+            <InputOTPGroup className="gap-4">
+              {[0, 1, 2, 3, 4, 5].map((slot) => (
+                <InputOTPSlot key={slot} index={slot} className="h-14 w-12 rounded-2xl border-white/20 bg-white/10 text-xl text-white" />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
         </div>
 
-        <div className="text-center space-y-2">
-          <p className="text-sm text-muted-foreground">Didn't receive the code?</p>
-          <Button variant="ghost" onClick={handleResend} disabled={!canResend || isResending} className="text-sm">
+        <Button
+          onClick={handleVerify}
+          className="h-12 w-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 text-base font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 hover:from-cyan-300 hover:via-sky-300 hover:to-fuchsia-400"
+          disabled={isLoading || otp.length !== 6}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying…
+            </>
+          ) : (
+            "Complete Ritual"
+          )}
+        </Button>
+
+        <div className="space-y-2 text-center text-sm text-white/70">
+          <p>Didn&apos;t catch the signal?</p>
+          <Button
+            variant="ghost"
+            onClick={handleResend}
+            disabled={!canResend || isResending}
+            className="inline-flex items-center justify-center gap-2 text-sm text-white hover:text-cyan-100"
+          >
             {isResending ? (
               <>
-                <RefreshCw className="mr-2 h-3 w-3 animate-spin" />
-                Sending...
+                <RefreshCw className="h-4 w-4 animate-spin" /> Sending…
               </>
             ) : canResend ? (
               <>
-                {email ? <Mail className="mr-2 h-3 w-3" /> : <Smartphone className="mr-2 h-3 w-3" />}
-                Resend Code
+                {email ? <Mail className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+                Resend code
               </>
             ) : (
               `Resend in ${countdown}s`
@@ -161,8 +162,12 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
           </Button>
         </div>
 
-        <Button variant="outline" onClick={onBack} className="w-full bg-transparent">
-          Back to Registration
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="h-12 w-full rounded-full border-white/30 bg-transparent text-white hover:bg-white/10"
+        >
+          Back to details
         </Button>
       </CardContent>
     </Card>

@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Loader2, UserRoundPlus } from "lucide-react"
+import { KeyRound, Loader2, Mail, Phone } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -94,16 +94,16 @@ export function LoginForm() {
   }
 
   return (
-    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors">
-      <div className="bg-gradient-to-r from-primary to-accent py-4 text-center text-primary-foreground">
-        <h1 className="text-lg font-semibold tracking-wide">User Referral Login System</h1>
-      </div>
-
-      <div className="space-y-6 px-6 py-6 sm:px-8">
-        <div className="flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border/60 bg-background/80 text-primary shadow-sm">
-            <UserRoundPlus className="h-8 w-8" />
-          </div>
+    <div className="relative overflow-hidden rounded-[2.75rem] border border-white/15 bg-black/50 shadow-[0_30px_90px_rgba(59,130,246,0.28)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.25),_transparent_60%)]" />
+      <div className="absolute inset-x-6 top-6 h-40 rounded-[2.25rem] bg-gradient-to-r from-cyan-400/30 via-sky-400/20 to-fuchsia-400/30 blur-3xl" />
+      <div className="relative space-y-8 px-8 pb-10 pt-12 sm:px-10">
+        <div className="space-y-2 text-center text-white">
+          <p className="text-xs font-semibold uppercase tracking-[0.45em] text-cyan-100/70">Login Portal</p>
+          <h1 className="text-3xl font-bold">Apple Mine Access Console</h1>
+          <p className="text-sm text-white/70">
+            Authenticate with your preferred channel and rejoin your luminous mining habitat.
+          </p>
         </div>
 
         {error && (
@@ -112,7 +112,7 @@ export function LoginForm() {
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6 text-white">
           <Tabs
             value={authMethod}
             onValueChange={(value) => {
@@ -121,36 +121,46 @@ export function LoginForm() {
             }}
             className="space-y-4"
           >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="email">Email</TabsTrigger>
-              <TabsTrigger value="phone">Phone</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 rounded-full border border-white/15 bg-white/10 p-1">
+              <TabsTrigger
+                value="email"
+                className="rounded-full text-sm font-semibold text-white/70 data-[state=active]:bg-white data-[state=active]:text-slate-900"
+              >
+                <Mail className="mr-2 h-4 w-4" /> Email
+              </TabsTrigger>
+              <TabsTrigger
+                value="phone"
+                className="rounded-full text-sm font-semibold text-white/70 data-[state=active]:bg-white data-[state=active]:text-slate-900"
+              >
+                <Phone className="mr-2 h-4 w-4" /> Phone
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="email" className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold text-foreground/90">
+            <TabsContent value="email" className="space-y-3">
+              <Label htmlFor="email" className="text-sm font-semibold text-white/80">
                 Email Address
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                placeholder="name@domain.com"
                 value={formData.email}
                 onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
-                className="h-11"
+                className="h-12 rounded-2xl border-white/20 bg-white/10 text-white placeholder:text-white/40"
               />
             </TabsContent>
 
-            <TabsContent value="phone" className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
+            <TabsContent value="phone" className="space-y-3">
+              <Label htmlFor="phone" className="text-sm font-semibold text-white/80">
                 Phone Number
               </Label>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <Select
                   value={formData.countryCode}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, countryCode: value }))}
                 >
-                  <SelectTrigger className="h-11 rounded-md sm:w-40">
-                    <SelectValue placeholder="Country" />
+                  <SelectTrigger className="h-12 rounded-2xl border-white/20 bg-white/10 text-white sm:w-44">
+                    <SelectValue placeholder="Code" />
                   </SelectTrigger>
                   <SelectContent className="max-h-64">
                     {SORTED_COUNTRY_DIAL_CODES.map((country) => (
@@ -168,55 +178,56 @@ export function LoginForm() {
                   onChange={(event) =>
                     setFormData((prev) => ({ ...prev, phone: event.target.value.replace(/[^\d]/g, "") }))
                   }
-                  className="h-11 flex-1"
+                  className="h-12 flex-1 rounded-2xl border-white/20 bg-white/10 text-white placeholder:text-white/40"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Use the number you registered with, including the country code.
-              </p>
+              <p className="text-xs text-white/60">Use the number linked to your Apple Mine ident, including the country code.</p>
             </TabsContent>
           </Tabs>
 
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
+          <div className="space-y-3">
+            <Label htmlFor="password" className="text-sm font-semibold text-white/80">
               Password
             </Label>
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="Enter your passphrase"
               value={formData.password}
               onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
-              required
-              className="h-11"
+              className="h-12 rounded-2xl border-white/20 bg-white/10 text-white placeholder:text-white/40"
             />
           </div>
 
-          <div className="flex items-center justify-end text-sm">
-            <Link
-              href="/auth/forgot"
-              className="font-medium text-primary underline-offset-4 transition-colors hover:text-primary/80 hover:underline"
-            >
-              Forgot Password?
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <Link href="/auth/forgot-password" className="text-sm font-medium text-cyan-100/80 hover:text-cyan-100">
+              Forgot your passphrase?
             </Link>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => router.push("/auth/register")}>
-              (Create Account)
-            </Button>
-            <Button type="submit" className="flex-1 h-11 shadow-lg shadow-primary/20" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="h-12 w-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-fuchsia-500 text-base font-semibold text-slate-900 shadow-lg shadow-cyan-500/30 hover:from-cyan-300 hover:via-sky-300 hover:to-fuchsia-400 sm:w-auto"
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Logging in...
+                  Signing in…
                 </>
               ) : (
-                "Login"
+                <>
+                  <KeyRound className="mr-2 h-4 w-4" /> Enter Habitat
+                </>
               )}
             </Button>
           </div>
         </form>
+
+        <div className="flex flex-col items-center justify-between gap-3 rounded-[1.75rem] border border-white/10 bg-white/5 px-6 py-5 text-center text-xs text-white/70 sm:flex-row sm:text-left">
+          <span>First time exploring Apple Mine?</span>
+          <Link href="/auth/register" className="font-semibold text-white hover:text-cyan-100">
+            Initiate your ident
+          </Link>
+        </div>
       </div>
     </div>
   )

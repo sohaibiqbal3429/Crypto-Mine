@@ -5,6 +5,104 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 
+const sections = [
+  {
+    title: "1. Acceptance of Habitat Terms",
+    body: (
+      <p>
+        Accessing Apple Mine means you agree to our luminous habitat terms. If you disagree with any ritual, refrain from
+        using the platform until alignment is achieved.
+      </p>
+    ),
+  },
+  {
+    title: "2. Platform Identity",
+    body: (
+      <p>
+        Apple Mine is a bespoke mining habitat offering adaptive yield engines, cinematic dashboards, and secure vault
+        management. Nothing here is cloned; the experience is engineered specifically for this ecosystem.
+      </p>
+    ),
+  },
+  {
+    title: "3. Crew Responsibilities",
+    body: (
+      <ul className="list-disc space-y-2 pl-6">
+        <li>Provide accurate details during onboarding and keep them current.</li>
+        <li>Protect your credentials and ritual devices; never share OTP codes.</li>
+        <li>Operate in compliance with your local regulations.</li>
+        <li>Avoid malicious automation, scraping, or attempts to replicate our interface.</li>
+        <li>Understand that crypto operations carry financial risk.</li>
+      </ul>
+    ),
+  },
+  {
+    title: "4. Mining & Rewards",
+    body: (
+      <p>
+        Rewards fluctuate based on reactor performance, liquidity balancing, and crew streaks. Sessions can be launched
+        every 24 hours, and the platform may adjust formulas to maintain system integrity.
+      </p>
+    ),
+  },
+  {
+    title: "5. Deposits & Withdrawals",
+    body: (
+      <p>
+        Deposits begin at $80 USDT. Withdrawals start at $10 USDT and are typically processed within 24–48 hours. A 2%
+        withdrawal fee covers chain and security costs. Additional checks may be required for large transfers.
+      </p>
+    ),
+  },
+  {
+    title: "6. Alliance Program",
+    body: (
+      <p>
+        Referral and alliance rewards are transparent and dynamic. Abuse—including fake accounts or circular activity—will
+        result in removal and possible suspension.
+      </p>
+    ),
+  },
+  {
+    title: "7. Risk Signals",
+    body: (
+      <ul className="list-disc space-y-2 pl-6">
+        <li>Crypto values are volatile; earnings can rise or fall without notice.</li>
+        <li>Historical results do not promise future performance.</li>
+        <li>Technical or regulatory events may temporarily limit access.</li>
+        <li>You are responsible for the tax treatment of your activity.</li>
+      </ul>
+    ),
+  },
+  {
+    title: "8. Account Suspension",
+    body: (
+      <p>
+        We may restrict or suspend accounts engaged in fraud, regulatory violations, or behaviour that harms the community.
+        You may close your account by contacting support at any time.
+      </p>
+    ),
+  },
+  {
+    title: "9. Liability Boundaries",
+    body: (
+      <p>
+        Apple Mine is not liable for indirect, incidental, or consequential losses arising from platform use, network
+        outages, or third-party integrations.
+      </p>
+    ),
+  },
+  {
+    title: "10. Evolving Rituals",
+    body: (
+      <p>
+        Terms may evolve as the habitat grows. When we update them, you will receive notifications. Continuing to use Apple
+        Mine after updates counts as acceptance of the new ritual.
+      </p>
+    ),
+  },
+]
+
 export default function TermsPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -36,181 +134,27 @@ export default function TermsPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-gradient-to-br from-[#030614] via-[#04091f] to-[#0a0215] text-foreground">
       <Sidebar user={user} />
 
-      <main className="flex-1 md:ml-64 overflow-auto">
-        <div className="p-6">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-balance">Terms of Service</h1>
-            <p className="text-muted-foreground">Last updated: January 15, 2025</p>
+      <main className="flex-1 overflow-auto md:ml-72">
+        <div className="relative px-6 pb-16 pt-10">
+          <div className="pointer-events-none absolute inset-x-12 top-0 h-48 rounded-[4rem] bg-[radial-gradient(circle,_rgba(244,114,182,0.18),_transparent_70%)] blur-3xl" />
+          <div className="relative z-10 mb-10 rounded-[2.5rem] border border-white/10 bg-white/5 p-8 text-white shadow-[0_35px_90px_rgba(244,114,182,0.18)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-white/70">Habitat Terms</p>
+            <h1 className="mt-4 text-3xl font-bold">Apple Mine Manifest</h1>
+            <p className="mt-2 text-sm text-white/70">Last updated: February 12, 2025</p>
           </div>
 
-          <div className="max-w-4xl space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>1. Acceptance of Terms</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  By accessing and using Mintmine Pro ("the Platform"), you accept and agree to be bound by the terms
-                  and provision of this agreement. If you do not agree to abide by the above, please do not use this
-                  service.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>2. Platform Description</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>Mintmine Pro is a cryptocurrency mining and investment platform that allows users to:</p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Participate in P-Coin mining activities</li>
-                  <li>Stake cryptocurrencies for rewards</li>
-                  <li>Refer new users and earn commissions</li>
-                  <li>Manage digital wallets and transactions</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>3. User Responsibilities</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>Users are responsible for:</p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Providing accurate and truthful information during registration</li>
-                  <li>Maintaining the security of their account credentials</li>
-                  <li>Complying with all applicable laws and regulations</li>
-                  <li>Not engaging in fraudulent or malicious activities</li>
-                  <li>Understanding the risks associated with cryptocurrency investments</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>4. Mining and Rewards</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  Mining rewards are calculated based on various factors including user level, deposit amount, and
-                  platform performance. Rewards are not guaranteed and may vary based on market conditions and platform
-                  policies.
-                </p>
-                <p>
-                  Users can mine P-Coins once every 24 hours. The platform reserves the right to adjust mining rewards
-                  and cooldown periods as needed.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>5. Deposits and Withdrawals</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  Minimum deposit: $80 USDT
-                  <br />
-                  Minimum withdrawal: $10 USDT
-                  <br />
-                  Withdrawal processing time: 24-48 hours
-                  <br />
-                  Withdrawal fee: 2% of the withdrawal amount
-                </p>
-                <p>
-                  All transactions are subject to verification and may be delayed or rejected if they violate platform
-                  policies or applicable laws.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>6. Referral Program</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  Users can earn commissions by referring new users to the platform. Commission rates vary by level and
-                  are subject to change. Referral abuse or fraudulent referrals may result in account suspension.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>7. Risk Disclosure</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p className="font-semibold text-amber-600">
-                  IMPORTANT: Cryptocurrency investments carry significant risks.
-                </p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Cryptocurrency values can be extremely volatile</li>
-                  <li>Past performance does not guarantee future results</li>
-                  <li>You may lose some or all of your investment</li>
-                  <li>Regulatory changes may affect platform operations</li>
-                  <li>Technical issues may temporarily affect platform availability</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>8. Account Termination</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  The platform reserves the right to suspend or terminate user accounts for violations of these terms,
-                  suspicious activities, or legal requirements. Users may also close their accounts at any time by
-                  contacting support.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>9. Limitation of Liability</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  Mintmine Pro shall not be liable for any direct, indirect, incidental, special, or consequential
-                  damages resulting from the use or inability to use the platform, even if advised of the possibility of
-                  such damages.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>10. Changes to Terms</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>
-                  These terms may be updated from time to time. Users will be notified of significant changes via email
-                  or platform notifications. Continued use of the platform after changes constitutes acceptance of the
-                  new terms.
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>11. Contact Information</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>For questions about these terms or the platform, please contact us at:</p>
-                <p>
-                  Email:mintminepro@mail.com
-                  <br />
-                  Support: Available 24/7 through the platform
-                </p>
-              </CardContent>
-            </Card>
+          <div className="relative z-10 grid gap-6 pb-20">
+            {sections.map((section) => (
+              <Card key={section.title} className="rounded-[2rem] border border-white/10 bg-black/40 text-white">
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-white">{section.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-invert prose-sm max-w-none text-white/70">{section.body}</CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </main>

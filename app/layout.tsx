@@ -6,10 +6,22 @@ import { cn } from "@/lib/utils"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "CryptoMine - Next-Generation Mining Platform",
+  title: "Apple Mine | Luminous Mining Habitat",
   description:
-    "Join our innovative mining ecosystem with referral rewards, team building, and sustainable earning opportunities.",
-    generator: 'v0.app'
+    "Apple Mine is a cinematic mining habitat with bioluminescent dashboards, real-time vault telemetry, and ritualised earning flows for modern crews.",
+  keywords: [
+    "Apple Mine",
+    "crypto mining platform",
+    "vault dashboard",
+    "team rewards",
+    "digital wallet",
+  ],
+  authors: [{ name: "Apple Mine Studio" }],
+  openGraph: {
+    title: "Apple Mine",
+    description:
+      "Command a luminous mining habitat with adaptive yields, collaborative rituals, and cinematic telemetry across every device.",
+  },
 }
 
 export default function RootLayout({

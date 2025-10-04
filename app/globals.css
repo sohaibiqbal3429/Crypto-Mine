@@ -4,80 +4,79 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Enhanced crypto-focused color scheme with better contrast and modern aesthetics */
-  --background: oklch(0.98 0.005 240);
-  --foreground: oklch(0.15 0.02 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.02 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.02 240);
-  --primary: oklch(0.55 0.18 45); /* Crypto gold/amber */
-  --primary-foreground: oklch(0.98 0.005 240);
-  --secondary: oklch(0.96 0.01 240);
-  --secondary-foreground: oklch(0.25 0.02 240);
-  --muted: oklch(0.96 0.01 240);
-  --muted-foreground: oklch(0.55 0.02 240);
-  --accent: oklch(0.55 0.18 45);
-  --accent-foreground: oklch(0.98 0.005 240);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.98 0.005 240);
-  --border: oklch(0.92 0.01 240);
-  --input: oklch(0.92 0.01 240);
-  --ring: oklch(0.55 0.18 45);
-  --chart-1: oklch(0.55 0.18 45); /* Crypto gold */
-  --chart-2: oklch(0.45 0.15 200); /* Crypto blue */
-  --chart-3: oklch(0.35 0.12 280); /* Crypto purple */
-  --chart-4: oklch(0.65 0.15 120); /* Crypto green */
-  --chart-5: oklch(0.5 0.2 15); /* Crypto orange */
-  --radius: 0.75rem;
-  --sidebar: oklch(0.98 0.005 240);
-  --sidebar-foreground: oklch(0.15 0.02 240);
-  --sidebar-primary: oklch(0.55 0.18 45);
-  --sidebar-primary-foreground: oklch(0.98 0.005 240);
-  --sidebar-accent: oklch(0.96 0.01 240);
-  --sidebar-accent-foreground: oklch(0.25 0.02 240);
-  --sidebar-border: oklch(0.92 0.01 240);
-  --sidebar-ring: oklch(0.55 0.18 45);
+  /* Aurora-inspired palette for the luminous Apple Mine habitat */
+  --background: oklch(0.97 0.01 255);
+  --foreground: oklch(0.2 0.03 245);
+  --card: oklch(0.99 0.008 260);
+  --card-foreground: oklch(0.23 0.03 245);
+  --popover: oklch(0.99 0.008 260);
+  --popover-foreground: oklch(0.23 0.03 245);
+  --primary: oklch(0.67 0.18 210);
+  --primary-foreground: oklch(0.13 0.03 240);
+  --secondary: oklch(0.92 0.02 290);
+  --secondary-foreground: oklch(0.3 0.02 270);
+  --muted: oklch(0.93 0.01 270);
+  --muted-foreground: oklch(0.53 0.02 270);
+  --accent: oklch(0.75 0.2 340);
+  --accent-foreground: oklch(0.16 0.03 250);
+  --destructive: oklch(0.54 0.19 25);
+  --destructive-foreground: oklch(0.99 0.004 160);
+  --border: oklch(0.88 0.01 260);
+  --input: oklch(0.88 0.01 260);
+  --ring: oklch(0.67 0.18 210);
+  --chart-1: oklch(0.67 0.18 210);
+  --chart-2: oklch(0.63 0.22 330);
+  --chart-3: oklch(0.68 0.16 180);
+  --chart-4: oklch(0.62 0.14 260);
+  --chart-5: oklch(0.71 0.2 70);
+  --radius: 0.9rem;
+  --sidebar: oklch(0.98 0.01 255);
+  --sidebar-foreground: oklch(0.23 0.03 245);
+  --sidebar-primary: oklch(0.67 0.18 210);
+  --sidebar-primary-foreground: oklch(0.13 0.03 240);
+  --sidebar-accent: oklch(0.9 0.01 280);
+  --sidebar-accent-foreground: oklch(0.3 0.02 270);
+  --sidebar-border: oklch(0.88 0.01 260);
+  --sidebar-ring: oklch(0.67 0.18 210);
 }
 
 .dark {
-  /* Enhanced dark theme with better crypto aesthetics and improved contrast */
-  --background: oklch(0.08 0.01 240);
-  --foreground: oklch(0.95 0.005 240);
-  --card: oklch(0.12 0.01 240);
-  --card-foreground: oklch(0.95 0.005 240);
-  --popover: oklch(0.12 0.01 240);
-  --popover-foreground: oklch(0.95 0.005 240);
-  --primary: oklch(0.65 0.2 45); /* Brighter crypto gold for dark mode */
-  --primary-foreground: oklch(0.08 0.01 240);
-  --secondary: oklch(0.18 0.01 240);
-  --secondary-foreground: oklch(0.95 0.005 240);
-  --muted: oklch(0.18 0.01 240);
-  --muted-foreground: oklch(0.65 0.01 240);
-  --accent: oklch(0.65 0.2 45);
-  --accent-foreground: oklch(0.08 0.01 240);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.95 0.005 240);
-  --border: oklch(0.18 0.01 240);
-  --input: oklch(0.18 0.01 240);
-  --ring: oklch(0.65 0.2 45);
-  --chart-1: oklch(0.65 0.2 45); /* Bright crypto gold */
-  --chart-2: oklch(0.55 0.18 200); /* Bright crypto blue */
-  --chart-3: oklch(0.45 0.15 280); /* Bright crypto purple */
-  --chart-4: oklch(0.75 0.18 120); /* Bright crypto green */
-  --chart-5: oklch(0.6 0.22 15); /* Bright crypto orange */
-  --sidebar: oklch(0.1 0.01 240);
-  --sidebar-foreground: oklch(0.95 0.005 240);
-  --sidebar-primary: oklch(0.65 0.2 45);
-  --sidebar-primary-foreground: oklch(0.08 0.01 240);
-  --sidebar-accent: oklch(0.18 0.01 240);
-  --sidebar-accent-foreground: oklch(0.95 0.005 240);
-  --sidebar-border: oklch(0.18 0.01 240);
-  --sidebar-ring: oklch(0.65 0.2 45);
+  /* Midnight-mode palette */
+  --background: oklch(0.12 0.04 250);
+  --foreground: oklch(0.94 0.01 260);
+  --card: oklch(0.18 0.03 250);
+  --card-foreground: oklch(0.94 0.01 260);
+  --popover: oklch(0.18 0.03 250);
+  --popover-foreground: oklch(0.94 0.01 260);
+  --primary: oklch(0.63 0.2 210);
+  --primary-foreground: oklch(0.13 0.03 240);
+  --secondary: oklch(0.26 0.03 270);
+  --secondary-foreground: oklch(0.94 0.01 260);
+  --muted: oklch(0.26 0.03 270);
+  --muted-foreground: oklch(0.7 0.01 270);
+  --accent: oklch(0.58 0.22 340);
+  --accent-foreground: oklch(0.13 0.03 240);
+  --destructive: oklch(0.54 0.19 25);
+  --destructive-foreground: oklch(0.98 0.006 150);
+  --border: oklch(0.24 0.03 270);
+  --input: oklch(0.24 0.03 270);
+  --ring: oklch(0.63 0.2 210);
+  --chart-1: oklch(0.63 0.2 210);
+  --chart-2: oklch(0.56 0.25 330);
+  --chart-3: oklch(0.6 0.18 180);
+  --chart-4: oklch(0.52 0.16 260);
+  --chart-5: oklch(0.58 0.23 70);
+  --sidebar: oklch(0.18 0.03 250);
+  --sidebar-foreground: oklch(0.94 0.01 260);
+  --sidebar-primary: oklch(0.63 0.2 210);
+  --sidebar-primary-foreground: oklch(0.13 0.03 240);
+  --sidebar-accent: oklch(0.26 0.03 270);
+  --sidebar-accent-foreground: oklch(0.94 0.01 260);
+  --sidebar-border: oklch(0.26 0.03 270);
+  --sidebar-ring: oklch(0.63 0.2 210);
 }
 
 @theme inline {
-  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -122,8 +121,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Added smooth transitions for better UX */
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.4s ease, color 0.4s ease;
   }
 }
 
@@ -131,7 +129,7 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-/* Enhanced scrollbar with crypto theme colors */
+/* Enhanced scrollbar with spectral gradients */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -151,8 +149,8 @@ body {
   background: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--primary)));
 }
 
-/* Added crypto-themed animations and effects */
-@keyframes crypto-glow {
+/* Habitat ambient animations */
+@keyframes habitat-glow {
   0%,
   100% {
     box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
@@ -162,42 +160,51 @@ body {
   }
 }
 
-@keyframes mining-pulse {
+@keyframes pulse-beacon {
   0%,
   100% {
     transform: scale(1);
     opacity: 0.8;
   }
   50% {
-    transform: scale(1.05);
+    transform: scale(1.06);
     opacity: 1;
   }
 }
 
-.crypto-glow {
-  animation: crypto-glow 3s ease-in-out infinite;
+.habitat-glow {
+  animation: habitat-glow 4s ease-in-out infinite;
 }
 
-.mining-pulse {
-  animation: mining-pulse 2s ease-in-out infinite;
+.pulse-beacon {
+  animation: pulse-beacon 2.6s ease-in-out infinite;
 }
 
-/* Enhanced card hover effects for better interactivity */
-.crypto-card {
+/* Immersive card motion */
+.habitat-card {
   transition: all 0.3s ease;
   border: 1px solid hsl(var(--border));
 }
 
-.crypto-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px hsl(var(--primary) / 0.15);
-  border-color: hsl(var(--primary) / 0.3);
+.habitat-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 40px hsl(var(--primary) / 0.22);
+  border-color: hsl(var(--primary) / 0.35);
 }
 
-/* Gradient text effects for crypto branding */
-.crypto-gradient-text {
+.spectral-text {
   background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: transparent;
+}
+
+.holo-grid {
+  background-image: radial-gradient(hsl(var(--primary) / 0.14) 1px, transparent 1px),
+    radial-gradient(hsl(var(--accent) / 0.12) 1px, transparent 1px);
+  background-position: 0 0, 24px 24px;
+  background-size: 48px 48px;
+}
+
+.aurora-ring {
+  background: conic-gradient(from 180deg at 50% 50%, hsl(var(--primary) / 0.35), hsl(var(--accent) / 0.35), hsl(var(--primary) / 0.35));
 }
