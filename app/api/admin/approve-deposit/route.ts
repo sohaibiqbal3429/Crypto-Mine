@@ -5,7 +5,7 @@ import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { getUserFromRequest } from "@/lib/auth"
-import { processReferralCommission } from "@/lib/utils/commission"
+import { applyDepositRewards } from "@/lib/utils/commission"
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,8 +46,8 @@ export async function POST(request: NextRequest) {
       ),
     ])
 
-    // Process referral commission
-    await processReferralCommission(transaction.userId.toString(), transaction.amount)
+    // Apply deposit commissions and referral rewards
+    await applyDepositRewards(transaction.userId.toString(), transaction.amount)
 
     // Create notification
     await Notification.create({

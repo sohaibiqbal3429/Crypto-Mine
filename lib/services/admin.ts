@@ -35,7 +35,15 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     throw new Error("Admin access required")
   }
 
-  const [transactionDocsRaw, userDocsRaw] = await Promise.all([
+  const [
+    transactionDocsRaw,
+    userDocsRaw,
+    totalUsersCount,
+    activeUsersCount,
+    totalsAggregate,
+    pendingDepositCount,
+    pendingWithdrawalCount,
+  ] = await Promise.all([
     Transaction.find({})
       .populate("userId", "name email referralCode")
       .sort({ createdAt: -1 })
@@ -46,6 +54,19 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
       .sort({ createdAt: -1 })
       .limit(20)
       .lean(),
+    User.countDocuments({}),
+    User.countDocuments({ isActive: true }),
+    User.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalDeposits: { $sum: "$depositTotal" },
+          totalWithdrawals: { $sum: "$withdrawTotal" },
+        },
+      },
+    ]),
+    Transaction.countDocuments({ type: "deposit", status: "pending" }),
+    Transaction.countDocuments({ type: "withdraw", status: "pending" }),
   ])
 
   const userDocs = userDocsRaw as Array<IUser & { _id: any }>
@@ -102,13 +123,18 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     }
   })
 
+  const aggregateTotals = (totalsAggregate[0] as { totalDeposits: number; totalWithdrawals: number } | undefined) ?? {
+    totalDeposits: 0,
+    totalWithdrawals: 0,
+  }
+
   const stats: AdminStats = {
-    totalUsers: users.length,
-    activeUsers: users.filter((user) => user.isActive).length,
-    pendingDeposits: transactions.filter((tx) => tx.type === "deposit" && tx.status === "pending").length,
-    pendingWithdrawals: transactions.filter((tx) => tx.type === "withdraw" && tx.status === "pending").length,
-    totalDeposits: users.reduce((sum, user) => sum + user.depositTotal, 0),
-    totalWithdrawals: users.reduce((sum, user) => sum + user.withdrawTotal, 0),
+    totalUsers: totalUsersCount,
+    activeUsers: activeUsersCount,
+    pendingDeposits: pendingDepositCount,
+    pendingWithdrawals: pendingWithdrawalCount,
+    totalDeposits: aggregateTotals.totalDeposits,
+    totalWithdrawals: aggregateTotals.totalWithdrawals,
   }
 
   const adminUser: AdminSessionUser = {

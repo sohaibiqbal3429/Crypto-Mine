@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
 
     const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
     const totalEarning = balance.totalEarning ?? 0
-    const totalBalance = (balance.totalBalance ?? 0) + teamRewardsAvailable
-    const currentBalance = (balance.current ?? 0) + teamRewardsAvailable
+    const totalBalance = balance.totalBalance ?? 0
+    const currentBalance = balance.current ?? 0
 
     return NextResponse.json({
       kpis: {

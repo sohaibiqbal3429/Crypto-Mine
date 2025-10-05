@@ -10,7 +10,7 @@ import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { depositSchema } from "@/lib/validations/wallet"
-import { calculateUserLevel, processReferralCommission } from "@/lib/utils/commission"
+import { applyDepositRewards } from "@/lib/utils/commission"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
@@ -195,8 +195,7 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       ),
     ])
 
-    await processReferralCommission(input.userId, FAKE_DEPOSIT_AMOUNT)
-    await calculateUserLevel(input.userId)
+    await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT)
 
     await Notification.create({
       userId: input.userId,

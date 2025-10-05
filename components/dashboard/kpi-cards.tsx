@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Wallet, DollarSign, Users, ArrowDownToLine, Clock, Trophy } from "lucide-react"
+import { TrendingUp, Wallet, DollarSign, ArrowDownToLine, Clock, Trophy } from "lucide-react"
 
 interface KPICardsProps {
   kpis: {
@@ -39,13 +39,6 @@ export function KPICards({ kpis }: KPICardsProps) {
       icon: DollarSign,
       color: "text-amber-600",
       bgColor: "bg-amber-50",
-    },
-    {
-      title: "Active Members",
-      value: kpis.activeMembers.toString(),
-      icon: Users,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
     },
     {
       title: "Total Withdraw",
