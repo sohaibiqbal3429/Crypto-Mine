@@ -34,9 +34,11 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
 
   if (!userDoc) return null
 
+  const teamRewardsAvailable = Number(balanceDoc?.teamRewardsAvailable ?? 0)
+
   const stats = {
-    currentBalance: Number(balanceDoc?.current ?? 0),
-    totalBalance: Number(balanceDoc?.totalBalance ?? 0),
+    currentBalance: Number(balanceDoc?.current ?? 0) + teamRewardsAvailable,
+    totalBalance: Number(balanceDoc?.totalBalance ?? 0) + teamRewardsAvailable,
     totalEarning: Number(balanceDoc?.totalEarning ?? 0),
     pendingWithdraw: Number(balanceDoc?.pendingWithdraw ?? 0),
     staked: Number(balanceDoc?.staked ?? 0),

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Zap, Clock, TrendingUp, Award } from "lucide-react"
+import { Zap, Clock, Award } from "lucide-react"
 
 export default async function MiningPage() {
   // cookies() is synchronous in the app router context
@@ -35,9 +35,8 @@ export default async function MiningPage() {
   }
 
   const overviewStats = {
-    totalMined: miningStatus.userStats.totalEarning,
+    totalClicks: miningStatus.totalClicks,
     todayMined: miningStatus.earnedInCycle,
-    miningPower: Math.max(miningStatus.baseAmount, 0),
     efficiency: Math.min(Math.round(miningStatus.userStats.roiProgress), 100),
     rank: 0,
     totalMiners: 0,
@@ -59,15 +58,15 @@ export default async function MiningPage() {
           <MiningWidget mining={miningStatus} />
 
           {/* ---- Cards ---- */}
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Mined</CardTitle>
                 <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${overviewStats.totalMined.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Min earning</p>
+                <div className="text-2xl font-bold">{overviewStats.totalClicks}</div>
+                <p className="text-xs text-muted-foreground">Mining actions performed</p>
               </CardContent>
             </Card>
 
@@ -79,17 +78,6 @@ export default async function MiningPage() {
               <CardContent>
                 <div className="text-2xl font-bold">${overviewStats.todayMined.toFixed(2)}</div>
                 <p className="text-xs text-muted-foreground">Original</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Mining Base</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${overviewStats.miningPower.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Real</p>
               </CardContent>
             </Card>
 
