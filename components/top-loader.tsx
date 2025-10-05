@@ -1,11 +1,14 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-
 import Router from "next/router"
 
 const MIN_PROGRESS = 0.08
 const INCREMENT_INTERVAL = 300
+
+// From codex/implement-countdown-timer-logic-9ivujd
+const MIN_VISIBLE_DURATION = 400
+const RESET_FADE_DURATION = 260
 
 export function TopLoader() {
   const activeRequests = useRef(0)
@@ -14,18 +17,40 @@ export function TopLoader() {
   const barRef = useRef<HTMLDivElement | null>(null)
   const originalFetch = useRef<typeof window.fetch | null>(null)
 
+  // From codex/implement-countdown-timer-logic-9ivujd
+  const settleTimeoutRef = useRef<number | null>(null)
+  const fadeTimeoutRef = useRef<number | null>(null)
+  const startTimeRef = useRef<number>(0)
+
   useEffect(() => {
     barRef.current = document.getElementById("top-loader") as HTMLDivElement | null
   }, [])
 
   useEffect(() => {
+    // From codex/implement-countdown-timer-logic-9ivujd
+    const clearTimer = (ref: { current: number | null }) => {
+      if (ref.current) {
+        window.clearTimeout(ref.current)
+        ref.current = null
+      }
+    }
+
     const set = (value: number) => {
       progress.current = Math.max(0, Math.min(1, value))
       barRef.current?.style.setProperty("transform", `scaleX(${progress.current})`)
     }
 
     const start = () => {
+      // codex extras: cancel any pending settle/fade timers
+      clearTimer(settleTimeoutRef)
+      clearTimer(fadeTimeoutRef)
+
       if (activeRequests.current === 0) {
+        startTimeRef.current = performance.now()
+        if (barRef.current) {
+          barRef.current.style.visibility = "visible"
+          barRef.current.style.opacity = "1"
+        }
         set(MIN_PROGRESS)
         intervalRef.current = window.setInterval(() => {
           const next = progress.current + (1 - progress.current) * 0.1
@@ -39,14 +64,42 @@ export function TopLoader() {
       if (activeRequests.current === 0) return
       activeRequests.current -= 1
       if (activeRequests.current === 0) {
-        if (intervalRef.current) {
-          window.clearInterval(intervalRef.current)
-          intervalRef.current = null
+        const finalize = () => {
+          if (intervalRef.current) {
+            window.clearInterval(intervalRef.current)
+            intervalRef.current = null
+          }
+          set(1)
+
+          if (barRef.current) {
+            const currentBar = barRef.current
+            // fade to opacity 0 on next frame to allow CSS transition
+            requestAnimationFrame(() => {
+              currentBar.style.opacity = "0"
+            })
+          }
+
+          // after fade, hide & reset transform
+          fadeTimeoutRef.current = window.setTimeout(() => {
+            if (activeRequests.current > 0) return
+            set(0)
+            if (barRef.current) {
+              barRef.current.style.visibility = "hidden"
+            }
+            fadeTimeoutRef.current = null
+          }, RESET_FADE_DURATION)
         }
-        set(1)
-        window.setTimeout(() => {
-          set(0)
-        }, 220)
+
+        // ensure bar stays visible for at least MIN_VISIBLE_DURATION
+        const elapsed = performance.now() - startTimeRef.current
+        if (elapsed < MIN_VISIBLE_DURATION) {
+          settleTimeoutRef.current = window.setTimeout(() => {
+            finalize()
+            settleTimeoutRef.current = null
+          }, MIN_VISIBLE_DURATION - elapsed)
+        } else {
+          finalize()
+        }
       }
     }
 
@@ -62,7 +115,8 @@ export function TopLoader() {
       window.fetch = async (...args) => {
         start()
         try {
-          return await originalFetch.current!(...args)
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          return await originalFetch.current!(...args as Parameters<typeof window.fetch>)
         } finally {
           done()
         }
@@ -78,6 +132,9 @@ export function TopLoader() {
         window.clearInterval(intervalRef.current)
         intervalRef.current = null
       }
+
+      clearTimer(settleTimeoutRef)
+      clearTimer(fadeTimeoutRef)
 
       if (originalFetch.current) {
         window.fetch = originalFetch.current

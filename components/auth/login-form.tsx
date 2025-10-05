@@ -70,6 +70,7 @@ export function LoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           identifier,
           identifierType,
@@ -77,14 +78,18 @@ export function LoginForm() {
         }),
       })
 
-      const data = await response.json().catch(() => ({}))
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean
+        error?: string
+      }
 
-      if (!response.ok) {
-        setError((data as { error?: string }).error || "Login failed")
+      if (!response.ok || !data?.success) {
+        setError(data?.error || "Login failed")
         return
       }
 
-      router.push("/dashboard")
+      router.replace("/dashboard")
+      router.refresh()
     } catch (submitError) {
       console.error("Login error", submitError)
       setError("Network error. Please try again.")
