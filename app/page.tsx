@@ -1,29 +1,10 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Shield, Users, Zap } from "lucide-react"
-import Image from "next/image"
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[hsl(var(--background))] via-[hsl(var(--secondary))] to-[hsl(var(--muted))] text-foreground transition-colors dark:from-[#050505] dark:via-[#0c0c0c] dark:to-[#161616]">
-      {/* Header */}
-      <header className="border-b border-border/60 bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/60 dark:bg-[#101010]/80">
-        <div className="container mx-auto flex items-center justify-between px-4 py-4">
-          <div className="flex items-center space-x-2">
-            <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
-            <span className="text-xl font-bold">Mintmine Pro</span>
-          </div>
-          <div className="flex items-center space-x-3">
-            <Link href="/auth/login">
-              <Button variant="ghost">Sign In</Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button className="shadow-lg shadow-primary/20">Get Started</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-full bg-gradient-to-br from-[hsl(var(--background))] via-[hsl(var(--secondary))] to-[hsl(var(--muted))] text-foreground transition-colors dark:from-[#050505] dark:via-[#0c0c0c] dark:to-[#161616]">
       {/* Hero Section */}
       <main className="container mx-auto px-4 py-16">
         <div className="mx-auto max-w-4xl text-center">
