@@ -12,6 +12,11 @@
     "emitDeclarationOnly": false,
     "declaration": false
   },
-  "include": ["scripts/seed-database.ts", "lib/mongodb.ts", "models/**/*.ts"],
+  "include": [
+    "scripts/seed-database.ts",
+    "scripts/policy_rebuild_active_and_ranks.ts",
+    "lib/mongodb.ts",
+    "models/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }

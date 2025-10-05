@@ -4,6 +4,7 @@ import Transaction from "@/models/Transaction"
 import CommissionRule from "@/models/CommissionRule"
 import Settings, { type ISettings } from "@/models/Settings"
 import Notification from "@/models/Notification"
+import { isUserActiveByPolicy } from "@/lib/utils/policy"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
 const REFERRAL_LEVEL_COMMISSIONS = [0.05, 0.04, 0.03, 0.02, 0.01]
@@ -18,18 +19,25 @@ function roundCurrency(amount: number): number {
   return Math.round(amount * 100) / 100
 }
 
-export async function calculateUserLevel(userId: string): Promise<number> {
+interface CalculateUserLevelOptions {
+  suppressNotifications?: boolean
+}
+
+export async function calculateUserLevel(
+  userId: string,
+  options?: CalculateUserLevelOptions,
+): Promise<number> {
   const [user, settings, directReferrals] = await Promise.all([
     User.findById(userId),
     Settings.findOne(),
-    User.find({ referredBy: userId }).select("depositTotal"),
+    User.find({ referredBy: userId }).select(
+      "depositTotal isActive first_qualifying_deposit_at first_qualifying_deposit_amount",
+    ),
   ])
 
   if (!user) return 0
 
   const minDeposit = settings?.gating?.minDeposit ?? 30
-  const activeDepositThreshold = settings?.gating?.activeMinDeposit ?? 80
-
   if (user.depositTotal < minDeposit) {
     if (user.level !== 0) {
       await User.updateOne({ _id: userId }, { level: 0 })
@@ -37,7 +45,7 @@ export async function calculateUserLevel(userId: string): Promise<number> {
     return 0
   }
 
-  const activeDirectReferrals = directReferrals.filter((member) => member.depositTotal >= activeDepositThreshold)
+  const activeDirectReferrals = directReferrals.filter((member) => isUserActiveByPolicy(member))
   const activeCount = activeDirectReferrals.length
   const directSalesVolume = directReferrals.reduce((sum, member) => sum + member.depositTotal, 0)
 
@@ -60,10 +68,12 @@ export async function calculateUserLevel(userId: string): Promise<number> {
     userLevel = 4
   }
 
-  if (user.level !== userLevel) {
+  const previousLevel = user.level ?? 0
+
+  if (previousLevel !== userLevel) {
     await User.updateOne({ _id: userId }, { level: userLevel })
 
-    if (userLevel > user.level) {
+    if (!options?.suppressNotifications && userLevel > previousLevel) {
       await Notification.create({
         userId,
         kind: "level-up",
@@ -239,13 +249,17 @@ export async function applyDepositRewards(userId: string, depositAmount: number)
 }
 
 export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> {
-  const user = await User.findById(userId).select("name email referralCode level depositTotal isActive createdAt")
+  const user = await User.findById(userId).select(
+    "name email referralCode level depositTotal isActive createdAt first_qualifying_deposit_at first_qualifying_deposit_amount",
+  )
   if (!user) return null
 
   if (maxDepth <= 0) return user
 
   const directReferrals = await User.find({ referredBy: userId })
-    .select("name email referralCode level depositTotal isActive createdAt")
+    .select(
+      "name email referralCode level depositTotal isActive createdAt first_qualifying_deposit_at first_qualifying_deposit_amount",
+    )
     .sort({ createdAt: -1 })
 
   const children = []
@@ -256,11 +270,18 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
     }
   }
 
+  const userObject = user.toObject()
+
   return {
-    ...user.toObject(),
+    ...userObject,
+    firstQualifyingDepositAt: (userObject.first_qualifying_deposit_at as Date | undefined | null)?.toISOString?.() ?? null,
+    firstQualifyingDepositAmount:
+      typeof userObject.first_qualifying_deposit_amount === "number"
+        ? userObject.first_qualifying_deposit_amount
+        : null,
     children,
     directCount: directReferrals.length,
-    activeCount: directReferrals.filter((r) => r.depositTotal >= 80).length,
+    activeCount: directReferrals.filter((r) => isUserActiveByPolicy(r)).length,
   }
 }
 
@@ -270,13 +291,13 @@ export async function getTeamStats(userId: string) {
 
   // Calculate team statistics
   const totalMembers = allTeamMembers.length
-  const activeMembers = allTeamMembers.filter((member) => member.depositTotal >= 80).length
+  const activeMembers = allTeamMembers.filter((member) => isUserActiveByPolicy(member)).length
   const totalTeamDeposits = allTeamMembers.reduce((sum, member) => sum + member.depositTotal, 0)
   const totalTeamEarnings = allTeamMembers.reduce((sum, member) => sum + member.roiEarnedTotal, 0)
 
   // Get direct referrals
   const directReferrals = await User.find({ referredBy: userId })
-  const directActive = directReferrals.filter((member) => member.depositTotal >= 80).length
+  const directActive = directReferrals.filter((member) => isUserActiveByPolicy(member)).length
 
   return {
     totalMembers,

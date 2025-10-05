@@ -93,7 +93,6 @@ export async function POST(request: NextRequest) {
       passwordHash,
       referralCode: newReferralCode,
       referredBy: referrer._id,
-      isActive: true, // User is active since they verified their contact
     }
 
     if (validatedData.email) {
