@@ -166,7 +166,7 @@ export function Sidebar({ user }: SidebarProps) {
         <SidebarContent />
       </div>
 
-      <div className="fixed top-8 right-6 z-50 hidden md:flex">
+      <div className="fixed top-8 right-6 z-[var(--z-header)] hidden md:flex">
         <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-4 py-2 shadow-lg shadow-black/5 backdrop-blur">
           <NotificationBell />
           <span className="h-5 w-px bg-border/60" aria-hidden />

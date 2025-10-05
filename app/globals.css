@@ -30,6 +30,15 @@
   --chart-4: oklch(0.65 0.15 120); /* Crypto green */
   --chart-5: oklch(0.5 0.2 15); /* Crypto orange */
   --radius: 0.75rem;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t-fast: 180ms;
+  --t-med: 240ms;
+  --z-header: 100;
+  --z-dropdown: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-loader: 1200;
+  --elev: 0 12px 28px rgba(15, 23, 42, 0.12);
   --sidebar: oklch(0.98 0.005 240);
   --sidebar-foreground: oklch(0.15 0.02 240);
   --sidebar-primary: oklch(0.55 0.18 45);
@@ -129,6 +138,63 @@
 
 body {
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]) {
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]):hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev);
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]):active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.popover {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease);
+}
+
+.popover.open {
+  opacity: 1;
+  transform: none;
+}
+
+.u-transition {
+  transition: all var(--t-med) var(--ease);
+}
+
+.u-fade-in {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.u-fade-in.show {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+#top-loader {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ff5a1f, #ffb703);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  z-index: var(--z-loader);
+  transition: transform 160ms var(--ease);
+  pointer-events: none;
 }
 
 /* Enhanced scrollbar with crypto theme colors */
