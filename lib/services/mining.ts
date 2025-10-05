@@ -41,6 +41,7 @@ export interface MiningStatusResult {
     totalEarning: number
     roiProgress: number
   }
+  totalClicks: number
 }
 
 export async function getMiningStatus(userId: string): Promise<MiningStatusResult> {
@@ -83,6 +84,14 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
   const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
   const hasMinimumDeposit = user.depositTotal >= requiredDeposit
 
+  const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
+
+  const totalMiningClicks = await Transaction.countDocuments({
+    userId: user._id,
+    type: "earn",
+    "meta.source": "mining",
+  })
+
   const now = new Date()
   const canMineNow = (!miningSession.nextEligibleAt || now >= miningSession.nextEligibleAt) && hasMinimumDeposit
   const roiCapReached = hasReachedROICap(user.roiEarnedTotal, user.depositTotal, settings.roiCap)
@@ -107,11 +116,12 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
     userStats: {
       depositTotal: user.depositTotal,
       roiEarnedTotal: user.roiEarnedTotal,
-      currentBalance: balance.current ?? 0,
+      currentBalance: (balance.current ?? 0) + teamRewardsAvailable,
       totalEarning: balance.totalEarning ?? 0,
       roiProgress:
         user.depositTotal > 0 ? (user.roiEarnedTotal / (user.depositTotal * settings.roiCap)) * 100 : 0,
     },
+    totalClicks: totalMiningClicks,
   }
 }
 
