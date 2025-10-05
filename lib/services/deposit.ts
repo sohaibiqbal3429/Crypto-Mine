@@ -195,7 +195,10 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       ),
     ])
 
-    await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT)
+    await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
+      depositTransactionId: transaction._id.toString(),
+      depositAt: transaction.createdAt,
+    })
 
     await Notification.create({
       userId: input.userId,

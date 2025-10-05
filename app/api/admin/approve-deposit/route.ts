@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
     ])
 
     // Apply deposit commissions and referral rewards
-    await applyDepositRewards(transaction.userId.toString(), transaction.amount)
+    await applyDepositRewards(transaction.userId.toString(), transaction.amount, {
+      depositTransactionId: transaction._id.toString(),
+      depositAt: transaction.createdAt,
+    })
 
     // Create notification
     await Notification.create({

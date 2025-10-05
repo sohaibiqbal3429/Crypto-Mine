@@ -6,6 +6,7 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import MiningSession from "@/models/MiningSession"
 import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
+import { applyTeamProfitOverrides } from "@/lib/utils/commission"
 
 const DEFAULT_MINING_SETTINGS = {
   minPct: 2.5,
@@ -207,7 +208,7 @@ export async function performMiningClick(userId: string) {
 
   await User.updateOne({ _id: user._id }, { $inc: { roiEarnedTotal: finalProfit } })
 
-  await Transaction.create({
+  const profitTransaction = await Transaction.create({
     userId: user._id,
     type: "earn",
     amount: finalProfit,
@@ -219,6 +220,13 @@ export async function performMiningClick(userId: string) {
       roiCapReached,
       originalProfit: profit,
     },
+  })
+
+  await applyTeamProfitOverrides(user._id.toString(), finalProfit, {
+    profitTransactionId: profitTransaction._id.toString(),
+    profitDate: now,
+    profitSource: "mining",
+    baseAmount,
   })
 
   const nextEligible = new Date(now.getTime() + 24 * 60 * 60 * 1000)
