@@ -70,6 +70,8 @@ export function LoginForm() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
         body: JSON.stringify({
           identifier,
           identifierType,
@@ -77,17 +79,24 @@ export function LoginForm() {
         }),
       })
 
-      const data = await response.json().catch(() => ({}))
+      const data = (await response.json().catch(() => ({}))) as {
+        success?: boolean
+        error?: string
+      }
 
-      if (!response.ok) {
-        setError((data as { error?: string }).error || "Login failed")
+      if (!response.ok || !data?.success) {
+        const message =
+          data?.error || (response.status >= 500 ? "Server error. Please try again shortly." : "Login failed")
+        setError(message)
         return
       }
 
       router.push("/dashboard")
     } catch (submitError) {
       console.error("Login error", submitError)
-      setError("Network error. Please try again.")
+      setError(
+        submitError instanceof Error && submitError.message ? submitError.message : "Network error. Please try again.",
+      )
     } finally {
       setIsLoading(false)
     }

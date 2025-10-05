@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
+
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import { loginSchema } from "@/lib/validations/auth"
 import { comparePassword, signToken } from "@/lib/auth"
+import { buildPhoneSearch } from "@/lib/utils/phone"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,13 +15,31 @@ export async function POST(request: NextRequest) {
 
     const { identifier, identifierType, password } = validatedData
 
-    const query =
-      identifierType === "email"
-        ? { email: identifier.toLowerCase() }
-        : { phone: identifier }
+    let user = null
 
-    // Find user
-    const user = await User.findOne(query)
+    if (identifierType === "email") {
+      user = await User.findOne({ email: identifier.toLowerCase() })
+    } else {
+      const phoneLookup = buildPhoneSearch(identifier)
+
+      if (!phoneLookup) {
+        return NextResponse.json({ error: "Invalid phone number" }, { status: 400 })
+      }
+
+      user = await User.findOne({
+        $or: phoneLookup.queries,
+      })
+
+      if (user && phoneLookup.canonical && user.phone !== phoneLookup.canonical) {
+        user.phone = phoneLookup.canonical
+        try {
+          await user.save()
+        } catch (updateError) {
+          console.warn("Failed to normalise phone during login", updateError)
+        }
+      }
+    }
+
     if (!user) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
@@ -45,6 +65,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         referralCode: user.referralCode,
+        phone: user.phone,
       },
     })
 
@@ -62,6 +83,20 @@ export async function POST(request: NextRequest) {
 
     if (error.name === "ZodError") {
       return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    }
+
+    if (error.message?.includes("MONGODB_URI")) {
+      return NextResponse.json(
+        { error: "Database configuration error. Please check your MongoDB URI." },
+        { status: 500 },
+      )
+    }
+
+    if (error.message?.includes("connect")) {
+      return NextResponse.json(
+        { error: "Database connection failed. Please check your MongoDB connection." },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

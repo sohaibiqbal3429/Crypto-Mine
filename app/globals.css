@@ -30,6 +30,15 @@
   --chart-4: oklch(0.65 0.15 120); /* Crypto green */
   --chart-5: oklch(0.5 0.2 15); /* Crypto orange */
   --radius: 0.75rem;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t-fast: 180ms;
+  --t-med: 240ms;
+  --z-header: 100;
+  --z-dropdown: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --z-loader: 1200;
+  --elev: 0 12px 28px rgba(15, 23, 42, 0.12);
   --sidebar: oklch(0.98 0.005 240);
   --sidebar-foreground: oklch(0.15 0.02 240);
   --sidebar-primary: oklch(0.55 0.18 45);
@@ -129,6 +138,96 @@
 
 body {
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]) {
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), color var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease);
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]):hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elev);
+}
+
+:where(button, .button, .icon-btn, a, [role="button"]):active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.popover {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease);
+}
+
+.popover.open {
+  opacity: 1;
+  transform: none;
+}
+
+:where([data-slot$="content"], [data-slot$="overlay"]) {
+  transition: opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease);
+  will-change: opacity, transform;
+}
+
+[data-slot="card"] {
+  transition: transform var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease), border-color var(--t-med) var(--ease), background-color var(--t-med) var(--ease);
+}
+
+[data-slot="card"]:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--elev);
+}
+
+[data-slot="card"]:active {
+  transform: translateY(-2px);
+}
+
+:where([data-slot="tabs-trigger"], [data-slot$="menu-item"], [data-slot$="select-item"], [data-slot$="command-item"], [role="menuitem"], [role="option"], [role="tab"]) {
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease), background-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+
+:where([data-slot="tabs-trigger"], [data-slot$="menu-item"], [data-slot$="select-item"], [data-slot$="command-item"], [role="menuitem"], [role="option"], [role="tab"]):hover {
+  transform: translateY(-1px);
+}
+
+:where([data-slot="tabs-trigger"], [data-slot$="menu-item"], [data-slot$="select-item"], [data-slot$="command-item"], [role="menuitem"], [role="option"], [role="tab"]):active {
+  transform: translateY(-0.5px) scale(0.99);
+}
+
+.u-transition {
+  transition: all var(--t-med) var(--ease);
+}
+
+.u-fade-in {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.u-fade-in.show {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+#top-loader {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ff5a1f, #ffb703);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  z-index: var(--z-loader);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform var(--t-med) var(--ease), opacity var(--t-fast) var(--ease);
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 /* Enhanced scrollbar with crypto theme colors */

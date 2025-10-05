@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { ThemeProvider } from "@/components/theme-provider"
+import { TopLoader } from "@/components/top-loader"
 import { cn } from "@/lib/utils"
 
 import "./globals.css"
@@ -20,7 +21,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={cn("min-h-screen bg-background font-sans antialiased text-foreground")}>
+        <div id="top-loader" aria-hidden="true" />
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <TopLoader />
           {children}
         </ThemeProvider>
       </body>
