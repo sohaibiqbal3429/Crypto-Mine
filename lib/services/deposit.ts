@@ -217,23 +217,50 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       ),
     ])
 
-    await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
+    const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
       depositTransactionId: transaction._id.toString(),
       depositAt: transaction.createdAt,
     })
+
+    if (rewardOutcome.activated) {
+      await Transaction.updateOne(
+        { _id: transaction._id },
+        { $set: { "meta.qualifiesForActivation": true } },
+      )
+
+      transaction.meta = {
+        ...transaction.meta,
+        qualifiesForActivation: true,
+      }
+    }
+
+    const notificationBodyParts = [
+      `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
+    ]
+
+    if (rewardOutcome.activated) {
+      notificationBodyParts.push(
+        `You've now satisfied the qualifying deposit requirement of $${rewardOutcome.activationThreshold.toFixed(
+          2,
+        )} and your account is fully activated.`,
+      )
+    }
 
     await Notification.create({
       userId: input.userId,
       kind: "deposit-approved",
       title: "Deposit Approved",
-      body: `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
+      body: notificationBodyParts.join(" "),
     })
 
     return {
       status: "approved" as const,
       transaction,
       receiptMeta: receiptResult?.meta,
-      message: "Fake deposit processed successfully!",
+      message: rewardOutcome.activated
+        ? "Deposit processed and account activated!"
+        : "Fake deposit processed successfully!",
+      activated: rewardOutcome.activated,
     }
   }
 
@@ -258,5 +285,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     transaction,
     receiptMeta: receiptResult?.meta,
     message: `Deposit submitted for review (${walletOption.network})`,
+    activated: false,
   }
 }

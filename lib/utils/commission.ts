@@ -262,6 +262,7 @@ interface ReferralCommissionOptions {
   depositAt?: Date
   adjustmentReason?: string
   dryRun?: boolean
+  qualifiesForActivation?: boolean
 }
 
 export async function processReferralCommission(
@@ -277,7 +278,10 @@ export async function processReferralCommission(
   const resolvedSettings = settings ?? (await Settings.findOne())
   const requiredDeposit = minRewardDeposit ?? resolveMinRewardDeposit(resolvedSettings)
 
-  if (depositAmount < requiredDeposit) return null
+  const qualifiesForRewards =
+    depositAmount >= requiredDeposit || Boolean(options.qualifiesForActivation)
+
+  if (!qualifiesForRewards) return null
 
   const payout = await resolveDirectCommission(referredUser, depositAmount)
   if (!payout) return null
@@ -879,14 +883,32 @@ export async function applyDepositRewards(
   depositAmount: number,
   options: DepositRewardOptions = {},
 ) {
-  const settings = await Settings.findOne()
+  const [settings, userDoc] = await Promise.all([
+    Settings.findOne(),
+    User.findById(userId).select("depositTotal isActive"),
+  ])
   const requiredDeposit = resolveMinRewardDeposit(settings)
+  const qualifiesForActivation = Boolean(
+    userDoc && !userDoc.isActive && userDoc.depositTotal >= requiredDeposit,
+  )
+  const qualifiesForRewards = depositAmount >= requiredDeposit || qualifiesForActivation
+
   const results: {
     depositCommission?: number
     directCommission?: DirectCommissionComputation | null
-  } = {}
+    activated: boolean
+    activationThreshold: number
+  } = {
+    activated: qualifiesForActivation,
+    activationThreshold: requiredDeposit,
+    directCommission: null,
+  }
 
-  if (depositAmount >= requiredDeposit) {
+  if (qualifiesForActivation && !options.dryRun) {
+    await User.updateOne({ _id: userId }, { $set: { isActive: true } })
+  }
+
+  if (qualifiesForRewards) {
     const depositCommission = roundCurrency(depositAmount * DEPOSIT_COMMISSION_PCT)
     results.depositCommission = depositCommission
 
@@ -929,6 +951,7 @@ export async function applyDepositRewards(
       depositAt: options.depositAt,
       adjustmentReason: options.adjustmentReason,
       dryRun: options.dryRun,
+      qualifiesForActivation,
     },
   )
 
