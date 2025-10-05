@@ -12,17 +12,37 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Phone, Shield, Key, Copy, CheckCircle, Loader2, Link2 } from "lucide-react"
-// Removed: import Link from "next/link"  // Not needed here
+import {
+  User,
+  Mail,
+  Phone,
+  Shield,
+  Key,
+  Copy,
+  CheckCircle,
+  Loader2,
+  Link2,
+} from "lucide-react"
+
+import type { SerializableUser } from "@/lib/serializers/user"
+import { formatPhoneDisplay } from "@/lib/utils/formatting"
+
+type StatusMessage = { success?: string; error?: string }
 
 export default function ProfilePage() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<SerializableUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isUpdating, setIsUpdating] = useState(false)
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
-  const [success, setSuccess] = useState("")
-  const [error, setError] = useState("")
   const [copied, setCopied] = useState(false)
+  const [globalError, setGlobalError] = useState("")
+  const [profileStatus, setProfileStatus] = useState<StatusMessage>({})
+  const [verificationStatus, setVerificationStatus] = useState<StatusMessage>({})
+  const [passwordStatus, setPasswordStatus] = useState<StatusMessage>({})
+  const [otpStatus, setOtpStatus] = useState<StatusMessage>({})
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [otpLoading, setOtpLoading] = useState(false)
   const router = useRouter()
 
   const [profileData, setProfileData] = useState({
@@ -35,138 +55,228 @@ export default function ProfilePage() {
     currentPassword: "",
     newPassword: "",
     confirmPassword: "",
+    otpCode: "",
   })
+
+  const syncUserState = (nextUser: SerializableUser) => {
+    setUser(nextUser)
+    setProfileData({
+      name: nextUser.name || "",
+      email: nextUser.email || "",
+      phone: nextUser.phone || "",
+    })
+  }
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch user data from /api/auth/me
         const userRes = await fetch("/api/auth/me")
-        let userData = null
-        
-        if (userRes.ok) {
-          const response = await userRes.json()
-          userData = response.user || response
-          console.log("User data from /api/auth/me:", userData)
-        } else {
-          console.error("Failed to fetch from /api/auth/me:", userRes.status)
+
+        if (!userRes.ok) {
+          setGlobalError("Failed to load user data")
+          return
         }
 
-        // If referralCode is missing, try to fetch from /api/profile/generate-link
-        if (userData && !userData.referralCode) {
-          try {
-            const profileRes = await fetch("/api/profile/generate-link")
-            if (profileRes.ok) {
-              const profileResponse = await profileRes.json()
-              const profileUser = profileResponse.user || profileResponse
-              console.log("Profile data from /api/profile/generate-link:", profileUser)
-              
-              // Merge the referralCode if it exists
-              if (profileUser.referralCode) {
-                userData.referralCode = profileUser.referralCode
-              }
-            }
-          } catch (profileError) {
-            console.error("Failed to fetch from /api/profile/generate-link:", profileError)
-          }
-        }
+        const response = await userRes.json()
+        const fetchedUser: SerializableUser | null = response.user || null
 
-        if (userData) {
-          setUser(userData)
-          setProfileData({
-            name: userData.name || "",
-            email: userData.email || "",
-            phone: userData.phone || "",
-          })
+        if (fetchedUser) {
+          syncUserState(fetchedUser)
         } else {
-          setError("Failed to load user data")
+          setGlobalError("Failed to load user data")
         }
       } catch (error) {
         console.error("Failed to fetch data:", error)
-        setError("Failed to load user data")
+        setGlobalError("Failed to load user data")
       } finally {
         setLoading(false)
       }
     }
 
-    fetchData()
+    fetchData().catch((error) => {
+      console.error("Unexpected fetch error:", error)
+      setGlobalError("Failed to load user data")
+      setLoading(false)
+    })
   }, [])
 
-  const handleProfileUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsUpdating(true)
-    setError("")
-    setSuccess("")
+  const handleProfileUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setProfileLoading(true)
+    setProfileStatus({})
+    setGlobalError("")
 
     try {
-      // In real app, this would call API to update profile
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate API call
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: profileData.name,
+          phone: profileData.phone,
+        }),
+      })
 
-      setSuccess("Profile updated successfully!")
-    } catch (err) {
-      setError("Failed to update profile. Please try again.")
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update profile")
+      }
+
+      if (data.user) {
+        syncUserState(data.user as SerializableUser)
+      }
+
+      setProfileStatus({ success: data.message || "Profile updated successfully." })
+      setVerificationStatus({})
+    } catch (error: any) {
+      const message = typeof error?.message === "string" ? error.message : "Failed to update profile"
+      setProfileStatus({ error: message })
     } finally {
-      setIsUpdating(false)
+      setProfileLoading(false)
     }
   }
 
-  const handlePasswordUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleVerifyProfile = async () => {
+    setVerificationStatus({})
+    setGlobalError("")
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setError("New passwords do not match")
+    if (!user?.phone) {
+      setVerificationStatus({ error: "Add a phone number to your profile before verifying." })
       return
     }
 
-    setIsUpdating(true)
-    setError("")
-    setSuccess("")
+    setVerifyLoading(true)
 
     try {
-      // In real app, this would call API to update password
-      await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate API call
+      const response = await fetch("/api/profile/verify", { method: "POST" })
+      const data = await response.json()
 
-      setSuccess("Password updated successfully!")
-      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" })
-    } catch (err) {
-      setError("Failed to update password. Please try again.")
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to verify profile")
+      }
+
+      if (data.user) {
+        syncUserState(data.user as SerializableUser)
+      }
+
+      setVerificationStatus({ success: data.message || "Profile verified successfully." })
+      setProfileStatus({})
+    } catch (error: any) {
+      const message = typeof error?.message === "string" ? error.message : "Failed to verify profile"
+      setVerificationStatus({ error: message })
     } finally {
-      setIsUpdating(false)
+      setVerifyLoading(false)
     }
   }
 
-  // Helper to build the auth URL with the ?ref= code.
-  // Change AUTH_PATH or the query key if your auth route expects something else (e.g., '/auth/login' or 'referral').
+  const handlePasswordUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordStatus({ error: "New passwords do not match" })
+      return
+    }
+
+    if (!passwordData.otpCode) {
+      setPasswordStatus({ error: "Enter the 6-digit verification code we emailed you" })
+      return
+    }
+
+    setPasswordLoading(true)
+    setPasswordStatus({})
+    setOtpStatus({})
+    setGlobalError("")
+
+    try {
+      const response = await fetch("/api/profile/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+          otpCode: passwordData.otpCode,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update password")
+      }
+
+      setPasswordStatus({ success: data.message || "Password updated successfully." })
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "", otpCode: "" })
+    } catch (error: any) {
+      const message = typeof error?.message === "string" ? error.message : "Failed to update password"
+      setPasswordStatus({ error: message })
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
+  const handleSendPasswordOtp = async () => {
+    if (!profileData.email) {
+      setOtpStatus({ error: "Add an email address to your profile before requesting a code" })
+      return
+    }
+
+    setOtpLoading(true)
+    setOtpStatus({})
+    setPasswordStatus({})
+
+    try {
+      const response = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: profileData.email,
+          purpose: "password_reset",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send verification code")
+      }
+
+      setOtpStatus({ success: data.message || "Verification code sent to your email." })
+    } catch (error: any) {
+      const message = typeof error?.message === "string" ? error.message : "Failed to send verification code"
+      setOtpStatus({ error: message })
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
   const buildAuthUrl = (referralCode: string) => {
-    const AUTH_PATH = "/auth/register" // <-- adjust to '/auth/login' or '/signup' if needed
+    const AUTH_PATH = "/auth/register"
     const url = new URL(AUTH_PATH, window.location.origin)
-    url.searchParams.set("ref", referralCode) // or 'referral' based on your backend
+    url.searchParams.set("ref", referralCode)
     return url.toString()
   }
 
   const copyReferralLink = async () => {
     if (!user?.referralCode) {
-      setError("No referral code available")
+      setGlobalError("No referral code available")
       return
     }
 
     setIsGeneratingLink(true)
-    setError("")
+    setGlobalError("")
 
     try {
       const referralCode = String(user.referralCode).trim()
       const referralLink = buildAuthUrl(referralCode)
 
-      // Copy to clipboard
       await navigator.clipboard.writeText(referralLink)
       setCopied(true)
       setTimeout(() => setCopied(false), 3000)
 
-      // Redirect to auth page with referral pre-filled
       router.push(referralLink)
-    } catch (err) {
-      console.error("Error generating/copying referral link:", err)
-      setError("Failed to copy or open the referral link")
+    } catch (error) {
+      console.error("Error generating/copying referral link:", error)
+      setGlobalError("Failed to copy or open the referral link")
     } finally {
       setIsGeneratingLink(false)
     }
@@ -180,10 +290,10 @@ export default function ProfilePage() {
         setTimeout(() => setCopied(false), 2000)
       } catch (error) {
         console.error("Failed to copy to clipboard:", error)
-        setError("Failed to copy referral code")
+        setGlobalError("Failed to copy referral code")
       }
     } else {
-      setError("No referral code available")
+      setGlobalError("No referral code available")
     }
   }
 
@@ -197,21 +307,26 @@ export default function ProfilePage() {
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar user={user} />
+      <Sidebar user={user ?? undefined} />
 
-      <main className="flex-1 md:ml-64 overflow-auto">
+      <main className="flex-1 overflow-auto md:ml-64">
         <div className="p-6">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-balance">Profile Settings</h1>
             <p className="text-muted-foreground">Manage your account information and security</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Profile Overview */}
+          {globalError && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertDescription>{globalError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <Card className="lg:col-span-1">
               <CardHeader className="text-center">
-                <div className="mx-auto w-20 h-20 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center mb-4">
-                  <User className="w-10 h-10 text-white" />
+                <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600">
+                  <User className="h-10 w-10 text-white" />
                 </div>
                 <CardTitle>{user?.name}</CardTitle>
                 <CardDescription>{user?.email}</CardDescription>
@@ -230,142 +345,210 @@ export default function ProfilePage() {
                   <Label>Referral Code</Label>
                   <div className="flex gap-2">
                     <Input value={user?.referralCode || ""} readOnly className="font-mono" />
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
+                    <Button
+                      variant="outline"
+                      size="icon"
                       onClick={copyReferralCode}
                       disabled={!user?.referralCode}
                       title="Copy referral code"
                     >
-                      {copied ? <CheckCircle className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                      {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                     </Button>
-                    
-                    {/* Copy & open referral link button */}
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
+                    <Button
+                      variant="outline"
+                      size="icon"
                       onClick={copyReferralLink}
                       disabled={!user?.referralCode || isGeneratingLink}
                       title="Copy & open signup link"
                     >
-                      {isGeneratingLink ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Link2 className="w-4 h-4" />
-                      )}
+                      {isGeneratingLink ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="text-center p-3 bg-muted rounded-lg">
+                  <div className="rounded-lg bg-muted p-3 text-center">
                     <div className="font-semibold">${user?.depositTotal || 0}</div>
                     <div className="text-muted-foreground">Total Deposits</div>
                   </div>
-                  <div className="text-center p-3 bg-muted rounded-lg">
+                  <div className="rounded-lg bg-muted p-3 text-center">
                     <div className="font-semibold">${user?.withdrawTotal || 0}</div>
                     <div className="text-muted-foreground">Total Withdrawals</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Phone Verification</Label>
+                  <div className="rounded-lg border border-dashed border-muted-foreground/40 p-3">
+                    {user?.phone && user.phoneVerified ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold">{formatPhoneDisplay(user.phone)}</span>
+                        <Badge variant="secondary" className="bg-green-100 text-green-800">
+                          Verified
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <p className="font-medium">Profile Status: {user?.profileStatus ?? "Unverified"}</p>
+                        <p>{user?.phone ? "Verify your phone number to complete your profile." : "Add a phone number to verify your profile."}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Settings Tabs */}
             <div className="lg:col-span-2">
               <Tabs defaultValue="profile" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="profile" className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
+                    <User className="h-4 w-4" />
                     Profile
                   </TabsTrigger>
                   <TabsTrigger value="security" className="flex items-center gap-2">
-                    <Shield className="w-4 h-4" />
+                    <Shield className="h-4 w-4" />
                     Security
                   </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="profile">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Profile Information</CardTitle>
-                      <CardDescription>Update your personal information</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {error && (
-                        <Alert variant="destructive" className="mb-4">
-                          <AlertDescription>{error}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      {success && (
-                        <Alert className="border-green-200 bg-green-50 text-green-800 mb-4">
-                          <CheckCircle className="h-4 w-4" />
-                          <AlertDescription>{success}</AlertDescription>
-                        </Alert>
-                      )}
-
-                      <form onSubmit={handleProfileUpdate} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Full Name</Label>
-                          <Input
-                            id="name"
-                            value={profileData.name}
-                            onChange={(e) => setProfileData((prev) => ({ ...prev, name: e.target.value }))}
-                            required
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email Address</Label>
-                          <div className="flex items-center gap-2">
-                            <Mail className="w-4 h-4 text-muted-foreground" />
-                            <Input
-                              id="email"
-                              type="email"
-                              value={profileData.email}
-                              onChange={(e) => setProfileData((prev) => ({ ...prev, email: e.target.value }))}
-                              required
-                            />
-                            {user?.emailVerified && (
-                              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                Verified
-                              </Badge>
-                            )}
+                  <div className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Shield className="h-5 w-5" />
+                          Profile Verification
+                        </CardTitle>
+                        <CardDescription>
+                          Add and verify your phone number to secure your account and unlock all profile features.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between rounded-lg border border-muted p-4">
+                          <div>
+                            <p className="text-sm font-semibold text-muted-foreground">Current Status</p>
+                            <p className="text-base font-semibold text-foreground">{user?.profileStatus ?? "Unverified"}</p>
                           </div>
+                          <Badge variant={user?.phoneVerified ? "secondary" : "outline"} className={user?.phoneVerified ? "bg-green-100 text-green-800" : undefined}>
+                            {user?.phoneVerified ? "Verified" : "Unverified"}
+                          </Badge>
                         </div>
 
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone Number</Label>
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-4 h-4 text-muted-foreground" />
-                            <Input
-                              id="phone"
-                              type="tel"
-                              value={profileData.phone}
-                              onChange={(e) => setProfileData((prev) => ({ ...prev, phone: e.target.value }))}
-                              placeholder="+92xxxxxxxxxx"
-                            />
-                            {user?.phoneVerified && (
-                              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                Verified
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
+                        {verificationStatus.error && (
+                          <Alert variant="destructive">
+                            <AlertDescription>{verificationStatus.error}</AlertDescription>
+                          </Alert>
+                        )}
 
-                        <Button type="submit" disabled={isUpdating}>
-                          {isUpdating ? (
+                        {verificationStatus.success && (
+                          <Alert className="border-green-200 bg-green-50 text-green-800">
+                            <CheckCircle className="h-4 w-4" />
+                            <AlertDescription>{verificationStatus.success}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        <Button onClick={handleVerifyProfile} disabled={verifyLoading || Boolean(user?.phoneVerified)}>
+                          {verifyLoading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Updating...
+                              Verifying...
+                            </>
+                          ) : user?.phoneVerified ? (
+                            <>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              Profile Verified
                             </>
                           ) : (
-                            "Update Profile"
+                            <>
+                              <Shield className="mr-2 h-4 w-4" />
+                              Verify Profile
+                            </>
                           )}
                         </Button>
-                      </form>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Profile Information</CardTitle>
+                        <CardDescription>Update your personal information</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {profileStatus.error && (
+                          <Alert variant="destructive" className="mb-4">
+                            <AlertDescription>{profileStatus.error}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        {profileStatus.success && (
+                          <Alert className="mb-4 border-green-200 bg-green-50 text-green-800">
+                            <CheckCircle className="h-4 w-4" />
+                            <AlertDescription>{profileStatus.success}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        <form onSubmit={handleProfileUpdate} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="name">Full Name</Label>
+                            <Input
+                              id="name"
+                              value={profileData.name}
+                              onChange={(event) => setProfileData((prev) => ({ ...prev, name: event.target.value }))}
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="email">Email Address</Label>
+                            <div className="flex items-center gap-2">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                              <Input id="email" type="email" value={profileData.email} readOnly />
+                              {user?.emailVerified && (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="phone">Phone Number</Label>
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              <Input
+                                id="phone"
+                                type="tel"
+                                inputMode="tel"
+                                placeholder="+15551234567"
+                                pattern="^\\+[1-9]\\d{7,14}$"
+                                title="Enter a valid phone number with country code (e.g. +15551234567)"
+                                value={profileData.phone}
+                                onChange={(event) => setProfileData((prev) => ({ ...prev, phone: event.target.value }))}
+                                required
+                              />
+                              {user?.phoneVerified && (
+                                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                  Verified
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">Use international format, including country code.</p>
+                          </div>
+
+                          <Button type="submit" disabled={profileLoading}>
+                            {profileLoading ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Updating...
+                              </>
+                            ) : (
+                              "Update Profile"
+                            )}
+                          </Button>
+                        </form>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="security">
@@ -375,6 +558,32 @@ export default function ProfilePage() {
                       <CardDescription>Update your account password</CardDescription>
                     </CardHeader>
                     <CardContent>
+                        {otpStatus.error && (
+                          <Alert variant="destructive" className="mb-4">
+                            <AlertDescription>{otpStatus.error}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        {otpStatus.success && (
+                          <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-900">
+                            <CheckCircle className="h-4 w-4" />
+                            <AlertDescription>{otpStatus.success}</AlertDescription>
+                          </Alert>
+                        )}
+
+                        {passwordStatus.error && (
+                          <Alert variant="destructive" className="mb-4">
+                            <AlertDescription>{passwordStatus.error}</AlertDescription>
+                          </Alert>
+                        )}
+
+                      {passwordStatus.success && (
+                        <Alert className="mb-4 border-green-200 bg-green-50 text-green-800">
+                          <CheckCircle className="h-4 w-4" />
+                          <AlertDescription>{passwordStatus.success}</AlertDescription>
+                        </Alert>
+                      )}
+
                       <form onSubmit={handlePasswordUpdate} className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="currentPassword">Current Password</Label>
@@ -382,7 +591,9 @@ export default function ProfilePage() {
                             id="currentPassword"
                             type="password"
                             value={passwordData.currentPassword}
-                            onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                            onChange={(event) =>
+                              setPasswordData((prev) => ({ ...prev, currentPassword: event.target.value }))
+                            }
                             required
                           />
                         </div>
@@ -393,7 +604,9 @@ export default function ProfilePage() {
                             id="newPassword"
                             type="password"
                             value={passwordData.newPassword}
-                            onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                            onChange={(event) =>
+                              setPasswordData((prev) => ({ ...prev, newPassword: event.target.value }))
+                            }
                             required
                           />
                         </div>
@@ -404,13 +617,53 @@ export default function ProfilePage() {
                             id="confirmPassword"
                             type="password"
                             value={passwordData.confirmPassword}
-                            onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                            onChange={(event) =>
+                              setPasswordData((prev) => ({ ...prev, confirmPassword: event.target.value }))
+                            }
                             required
                           />
                         </div>
 
-                        <Button type="submit" disabled={isUpdating}>
-                          {isUpdating ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="otpCode">Email Verification Code</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleSendPasswordOtp}
+                              disabled={otpLoading}
+                            >
+                              {otpLoading ? (
+                                <>
+                                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                                  Sending
+                                </>
+                              ) : (
+                                "Send Code"
+                              )}
+                            </Button>
+                          </div>
+                          <Input
+                            id="otpCode"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="^\\d{6}$"
+                            maxLength={6}
+                            placeholder="123456"
+                            value={passwordData.otpCode}
+                            onChange={(event) =>
+                              setPasswordData((prev) => ({ ...prev, otpCode: event.target.value.replace(/[^0-9]/g, "") }))
+                            }
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            We&apos;ll email a 6-digit code to confirm this security change.
+                          </p>
+                        </div>
+
+                        <Button type="submit" disabled={passwordLoading}>
+                          {passwordLoading ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Updating...
