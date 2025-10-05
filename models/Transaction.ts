@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface ITransaction extends Document {
   userId: mongoose.Types.ObjectId
   type:
@@ -54,4 +56,4 @@ const TransactionSchema = new Schema<ITransaction>(
 TransactionSchema.index({ userId: 1, createdAt: -1 })
 TransactionSchema.index({ type: 1, status: 1 })
 
-export default mongoose.models.Transaction || mongoose.model<ITransaction>("Transaction", TransactionSchema)
+export default createModelProxy<ITransaction>("Transaction", TransactionSchema)

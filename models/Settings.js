@@ -1,5 +1,7 @@
 import mongoose from "mongoose"
 
+import { createModelProxy } from "../lib/in-memory/model-factory.js"
+
 const SettingsSchema = new mongoose.Schema(
   {
     mining: {
@@ -29,4 +31,4 @@ const SettingsSchema = new mongoose.Schema(
   },
 )
 
-export default mongoose.models.Settings || mongoose.model("Settings", SettingsSchema)
+export default createModelProxy("Settings", SettingsSchema)

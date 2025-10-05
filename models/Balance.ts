@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface IBalance extends Document {
   userId: mongoose.Types.ObjectId
   current: number
@@ -34,4 +36,4 @@ const BalanceSchema = new Schema<IBalance>(
 
 BalanceSchema.index({ userId: 1 })
 
-export default mongoose.models.Balance || mongoose.model<IBalance>("Balance", BalanceSchema)
+export default createModelProxy<IBalance>("Balance", BalanceSchema)

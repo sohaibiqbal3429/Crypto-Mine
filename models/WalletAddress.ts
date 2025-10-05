@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface IWalletAddress extends Document {
   userId: mongoose.Types.ObjectId
   label: string
@@ -25,4 +27,4 @@ const WalletAddressSchema = new Schema<IWalletAddress>(
 WalletAddressSchema.index({ userId: 1 })
 WalletAddressSchema.index({ userId: 1, address: 1 }, { unique: true })
 
-export default mongoose.models.WalletAddress || mongoose.model<IWalletAddress>("WalletAddress", WalletAddressSchema)
+export default createModelProxy<IWalletAddress>("WalletAddress", WalletAddressSchema)

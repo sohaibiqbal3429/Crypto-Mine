@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface IOTP extends Document {
   userId?: mongoose.Types.ObjectId
   email?: string
@@ -35,4 +37,4 @@ OTPSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
 OTPSchema.index({ email: 1, type: 1, purpose: 1 })
 OTPSchema.index({ phone: 1, type: 1, purpose: 1 })
 
-export default mongoose.models.OTP || mongoose.model<IOTP>("OTP", OTPSchema)
+export default createModelProxy<IOTP>("OTP", OTPSchema)

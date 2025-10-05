@@ -1,17 +1,52 @@
 import mongoose from "mongoose"
 
-const cached: any = (global as any).mongoose || { conn: null, promise: null }
+import { initializeInMemoryDatabase } from "./in-memory"
+
+type MongooseCache = {
+  conn: any
+  promise: Promise<typeof mongoose> | null
+}
+
+type GlobalWithMongoose = typeof globalThis & {
+  mongoose?: MongooseCache
+  __inMemoryDbInitialized?: boolean
+}
+
+const globalWithMongoose = globalThis as GlobalWithMongoose
+
+const cached: MongooseCache = globalWithMongoose.mongoose || { conn: null, promise: null }
+if (!globalWithMongoose.mongoose) {
+  globalWithMongoose.mongoose = cached
+}
 
 export default async function dbConnect() {
-  const uri = process.env.MONGODB_URI
-  const useInMemory = process.env.SEED_IN_MEMORY === "true"
+  const hasUri = Boolean(process.env.MONGODB_URI)
+  const seedFlag = process.env.SEED_IN_MEMORY
+  const preferInMemory =
+    seedFlag === "true" ||
+    (!seedFlag && process.env.NODE_ENV !== "production") ||
+    (!hasUri && process.env.NODE_ENV !== "production")
+  const allowFallback = process.env.NODE_ENV !== "production" || process.env.ALLOW_DB_FALLBACK === "true"
 
-  if (!uri) {
-    if (useInMemory) {
-      return null
+  if (preferInMemory) {
+    if (!globalWithMongoose.__inMemoryDbInitialized) {
+      await initializeInMemoryDatabase()
+      globalWithMongoose.__inMemoryDbInitialized = true
+      console.warn(
+        "[database] Running in demo mode with an in-memory data set. Set MONGODB_URI to connect to a persistent database.",
+      )
     }
 
-    throw new Error("Add MONGODB_URI to .env.local")
+    if (!cached.conn) {
+      cached.conn = { inMemory: true }
+    }
+
+    return cached.conn
+  }
+
+  const uri = process.env.MONGODB_URI
+  if (!uri) {
+    throw new Error("Add MONGODB_URI to .env.local or set SEED_IN_MEMORY=true for demo mode")
   }
 
   if (cached.conn) return cached.conn
@@ -21,9 +56,22 @@ export default async function dbConnect() {
       .connect(uri, {
         bufferCommands: false,
       })
-      .then((mongoose) => mongoose)
+      .then((connection) => connection)
   }
+  try {
+    cached.conn = await cached.promise
+    return cached.conn
+  } catch (error) {
+    cached.promise = null
 
-  cached.conn = await cached.promise
-  return cached.conn
+    if (allowFallback) {
+      console.error("[database] Failed to connect to MongoDB. Falling back to in-memory store.", error)
+      await initializeInMemoryDatabase()
+      globalWithMongoose.__inMemoryDbInitialized = true
+      cached.conn = { inMemory: true }
+      return cached.conn
+    }
+
+    throw error
+  }
 }
