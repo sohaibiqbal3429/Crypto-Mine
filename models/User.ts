@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface IUser extends Document {
   email: string
   phone?: string // Added phone field for OTP authentication
@@ -55,4 +57,4 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ referredBy: 1 })
 
-export default mongoose.models.User || mongoose.model<IUser>("User", UserSchema)
+export default createModelProxy<IUser>("User", UserSchema)

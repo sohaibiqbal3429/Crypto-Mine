@@ -1,5 +1,7 @@
 import mongoose from "mongoose"
 
+import { createModelProxy } from "../lib/in-memory/model-factory.js"
+
 const CommissionRuleSchema = new mongoose.Schema(
   {
     level: { type: Number, required: true, unique: true },
@@ -20,4 +22,4 @@ const CommissionRuleSchema = new mongoose.Schema(
 
 CommissionRuleSchema.index({ level: 1 })
 
-export default mongoose.models.CommissionRule || mongoose.model("CommissionRule", CommissionRuleSchema)
+export default createModelProxy("CommissionRule", CommissionRuleSchema)

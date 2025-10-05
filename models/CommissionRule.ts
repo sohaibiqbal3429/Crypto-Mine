@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface ICommissionRule extends Document {
   level: number
   directPct: number
@@ -31,4 +33,4 @@ const CommissionRuleSchema = new Schema<ICommissionRule>(
   },
 )
 
-export default mongoose.models.CommissionRule || mongoose.model<ICommissionRule>("CommissionRule", CommissionRuleSchema)
+export default createModelProxy<ICommissionRule>("CommissionRule", CommissionRuleSchema)

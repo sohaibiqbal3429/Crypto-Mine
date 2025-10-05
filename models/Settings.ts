@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface ISettings extends Document {
   mining: {
     minPct: number
@@ -53,4 +55,4 @@ const SettingsSchema = new Schema<ISettings>(
   },
 )
 
-export default mongoose.models.Settings || mongoose.model<ISettings>("Settings", SettingsSchema)
+export default createModelProxy<ISettings>("Settings", SettingsSchema)
