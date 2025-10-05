@@ -20,6 +20,8 @@ const UserSchema = new Schema(
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
+    first_qualifying_deposit_at: { type: Date, default: null },
+    first_qualifying_deposit_amount: { type: Number, default: null },
     groups: {
       A: [{ type: Schema.Types.ObjectId, ref: "User" }],
       B: [{ type: Schema.Types.ObjectId, ref: "User" }],
@@ -36,5 +38,21 @@ UserSchema.index({ email: 1 })
 UserSchema.index({ phone: 1 })
 UserSchema.index({ referralCode: 1 })
 UserSchema.index({ referredBy: 1 })
+
+UserSchema.virtual("firstQualifyingDepositAt")
+  .get(function () {
+    return this.first_qualifying_deposit_at ?? null
+  })
+  .set(function (value) {
+    this.set("first_qualifying_deposit_at", value ?? null)
+  })
+
+UserSchema.virtual("firstQualifyingDepositAmount")
+  .get(function () {
+    return this.first_qualifying_deposit_amount ?? null
+  })
+  .set(function (value) {
+    this.set("first_qualifying_deposit_amount", value ?? null)
+  })
 
 export default createModelProxy("User", UserSchema)

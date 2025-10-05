@@ -6,6 +6,7 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { getUserFromRequest } from "@/lib/auth"
 import { applyDepositRewards } from "@/lib/utils/commission"
+import { ensureUserActivationForDeposit } from "@/lib/utils/policy"
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,6 +29,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
 
+    const user = await User.findById(transaction.userId).select(
+      "isActive referredBy first_qualifying_deposit_at first_qualifying_deposit_amount",
+    )
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
     // Update transaction status
     await Transaction.updateOne({ _id: transactionId }, { status: "approved" })
 
@@ -45,6 +53,14 @@ export async function POST(request: NextRequest) {
         },
       ),
     ])
+
+    await ensureUserActivationForDeposit({
+      userId: transaction.userId.toString(),
+      userDoc: user,
+      depositAmount: transaction.amount,
+      meta: transaction.meta,
+      occurredAt: transaction.createdAt ?? new Date(),
+    })
 
     // Apply deposit commissions and referral rewards
     await applyDepositRewards(transaction.userId.toString(), transaction.amount)

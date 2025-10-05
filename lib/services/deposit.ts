@@ -11,6 +11,7 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { depositSchema } from "@/lib/validations/wallet"
 import { applyDepositRewards } from "@/lib/utils/commission"
+import { ensureUserActivationForDeposit } from "@/lib/utils/policy"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
@@ -196,6 +197,15 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     ])
 
     await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT)
+
+    await ensureUserActivationForDeposit({
+      userId: input.userId,
+      userDoc: user,
+      depositAmount: FAKE_DEPOSIT_AMOUNT,
+      meta: transaction.meta,
+      occurredAt: transaction.createdAt ?? new Date(),
+      settings,
+    })
 
     await Notification.create({
       userId: input.userId,

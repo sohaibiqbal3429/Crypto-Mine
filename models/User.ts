@@ -17,6 +17,10 @@ export interface IUser extends Document {
   withdrawTotal: number
   roiEarnedTotal: number
   level: number
+  first_qualifying_deposit_at?: Date | null
+  first_qualifying_deposit_amount?: number | null
+  firstQualifyingDepositAt?: Date | null
+  firstQualifyingDepositAmount?: number | null
   groups: {
     A: mongoose.Types.ObjectId[]
     B: mongoose.Types.ObjectId[]
@@ -43,6 +47,8 @@ const UserSchema = new Schema<IUser>(
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
+    first_qualifying_deposit_at: { type: Date, default: null },
+    first_qualifying_deposit_amount: { type: Number, default: null },
     groups: {
       A: [{ type: Schema.Types.ObjectId, ref: "User" }],
       B: [{ type: Schema.Types.ObjectId, ref: "User" }],
@@ -56,5 +62,21 @@ const UserSchema = new Schema<IUser>(
 )
 
 UserSchema.index({ referredBy: 1 })
+
+UserSchema.virtual("firstQualifyingDepositAt")
+  .get(function (this: IUser & { first_qualifying_deposit_at?: Date | null }) {
+    return this.first_qualifying_deposit_at ?? null
+  })
+  .set(function (this: IUser, value: Date | null) {
+    this.set("first_qualifying_deposit_at", value ?? null)
+  })
+
+UserSchema.virtual("firstQualifyingDepositAmount")
+  .get(function (this: IUser & { first_qualifying_deposit_amount?: number | null }) {
+    return this.first_qualifying_deposit_amount ?? null
+  })
+  .set(function (this: IUser, value: number | null) {
+    this.set("first_qualifying_deposit_amount", value ?? null)
+  })
 
 export default createModelProxy<IUser>("User", UserSchema)
