@@ -40,6 +40,19 @@ type CommissionRuleSeedDoc = {
   teamDailyPct: number
   teamRewardPct: number
   activeMin: number
+  teamOverrides: {
+    team: "A" | "B" | "C" | "D"
+    depth: number
+    pct: number
+    payout: "commission" | "reward"
+    appliesTo: "profit"
+  }[]
+  monthlyBonuses: {
+    threshold: number
+    amount: number
+    type: "bonus" | "salary"
+    label: string
+  }[]
   monthlyTargets: {
     directSale: number
     bonus: number
@@ -148,13 +161,79 @@ export async function seedDatabase(): Promise<SeedResult> {
   }
 
   // ---------- COMMISSION RULES ----------
-  const commissionRules = [
-    { level: 1, directPct: 7, teamDailyPct: 0, teamRewardPct: 0, activeMin: 0, monthlyTargets: { directSale: 0, bonus: 0 } },
-    { level: 2, directPct: 8, teamDailyPct: 0, teamRewardPct: 0, activeMin: 5, monthlyTargets: { directSale: 0, bonus: 0 } },
-    { level: 3, directPct: 9, teamDailyPct: 0, teamRewardPct: 0, activeMin: 10, monthlyTargets: { directSale: 0, bonus: 0 } },
-    { level: 4, directPct: 9, teamDailyPct: 1, teamRewardPct: 0, activeMin: 15, monthlyTargets: { directSale: 0, bonus: 0 } },
-    { level: 5, directPct: 9, teamDailyPct: 1, teamRewardPct: 0, activeMin: 25, monthlyTargets: { directSale: 7000, bonus: 200, salary: 500 } },
-  ] as const
+  const commissionRules: CommissionRuleSeedDoc[] = [
+    {
+      level: 1,
+      directPct: 7,
+      teamDailyPct: 0,
+      teamRewardPct: 0,
+      activeMin: 0,
+      teamOverrides: [],
+      monthlyBonuses: [],
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 2,
+      directPct: 8,
+      teamDailyPct: 0.5,
+      teamRewardPct: 0,
+      activeMin: 5,
+      teamOverrides: [
+        { team: "A", depth: 1, pct: 0.5, payout: "commission", appliesTo: "profit" },
+      ],
+      monthlyBonuses: [],
+      monthlyTargets: { directSale: 0, bonus: 0 },
+    },
+    {
+      level: 3,
+      directPct: 9,
+      teamDailyPct: 1,
+      teamRewardPct: 0.5,
+      activeMin: 10,
+      teamOverrides: [
+        { team: "A", depth: 1, pct: 1, payout: "commission", appliesTo: "profit" },
+        { team: "B", depth: 2, pct: 0.5, payout: "reward", appliesTo: "profit" },
+      ],
+      monthlyBonuses: [
+        { threshold: 3000, amount: 300, type: "bonus", label: "Monthly Bonus" },
+      ],
+      monthlyTargets: { directSale: 3000, bonus: 300 },
+    },
+    {
+      level: 4,
+      directPct: 9,
+      teamDailyPct: 1.5,
+      teamRewardPct: 1,
+      activeMin: 15,
+      teamOverrides: [
+        { team: "A", depth: 1, pct: 1, payout: "commission", appliesTo: "profit" },
+        { team: "B", depth: 2, pct: 0.5, payout: "commission", appliesTo: "profit" },
+        { team: "C", depth: 3, pct: 1, payout: "reward", appliesTo: "profit" },
+      ],
+      monthlyBonuses: [
+        { threshold: 5000, amount: 500, type: "bonus", label: "Monthly Bonus" },
+      ],
+      monthlyTargets: { directSale: 5000, bonus: 500 },
+    },
+    {
+      level: 5,
+      directPct: 10,
+      teamDailyPct: 2,
+      teamRewardPct: 1.5,
+      activeMin: 25,
+      teamOverrides: [
+        { team: "A", depth: 1, pct: 1, payout: "commission", appliesTo: "profit" },
+        { team: "B", depth: 2, pct: 1, payout: "commission", appliesTo: "profit" },
+        { team: "C", depth: 3, pct: 1, payout: "reward", appliesTo: "profit" },
+        { team: "D", depth: 4, pct: 0.5, payout: "reward", appliesTo: "profit" },
+      ],
+      monthlyBonuses: [
+        { threshold: 7000, amount: 200, type: "bonus", label: "Monthly Bonus" },
+        { threshold: 7000, amount: 500, type: "salary", label: "Monthly Salary" },
+      ],
+      monthlyTargets: { directSale: 7000, bonus: 200, salary: 500 },
+    },
+  ]
 
   const commissionRuleModel = (memory?.commissionRules ?? CommissionRule) as {
     findOne: (filter: Record<string, unknown>) => Promise<CommissionRuleSeedDoc | null>
