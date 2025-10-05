@@ -79,20 +79,43 @@ export async function POST(request: NextRequest) {
     ])
 
     // Apply deposit commissions and referral rewards
-    await applyDepositRewards(transaction.userId.toString(), transaction.amount, {
-      depositTransactionId: transaction._id.toString(),
-      depositAt: transaction.createdAt,
-    })
+    const rewardOutcome = await applyDepositRewards(
+      transaction.userId.toString(),
+      transaction.amount,
+      {
+        depositTransactionId: transaction._id.toString(),
+        depositAt: transaction.createdAt,
+      },
+    )
+
+    if (rewardOutcome.activated) {
+      await Transaction.updateOne(
+        { _id: transactionId },
+        { $set: { "meta.qualifiesForActivation": true } },
+      )
+    }
 
     // Create notification
+    const notificationBodyParts = [
+      `Your deposit of $${transaction.amount.toFixed(2)} has been approved and credited to your account.`,
+    ]
+
+    if (rewardOutcome.activated) {
+      notificationBodyParts.push(
+        `You've now satisfied the qualifying deposit requirement of $${rewardOutcome.activationThreshold.toFixed(
+          2,
+        )} and your account is fully activated.`,
+      )
+    }
+
     await Notification.create({
       userId: transaction.userId,
       kind: "deposit-approved",
       title: "Deposit Approved",
-      body: `Your deposit of $${transaction.amount.toFixed(2)} has been approved and credited to your account.`,
+      body: notificationBodyParts.join(" "),
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, activated: rewardOutcome.activated })
   } catch (error) {
     console.error("Approve deposit error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
         ...(result.receiptMeta ? { receiptUrl: result.receiptMeta.url } : {}),
       },
       message: result.message,
+      activated: Boolean(result.activated),
     })
   } catch (error: any) {
     if (error instanceof DepositSubmissionError) {
