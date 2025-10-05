@@ -10,15 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Bell,
-  Clock,
-  DollarSign,
-  Loader2,
-  RefreshCw,
-  SunMedium,
-  Users,
-} from "lucide-react"
+import { NotificationBell } from "@/components/notifications/notification-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Clock, DollarSign, Loader2, RefreshCw, Users } from "lucide-react"
 import type {
   AdminStats,
   AdminSessionUser,
@@ -197,23 +191,8 @@ export function AdminDashboard({
 
             <div className="flex flex-col items-end gap-4">
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
-                    10
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
-                  aria-label="Toggle theme"
-                >
-                  <SunMedium className="h-5 w-5" />
-                </button>
+                <NotificationBell />
+                <ThemeToggle />
               </div>
 
               <Button
