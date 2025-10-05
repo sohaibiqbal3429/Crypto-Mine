@@ -52,7 +52,7 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     User.find({})
       .select("-passwordHash")
       .sort({ createdAt: -1 })
-      .limit(20)
+      .limit(100)
       .lean(),
     User.countDocuments({}),
     User.countDocuments({ isActive: true }),

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const searchRaw = searchParams.get("search")
     const search = searchRaw ? searchRaw.trim() : ""
     const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1"))
-    const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") || "20")))
+    const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") || "100")))
 
     // Build query
     const query: any = {}

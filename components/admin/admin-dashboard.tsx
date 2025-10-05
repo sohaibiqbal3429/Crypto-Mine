@@ -44,7 +44,8 @@ export function AdminDashboard({
   initialStats,
   initialError = null,
 }: AdminDashboardProps) {
-  const PAGE_SIZE = 20
+  const TRANSACTION_PAGE_SIZE = 20
+  const USER_PAGE_SIZE = 100
   const [user, setUser] = useState(initialUser)
   const [transactions, setTransactions] = useState(initialTransactions)
   const [users, setUsers] = useState(initialUsers)
@@ -60,14 +61,14 @@ export function AdminDashboard({
   const [userSearch, setUserSearch] = useState("")
   const [transactionPagination, setTransactionPagination] = useState({
     page: 1,
-    pages: Math.max(1, Math.ceil(initialTransactions.length / PAGE_SIZE) || 1),
-    limit: PAGE_SIZE,
+    pages: Math.max(1, Math.ceil(initialTransactions.length / TRANSACTION_PAGE_SIZE) || 1),
+    limit: TRANSACTION_PAGE_SIZE,
     total: initialTransactions.length,
   })
   const [userPagination, setUserPagination] = useState({
     page: 1,
-    pages: Math.max(1, Math.ceil(initialUsers.length / PAGE_SIZE) || 1),
-    limit: PAGE_SIZE,
+    pages: Math.max(1, Math.ceil(initialUsers.length / USER_PAGE_SIZE) || 1),
+    limit: USER_PAGE_SIZE,
     total: initialUsers.length,
   })
 
@@ -93,7 +94,7 @@ export function AdminDashboard({
       const nextUserPage = userPage ?? userPagination.page
 
       transactionParams.set("page", nextTransactionPage.toString())
-      transactionParams.set("limit", PAGE_SIZE.toString())
+      transactionParams.set("limit", TRANSACTION_PAGE_SIZE.toString())
       if (transactionFilters.type !== "all") {
         transactionParams.set("type", transactionFilters.type)
       }
@@ -103,7 +104,7 @@ export function AdminDashboard({
 
       const userParams = new URLSearchParams()
       userParams.set("page", nextUserPage.toString())
-      userParams.set("limit", PAGE_SIZE.toString())
+      userParams.set("limit", USER_PAGE_SIZE.toString())
       const sanitizedSearch = userSearch.trim()
       if (sanitizedSearch.length > 0) {
         userParams.set("search", sanitizedSearch)
@@ -140,7 +141,7 @@ export function AdminDashboard({
         setTransactionPagination({
           page: Math.max(1, page || nextTransactionPage),
           pages: Math.max(1, pages || 1),
-          limit: limit || PAGE_SIZE,
+          limit: limit || TRANSACTION_PAGE_SIZE,
           total: total || 0,
         })
       }
@@ -149,7 +150,7 @@ export function AdminDashboard({
         setUserPagination({
           page: Math.max(1, page || nextUserPage),
           pages: Math.max(1, pages || 1),
-          limit: limit || PAGE_SIZE,
+          limit: limit || USER_PAGE_SIZE,
           total: total || 0,
         })
       }
