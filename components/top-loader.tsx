@@ -1,147 +1,246 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import Router from "next/router"
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-const MIN_PROGRESS = 0.08
-const INCREMENT_INTERVAL = 300
+import { cn } from "@/lib/utils"
 
-// From codex/implement-countdown-timer-logic-9ivujd
-const MIN_VISIBLE_DURATION = 400
-const RESET_FADE_DURATION = 260
+type TopLoaderContextValue = {
+  startTask: () => void
+  stopTask: () => void
+  withLoader: <T>(task: () => Promise<T>) => Promise<T>
+}
 
-export function TopLoader() {
-  const activeRequests = useRef(0)
-  const progress = useRef(0)
-  const intervalRef = useRef<number | null>(null)
-  const barRef = useRef<HTMLDivElement | null>(null)
-  const originalFetch = useRef<typeof window.fetch | null>(null)
+const TopLoaderContext = createContext<TopLoaderContextValue | null>(null)
 
-  // From codex/implement-countdown-timer-logic-9ivujd
-  const settleTimeoutRef = useRef<number | null>(null)
-  const fadeTimeoutRef = useRef<number | null>(null)
-  const startTimeRef = useRef<number>(0)
+function usePrefersReducedMotion() {
+  const query = "(prefers-reduced-motion: reduce)"
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
   useEffect(() => {
-    barRef.current = document.getElementById("top-loader") as HTMLDivElement | null
-  }, [])
+    if (typeof window === "undefined" || !window.matchMedia) return
 
-  useEffect(() => {
-    // From codex/implement-countdown-timer-logic-9ivujd
-    const clearTimer = (ref: { current: number | null }) => {
-      if (ref.current) {
-        window.clearTimeout(ref.current)
-        ref.current = null
-      }
+    const mediaQuery = window.matchMedia(query)
+    setPrefersReducedMotion(mediaQuery.matches)
+
+    const updatePreference = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches)
     }
 
-    const set = (value: number) => {
-      progress.current = Math.max(0, Math.min(1, value))
-      barRef.current?.style.setProperty("transform", `scaleX(${progress.current})`)
-    }
-
-    const start = () => {
-      // codex extras: cancel any pending settle/fade timers
-      clearTimer(settleTimeoutRef)
-      clearTimer(fadeTimeoutRef)
-
-      if (activeRequests.current === 0) {
-        startTimeRef.current = performance.now()
-        if (barRef.current) {
-          barRef.current.style.visibility = "visible"
-          barRef.current.style.opacity = "1"
-        }
-        set(MIN_PROGRESS)
-        intervalRef.current = window.setInterval(() => {
-          const next = progress.current + (1 - progress.current) * 0.1
-          set(next)
-        }, INCREMENT_INTERVAL) as unknown as number
-      }
-      activeRequests.current += 1
-    }
-
-    const done = () => {
-      if (activeRequests.current === 0) return
-      activeRequests.current -= 1
-      if (activeRequests.current === 0) {
-        const finalize = () => {
-          if (intervalRef.current) {
-            window.clearInterval(intervalRef.current)
-            intervalRef.current = null
-          }
-          set(1)
-
-          if (barRef.current) {
-            const currentBar = barRef.current
-            // fade to opacity 0 on next frame to allow CSS transition
-            requestAnimationFrame(() => {
-              currentBar.style.opacity = "0"
-            })
-          }
-
-          // after fade, hide & reset transform
-          fadeTimeoutRef.current = window.setTimeout(() => {
-            if (activeRequests.current > 0) return
-            set(0)
-            if (barRef.current) {
-              barRef.current.style.visibility = "hidden"
-            }
-            fadeTimeoutRef.current = null
-          }, RESET_FADE_DURATION)
-        }
-
-        // ensure bar stays visible for at least MIN_VISIBLE_DURATION
-        const elapsed = performance.now() - startTimeRef.current
-        if (elapsed < MIN_VISIBLE_DURATION) {
-          settleTimeoutRef.current = window.setTimeout(() => {
-            finalize()
-            settleTimeoutRef.current = null
-          }, MIN_VISIBLE_DURATION - elapsed)
-        } else {
-          finalize()
-        }
-      }
-    }
-
-    const handleStart = () => start()
-    const handleDone = () => done()
-
-    Router.events.on("routeChangeStart", handleStart)
-    Router.events.on("routeChangeComplete", handleDone)
-    Router.events.on("routeChangeError", handleDone)
-
-    if (typeof window !== "undefined" && !originalFetch.current) {
-      originalFetch.current = window.fetch
-      window.fetch = async (...args) => {
-        start()
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          return await originalFetch.current!(...args as Parameters<typeof window.fetch>)
-        } finally {
-          done()
-        }
-      }
-    }
+    mediaQuery.addEventListener("change", updatePreference)
 
     return () => {
-      Router.events.off("routeChangeStart", handleStart)
-      Router.events.off("routeChangeComplete", handleDone)
-      Router.events.off("routeChangeError", handleDone)
-
-      if (intervalRef.current) {
-        window.clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-
-      clearTimer(settleTimeoutRef)
-      clearTimer(fadeTimeoutRef)
-
-      if (originalFetch.current) {
-        window.fetch = originalFetch.current
-        originalFetch.current = null
-      }
+      mediaQuery.removeEventListener("change", updatePreference)
     }
   }, [])
 
-  return null
+  return prefersReducedMotion
 }
+
+export function useTopLoader() {
+  const context = useContext(TopLoaderContext)
+
+  if (!context) {
+    throw new Error("useTopLoader must be used within a TopLoaderProvider")
+  }
+
+  return context
+}
+
+export function TopLoaderProvider({ children }: { children: ReactNode }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const prefersReducedMotion = usePrefersReducedMotion()
+
+  const [isVisible, setIsVisible] = useState(false)
+  const [progress, setProgress] = useState(0)
+
+  const activeTaskCount = useRef(0)
+  const rafId = useRef<number | null>(null)
+  const hideTimeoutId = useRef<number | null>(null)
+  const initialRenderRef = useRef(true)
+  const latestLocationKey = useRef<string>()
+
+  const clearHideTimeout = useCallback(() => {
+    if (hideTimeoutId.current !== null) {
+      window.clearTimeout(hideTimeoutId.current)
+      hideTimeoutId.current = null
+    }
+  }, [])
+
+  const stopAnimation = useCallback(() => {
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current)
+      rafId.current = null
+    }
+  }, [])
+
+  const beginAnimation = useCallback(() => {
+    if (prefersReducedMotion) return
+
+    stopAnimation()
+    const step = () => {
+      setProgress((previous) => {
+        if (previous >= 0.92) return previous
+        const increment = Math.max(0.01, (1 - previous) * 0.08)
+        return Math.min(previous + increment, 0.92)
+      })
+      rafId.current = requestAnimationFrame(step)
+    }
+    rafId.current = requestAnimationFrame(step)
+  }, [prefersReducedMotion, stopAnimation])
+
+  const completeAnimation = useCallback(() => {
+    stopAnimation()
+    setProgress(1)
+
+    clearHideTimeout()
+    hideTimeoutId.current = window.setTimeout(() => {
+      setIsVisible(false)
+      setProgress(0)
+      hideTimeoutId.current = null
+    }, prefersReducedMotion ? 0 : 240) as unknown as number
+  }, [clearHideTimeout, prefersReducedMotion, stopAnimation])
+
+  const startTask = useCallback(() => {
+    activeTaskCount.current += 1
+
+    if (activeTaskCount.current === 1) {
+      clearHideTimeout()
+      setIsVisible(true)
+      setProgress(prefersReducedMotion ? 1 : 0.05)
+      beginAnimation()
+    }
+  }, [beginAnimation, clearHideTimeout, prefersReducedMotion])
+
+  const stopTask = useCallback(() => {
+    if (activeTaskCount.current === 0) return
+
+    activeTaskCount.current -= 1
+
+    if (activeTaskCount.current === 0) {
+      completeAnimation()
+    }
+  }, [completeAnimation])
+
+  const withLoader = useCallback(
+    async <T,>(task: () => Promise<T>) => {
+      startTask()
+      try {
+        return await task()
+      } finally {
+        stopTask()
+      }
+    },
+    [startTask, stopTask],
+  )
+
+  const locationKey = useMemo(() => {
+    const params = searchParams?.toString()
+    return `${pathname ?? ""}?${params ?? ""}`
+  }, [pathname, searchParams])
+
+  useEffect(() => {
+    if (initialRenderRef.current) {
+      initialRenderRef.current = false
+      latestLocationKey.current = locationKey
+      return
+    }
+
+    if (latestLocationKey.current !== locationKey) {
+      latestLocationKey.current = locationKey
+      stopTask()
+    }
+  }, [locationKey, stopTask])
+
+  useEffect(() => {
+    const routerWithInternals = router as unknown as {
+      [key: string]: unknown
+      __topLoaderPatched?: boolean
+    }
+
+    if (!routerWithInternals || routerWithInternals.__topLoaderPatched) {
+      return
+    }
+
+    const methodsToPatch = ["push", "replace", "back", "forward", "refresh"] as const
+    const originals: Partial<Record<(typeof methodsToPatch)[number], unknown>> = {}
+
+    methodsToPatch.forEach((method) => {
+      const original = routerWithInternals[method]
+      if (typeof original !== "function") return
+
+      originals[method] = original
+      routerWithInternals[method] = (...args: unknown[]) => {
+        startTask()
+        try {
+          const result = (original as (...inner: unknown[]) => unknown).apply(router, args)
+          if (result && typeof (result as Promise<unknown>).catch === "function") {
+            return (result as Promise<unknown>).catch((error) => {
+              stopTask()
+              throw error
+            })
+          }
+          return result
+        } catch (error) {
+          stopTask()
+          throw error
+        }
+      }
+    })
+
+    routerWithInternals.__topLoaderPatched = true
+
+    return () => {
+      methodsToPatch.forEach((method) => {
+        if (originals[method]) {
+          routerWithInternals[method] = originals[method]
+        }
+      })
+      routerWithInternals.__topLoaderPatched = false
+    }
+  }, [router, startTask, stopTask])
+
+  useEffect(() => {
+    return () => {
+      stopAnimation()
+      clearHideTimeout()
+    }
+  }, [clearHideTimeout, stopAnimation])
+
+  const displayProgress = prefersReducedMotion ? (isVisible ? 1 : 0) : progress
+
+  const contextValue = useMemo<TopLoaderContextValue>(
+    () => ({ startTask, stopTask, withLoader }),
+    [startTask, stopTask, withLoader],
+  )
+
+  return (
+    <TopLoaderContext.Provider value={contextValue}>
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none fixed left-0 right-0 top-0 z-[9999] h-1 origin-left bg-gradient-to-r from-primary via-accent to-primary/80",
+          prefersReducedMotion
+            ? "transition-none"
+            : "motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out",
+          isVisible ? "opacity-100" : "opacity-0",
+        )}
+        style={{ transform: `scaleX(${displayProgress})` }}
+      />
+      {children}
+    </TopLoaderContext.Provider>
+  )
+}
+
+export const TopLoader = TopLoaderProvider

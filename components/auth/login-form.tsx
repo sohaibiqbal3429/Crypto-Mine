@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Loader2, UserRoundPlus } from "lucide-react"
 
+import { useTopLoader } from "@/components/top-loader"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,6 +31,7 @@ interface LoginFormData {
 
 export function LoginForm() {
   const router = useRouter()
+  const { startTask, stopTask } = useTopLoader()
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
     countryCode: "+1",
@@ -45,6 +47,7 @@ export function LoginForm() {
     setError("")
     setIsLoading(true)
 
+    startTask()
     try {
       let identifier = formData.email.trim().toLowerCase()
       let identifierType: "email" | "phone" = "email"
@@ -78,13 +81,35 @@ export function LoginForm() {
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as {
-        success?: boolean
-        error?: string
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? ""
+      let parsed: unknown = null
+
+      if (contentType.includes("application/json")) {
+        parsed = await response.json().catch(() => null)
+      } else {
+        const textPayload = await response.text().catch(() => "")
+        try {
+          parsed = textPayload ? JSON.parse(textPayload) : null
+        } catch {
+          parsed = textPayload || null
+        }
       }
 
-      if (!response.ok || !data?.success) {
-        setError(data?.error || "Login failed")
+      const data = (parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null) ?? null
+      const success = Boolean(data?.success)
+
+      if (!response.ok || !success) {
+        const backendMessage =
+          (typeof data?.error === "string" && data.error) ||
+          (typeof data?.message === "string" && data.message) ||
+          (typeof parsed === "string" && parsed)
+
+        const fallbackMessage =
+          response.status === 401 || response.status === 403
+            ? "Invalid email or password."
+            : "Login failed. Please try again."
+
+        setError(backendMessage || fallbackMessage)
         return
       }
 
@@ -92,14 +117,26 @@ export function LoginForm() {
       router.refresh()
     } catch (submitError) {
       console.error("Login error", submitError)
-      setError("Network error. Please try again.")
+      const message =
+        submitError instanceof Error && submitError.name !== "AbortError"
+          ? submitError.message
+          : ""
+
+      if (message && /fetch failed|network|request|failed to fetch/i.test(message)) {
+        setError("Server not reachable. Please try later.")
+      } else if (message) {
+        setError(message)
+      } else {
+        setError("Server not reachable. Please try later.")
+      }
     } finally {
+      stopTask()
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors">
+    <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-border/70 bg-card shadow-xl shadow-primary/10 transition-colors motion-safe:transform-gpu motion-safe:duration-300 motion-safe:ease-out motion-safe:hover:-translate-y-1 motion-safe:hover:shadow-2xl">
       <div className="bg-gradient-to-r from-primary to-accent py-4 text-center text-primary-foreground">
         <h1 className="text-lg font-semibold tracking-wide">User Referral Login System</h1>
       </div>
@@ -112,7 +149,7 @@ export function LoginForm() {
         </div>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="motion-safe:animate-in motion-safe:fade-in-50">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -126,12 +163,12 @@ export function LoginForm() {
             }}
             className="space-y-4"
           >
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-2 motion-safe:transition-all motion-safe:duration-200">
               <TabsTrigger value="email">Email</TabsTrigger>
               <TabsTrigger value="phone">Phone</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="email" className="space-y-2">
+            <TabsContent value="email" className="space-y-2 motion-safe:animate-in motion-safe:fade-in-50">
               <Label htmlFor="email" className="text-sm font-semibold text-foreground/90">
                 Email Address
               </Label>
@@ -145,7 +182,7 @@ export function LoginForm() {
               />
             </TabsContent>
 
-            <TabsContent value="phone" className="space-y-2">
+            <TabsContent value="phone" className="space-y-2 motion-safe:animate-in motion-safe:fade-in-50">
               <Label htmlFor="phone" className="text-sm font-semibold text-foreground/90">
                 Phone Number
               </Label>
@@ -182,7 +219,7 @@ export function LoginForm() {
             </TabsContent>
           </Tabs>
 
-          <div className="space-y-2">
+          <div className="space-y-2 motion-safe:animate-in motion-safe:fade-in-50">
             <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
               Password
             </Label>
@@ -207,10 +244,19 @@ export function LoginForm() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => router.push("/auth/register")}>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 h-11 motion-safe:hover:scale-[1.01] motion-safe:active:scale-[0.99]"
+              onClick={() => router.push("/auth/register")}
+            >
               (Create Account)
             </Button>
-            <Button type="submit" className="flex-1 h-11 shadow-lg shadow-primary/20" disabled={isLoading}>
+            <Button
+              type="submit"
+              className="flex-1 h-11 shadow-lg shadow-primary/20 motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]"
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
