@@ -6,6 +6,8 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { getUserFromRequest } from "@/lib/auth"
 import { applyDepositRewards } from "@/lib/utils/commission"
+import Settings from "@/models/Settings"
+import { resolveCapitalLockWindow } from "@/lib/utils/locked-capital"
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,13 +25,27 @@ export async function POST(request: NextRequest) {
 
     const { transactionId } = await request.json()
 
-    const transaction = await Transaction.findById(transactionId)
+    const [transaction, settings] = await Promise.all([
+      Transaction.findById(transactionId),
+      Settings.findOne(),
+    ])
     if (!transaction || transaction.type !== "deposit" || transaction.status !== "pending") {
       return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
 
+    const { lockStart, lockEnd } = resolveCapitalLockWindow(settings)
+
+    const lockMeta = {
+      amount: transaction.amount,
+      lockStart,
+      lockEnd,
+    }
+
     // Update transaction status
-    await Transaction.updateOne({ _id: transactionId }, { status: "approved" })
+    await Transaction.updateOne(
+      { _id: transactionId },
+      { status: "approved", $set: { "meta.lock": lockMeta } },
+    )
 
     // Update user deposit total and balance
     await Promise.all([
@@ -42,7 +58,23 @@ export async function POST(request: NextRequest) {
             totalBalance: transaction.amount,
             lockedCapital: transaction.amount,
           },
+          $push: {
+            lockedCapitalLots: {
+              amount: transaction.amount,
+              lockStart,
+              lockEnd,
+              sourceTransactionId: transaction._id,
+            },
+          },
+          $setOnInsert: {
+            totalEarning: 0,
+            staked: 0,
+            pendingWithdraw: 0,
+            teamRewardsAvailable: 0,
+            teamRewardsClaimed: 0,
+          },
         },
+        { upsert: true },
       ),
     ])
 
