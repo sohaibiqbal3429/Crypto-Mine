@@ -39,15 +39,15 @@ export default function TermsPage() {
     <div className="flex h-screen bg-background">
       <Sidebar user={user} />
 
-      <main className="flex-1 md:ml-64 overflow-auto">
-        <div className="p-6">
+      <main className="flex-1 overflow-auto md:ml-64">
+        <div className="p-6 lg:p-10">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-balance">Terms of Service</h1>
             <p className="text-muted-foreground">Last updated: January 15, 2025</p>
           </div>
 
-          <div className="max-w-4xl space-y-6">
-            <Card>
+          <div className="space-y-6 lg:space-y-8">
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>1. Acceptance of Terms</CardTitle>
               </CardHeader>
@@ -60,7 +60,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>2. Platform Description</CardTitle>
               </CardHeader>
@@ -75,7 +75,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>3. User Responsibilities</CardTitle>
               </CardHeader>
@@ -91,7 +91,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>4. Mining and Rewards</CardTitle>
               </CardHeader>
@@ -108,7 +108,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>5. Deposits and Withdrawals</CardTitle>
               </CardHeader>
@@ -129,7 +129,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>6. Referral Program</CardTitle>
               </CardHeader>
@@ -141,7 +141,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>7. Risk Disclosure</CardTitle>
               </CardHeader>
@@ -159,7 +159,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>8. Account Termination</CardTitle>
               </CardHeader>
@@ -172,7 +172,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>9. Limitation of Liability</CardTitle>
               </CardHeader>
@@ -185,7 +185,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="w-full">
               <CardHeader>
                 <CardTitle>10. Changes to Terms</CardTitle>
               </CardHeader>

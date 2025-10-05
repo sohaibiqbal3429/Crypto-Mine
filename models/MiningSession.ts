@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface IMiningSession extends Document {
   userId: mongoose.Types.ObjectId
   lastClickAt: Date
@@ -22,4 +24,4 @@ const MiningSessionSchema = new Schema<IMiningSession>(
 MiningSessionSchema.index({ userId: 1 })
 MiningSessionSchema.index({ nextEligibleAt: 1 })
 
-export default mongoose.models.MiningSession || mongoose.model<IMiningSession>("MiningSession", MiningSessionSchema)
+export default createModelProxy<IMiningSession>("MiningSession", MiningSessionSchema)

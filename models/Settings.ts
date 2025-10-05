@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface ISettings extends Document {
   mining: {
     minPct: number
@@ -11,6 +13,7 @@ export interface ISettings extends Document {
     minWithdraw: number
     joinNeedsReferral: boolean
     activeMinDeposit: number
+    capitalLockDays: number
   }
   joiningBonus: {
     threshold: number
@@ -36,6 +39,7 @@ const SettingsSchema = new Schema<ISettings>(
       minWithdraw: { type: Number, default: 30 },
       joinNeedsReferral: { type: Boolean, default: true },
       activeMinDeposit: { type: Number, default: 80 },
+      capitalLockDays: { type: Number, default: 30 },
     },
     joiningBonus: {
       threshold: { type: Number, default: 100 },
@@ -53,4 +57,4 @@ const SettingsSchema = new Schema<ISettings>(
   },
 )
 
-export default mongoose.models.Settings || mongoose.model<ISettings>("Settings", SettingsSchema)
+export default createModelProxy<ISettings>("Settings", SettingsSchema)

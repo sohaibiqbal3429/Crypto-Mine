@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import { getUserFromRequest } from "@/lib/auth"
+import { serializeUser } from "@/lib/serializers/user"
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,15 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        referralCode: user.referralCode,
-        level: user.level,
-        isActive: user.isActive,
-      },
+      user: serializeUser(user),
     })
   } catch (error) {
     console.error("Get user error:", error)

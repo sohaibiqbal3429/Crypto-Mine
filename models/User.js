@@ -1,5 +1,7 @@
 import mongoose from "mongoose"
 
+import { createModelProxy } from "../lib/in-memory/model-factory.js"
+
 const { Schema } = mongoose
 
 const UserSchema = new Schema(
@@ -35,4 +37,4 @@ UserSchema.index({ phone: 1 })
 UserSchema.index({ referralCode: 1 })
 UserSchema.index({ referredBy: 1 })
 
-export default mongoose.models.User || mongoose.model("User", UserSchema)
+export default createModelProxy("User", UserSchema)

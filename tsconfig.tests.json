@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-tests",
+    "noEmit": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2019",
+    "lib": ["es2019"],
+    "allowJs": false,
+    "isolatedModules": false,
+    "emitDeclarationOnly": false,
+    "declaration": false,
+    "baseUrl": "."
+  },
+  "include": ["tests/**/*.ts", "lib/utils/locked-capital.ts"],
+  "exclude": ["node_modules"]
+}

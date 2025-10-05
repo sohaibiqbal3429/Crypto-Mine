@@ -53,15 +53,20 @@ export async function GET(request: NextRequest) {
     const hasMinimumDeposit = (user.depositTotal ?? 0) >= minDeposit
     const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
+    const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
+    const totalEarning = balance.totalEarning ?? 0
+    const totalBalance = balance.totalBalance ?? 0
+    const currentBalance = balance.current ?? 0
+
     return NextResponse.json({
       kpis: {
-        totalEarning: balance.totalEarning ?? 0,
-        totalBalance: balance.totalBalance ?? 0,
-        currentBalance: balance.current ?? 0,
+        totalEarning,
+        totalBalance,
+        currentBalance,
         activeMembers,
         totalWithdraw: user.withdrawTotal ?? 0,
         pendingWithdraw: balance.pendingWithdraw ?? 0,
-        teamReward: balance.teamRewardsAvailable ?? 0,
+        teamReward: teamRewardsAvailable,
       },
       mining: {
         canMine,

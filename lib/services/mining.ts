@@ -6,10 +6,11 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import MiningSession from "@/models/MiningSession"
 import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
+import { applyTeamProfitOverrides } from "@/lib/utils/commission"
 
 const DEFAULT_MINING_SETTINGS = {
-  minPct: 1.5,
-  maxPct: 5,
+  minPct: 2.5,
+  maxPct: 2.5,
   roiCap: 3,
 }
 
@@ -41,6 +42,7 @@ export interface MiningStatusResult {
     totalEarning: number
     roiProgress: number
   }
+  totalClicks: number
 }
 
 export async function getMiningStatus(userId: string): Promise<MiningStatusResult> {
@@ -76,17 +78,23 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
   }
 
   const settings = {
-    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
+    minPct: DEFAULT_MINING_SETTINGS.minPct,
+    maxPct: DEFAULT_MINING_SETTINGS.maxPct,
     roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
   const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
   const hasMinimumDeposit = user.depositTotal >= requiredDeposit
 
+  const totalMiningClicks = await Transaction.countDocuments({
+    userId: user._id,
+    type: "earn",
+    "meta.source": "mining",
+  })
+
   const now = new Date()
   const canMineNow = (!miningSession.nextEligibleAt || now >= miningSession.nextEligibleAt) && hasMinimumDeposit
   const roiCapReached = hasReachedROICap(user.roiEarnedTotal, user.depositTotal, settings.roiCap)
-  const baseAmount = hasMinimumDeposit ? Math.max(user.depositTotal, balance.staked, requiredDeposit) : 0
+  const baseAmount = hasMinimumDeposit ? user.depositTotal : 0
 
   let timeLeft = 0
   if (miningSession.nextEligibleAt && now < miningSession.nextEligibleAt) {
@@ -112,6 +120,7 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
       roiProgress:
         user.depositTotal > 0 ? (user.roiEarnedTotal / (user.depositTotal * settings.roiCap)) * 100 : 0,
     },
+    totalClicks: totalMiningClicks,
   }
 }
 
@@ -141,8 +150,8 @@ export async function performMiningClick(userId: string) {
   }
 
   const settings = {
-    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
+    minPct: DEFAULT_MINING_SETTINGS.minPct,
+    maxPct: DEFAULT_MINING_SETTINGS.maxPct,
     roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
 
@@ -170,7 +179,7 @@ export async function performMiningClick(userId: string) {
     throw error
   }
 
-  const baseAmount = Math.max(user.depositTotal, balance.staked, requiredDeposit)
+  const baseAmount = user.depositTotal
   const profit = calculateMiningProfit(baseAmount, settings.minPct, settings.maxPct)
 
   const newRoiTotal = user.roiEarnedTotal + profit
@@ -199,7 +208,7 @@ export async function performMiningClick(userId: string) {
 
   await User.updateOne({ _id: user._id }, { $inc: { roiEarnedTotal: finalProfit } })
 
-  await Transaction.create({
+  const profitTransaction = await Transaction.create({
     userId: user._id,
     type: "earn",
     amount: finalProfit,
@@ -211,6 +220,13 @@ export async function performMiningClick(userId: string) {
       roiCapReached,
       originalProfit: profit,
     },
+  })
+
+  await applyTeamProfitOverrides(user._id.toString(), finalProfit, {
+    profitTransactionId: profitTransaction._id.toString(),
+    profitDate: now,
+    profitSource: "mining",
+    baseAmount,
   })
 
   const nextEligible = new Date(now.getTime() + 24 * 60 * 60 * 1000)

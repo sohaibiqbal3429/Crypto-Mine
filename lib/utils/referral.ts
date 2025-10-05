@@ -7,16 +7,13 @@ export function generateReferralCode(): string {
   return result
 }
 
-export function calculateMiningProfit(baseAmount: number, minPct: number, maxPct: number): number {
-  // Use a weighted random distribution favoring middle values
-  const random1 = Math.random()
-  const random2 = Math.random()
-  const weightedRandom = (random1 + random2) / 2 // Creates a bell curve distribution
+export function calculateMiningProfit(baseAmount: number, minPct?: number, maxPct?: number): number {
+  if (baseAmount <= 0) return 0
 
-  const randomPct = weightedRandom * (maxPct - minPct) + minPct
-  const profit = (baseAmount * randomPct) / 100
+  const pct = typeof minPct === "number" && typeof maxPct === "number" ? (minPct + maxPct) / 2 : 2.5
+  const appliedPct = pct || 2.5
+  const profit = (baseAmount * appliedPct) / 100
 
-  // Round to 2 decimal places
   return Math.round(profit * 100) / 100
 }
 
@@ -24,9 +21,10 @@ export function hasReachedROICap(earnedTotal: number, depositTotal: number, roiC
   return earnedTotal >= depositTotal * roiCap
 }
 
-export function calculateEstimatedDailyEarnings(baseAmount: number, minPct: number, maxPct: number): number {
-  const avgPct = (minPct + maxPct) / 2
-  return Math.round(((baseAmount * avgPct) / 100) * 100) / 100
+export function calculateEstimatedDailyEarnings(baseAmount: number, minPct?: number, maxPct?: number): number {
+  if (baseAmount <= 0) return 0
+  const pct = typeof minPct === "number" && typeof maxPct === "number" ? (minPct + maxPct) / 2 : 2.5
+  return Math.round(((baseAmount * (pct || 2.5)) / 100) * 100) / 100
 }
 
 export function calculateROIProgress(earnedTotal: number, depositTotal: number, roiCap: number): number {

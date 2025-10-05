@@ -12,6 +12,6 @@
     "emitDeclarationOnly": false,
     "declaration": false
   },
-  "include": ["scripts/seed-database.ts", "lib/mongodb.ts", "models/**/*.ts"],
+  "include": ["scripts/**/*.ts", "lib/mongodb.ts", "lib/utils/**/*.ts", "models/**/*.ts"],
   "exclude": ["node_modules"]
 }

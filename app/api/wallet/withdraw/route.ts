@@ -7,6 +7,7 @@ import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
 import { getUserFromRequest } from "@/lib/auth"
 import { withdrawSchema } from "@/lib/validations/wallet"
+import { getWithdrawableBalance } from "@/lib/utils/locked-capital"
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,12 +52,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check available balance
-    if (validatedData.amount > balanceDoc.current) {
+    const withdrawableBalance = getWithdrawableBalance(balanceDoc, new Date())
+
+    // Check available balance (withdrawable earnings)
+    if (validatedData.amount > withdrawableBalance) {
       return NextResponse.json(
         {
-          error: "Insufficient balance",
-          availableBalance: balanceDoc.current,
+          error: "Insufficient withdrawable balance",
+          availableBalance: withdrawableBalance,
           requestedAmount: validatedData.amount,
         },
         { status: 400 },

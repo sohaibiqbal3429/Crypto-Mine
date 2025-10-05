@@ -1,5 +1,7 @@
 import mongoose, { Schema, type Document } from "mongoose"
 
+import { createModelProxy } from "@/lib/in-memory/model-factory"
+
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId
   kind:
@@ -48,4 +50,4 @@ const NotificationSchema = new Schema<INotification>(
 NotificationSchema.index({ userId: 1, createdAt: -1 })
 NotificationSchema.index({ userId: 1, read: 1 })
 
-export default mongoose.models.Notification || mongoose.model<INotification>("Notification", NotificationSchema)
+export default createModelProxy<INotification>("Notification", NotificationSchema)

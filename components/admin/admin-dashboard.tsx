@@ -10,15 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  Bell,
-  Clock,
-  DollarSign,
-  Loader2,
-  RefreshCw,
-  SunMedium,
-  Users,
-} from "lucide-react"
+import { NotificationBell } from "@/components/notifications/notification-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { Clock, DollarSign, Loader2, RefreshCw, Users } from "lucide-react"
 import type {
   AdminStats,
   AdminSessionUser,
@@ -50,7 +44,8 @@ export function AdminDashboard({
   initialStats,
   initialError = null,
 }: AdminDashboardProps) {
-  const PAGE_SIZE = 20
+  const TRANSACTION_PAGE_SIZE = 20
+  const USER_PAGE_SIZE = 100
   const [user, setUser] = useState(initialUser)
   const [transactions, setTransactions] = useState(initialTransactions)
   const [users, setUsers] = useState(initialUsers)
@@ -66,14 +61,14 @@ export function AdminDashboard({
   const [userSearch, setUserSearch] = useState("")
   const [transactionPagination, setTransactionPagination] = useState({
     page: 1,
-    pages: Math.max(1, Math.ceil(initialTransactions.length / PAGE_SIZE) || 1),
-    limit: PAGE_SIZE,
+    pages: Math.max(1, Math.ceil(initialTransactions.length / TRANSACTION_PAGE_SIZE) || 1),
+    limit: TRANSACTION_PAGE_SIZE,
     total: initialTransactions.length,
   })
   const [userPagination, setUserPagination] = useState({
     page: 1,
-    pages: Math.max(1, Math.ceil(initialUsers.length / PAGE_SIZE) || 1),
-    limit: PAGE_SIZE,
+    pages: Math.max(1, Math.ceil(initialUsers.length / USER_PAGE_SIZE) || 1),
+    limit: USER_PAGE_SIZE,
     total: initialUsers.length,
   })
 
@@ -99,7 +94,7 @@ export function AdminDashboard({
       const nextUserPage = userPage ?? userPagination.page
 
       transactionParams.set("page", nextTransactionPage.toString())
-      transactionParams.set("limit", PAGE_SIZE.toString())
+      transactionParams.set("limit", TRANSACTION_PAGE_SIZE.toString())
       if (transactionFilters.type !== "all") {
         transactionParams.set("type", transactionFilters.type)
       }
@@ -109,7 +104,7 @@ export function AdminDashboard({
 
       const userParams = new URLSearchParams()
       userParams.set("page", nextUserPage.toString())
-      userParams.set("limit", PAGE_SIZE.toString())
+      userParams.set("limit", USER_PAGE_SIZE.toString())
       const sanitizedSearch = userSearch.trim()
       if (sanitizedSearch.length > 0) {
         userParams.set("search", sanitizedSearch)
@@ -146,7 +141,7 @@ export function AdminDashboard({
         setTransactionPagination({
           page: Math.max(1, page || nextTransactionPage),
           pages: Math.max(1, pages || 1),
-          limit: limit || PAGE_SIZE,
+          limit: limit || TRANSACTION_PAGE_SIZE,
           total: total || 0,
         })
       }
@@ -155,7 +150,7 @@ export function AdminDashboard({
         setUserPagination({
           page: Math.max(1, page || nextUserPage),
           pages: Math.max(1, pages || 1),
-          limit: limit || PAGE_SIZE,
+          limit: limit || USER_PAGE_SIZE,
           total: total || 0,
         })
       }
@@ -195,25 +190,10 @@ export function AdminDashboard({
               <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
             </div>
 
-            <div className="flex flex-col items-end gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="relative flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground">
-                    10
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted"
-                  aria-label="Toggle theme"
-                >
-                  <SunMedium className="h-5 w-5" />
-                </button>
+                <NotificationBell />
+                <ThemeToggle />
               </div>
 
               <Button

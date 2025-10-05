@@ -10,7 +10,8 @@ import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { depositSchema } from "@/lib/validations/wallet"
-import { calculateUserLevel, processReferralCommission } from "@/lib/utils/commission"
+import { applyDepositRewards } from "@/lib/utils/commission"
+import { resolveCapitalLockWindow } from "@/lib/utils/locked-capital"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
@@ -160,6 +161,7 @@ export async function submitDeposit(input: DepositSubmissionInput) {
 
 
   if (isFakeDeposit) {
+    const { lockStart, lockEnd } = resolveCapitalLockWindow(settings)
     const transaction = await Transaction.create({
       userId: input.userId,
       type: "deposit",
@@ -174,6 +176,11 @@ export async function submitDeposit(input: DepositSubmissionInput) {
         isFakeDeposit: true,
         exchangePlatform: parsed.data.exchangePlatform ?? null,
         ...(receiptResult ? { receipt: receiptResult.meta } : {}),
+        lock: {
+          amount: FAKE_DEPOSIT_AMOUNT,
+          lockStart,
+          lockEnd,
+        },
       },
     })
 
@@ -190,26 +197,70 @@ export async function submitDeposit(input: DepositSubmissionInput) {
             totalBalance: FAKE_DEPOSIT_AMOUNT,
             lockedCapital: FAKE_DEPOSIT_AMOUNT,
           },
+          $push: {
+            lockedCapitalLots: {
+              amount: FAKE_DEPOSIT_AMOUNT,
+              lockStart,
+              lockEnd,
+              sourceTransactionId: transaction._id,
+            },
+          },
+          $setOnInsert: {
+            totalEarning: 0,
+            staked: 0,
+            pendingWithdraw: 0,
+            teamRewardsAvailable: 0,
+            teamRewardsClaimed: 0,
+          },
         },
         { upsert: true },
       ),
     ])
 
-    await processReferralCommission(input.userId, FAKE_DEPOSIT_AMOUNT)
-    await calculateUserLevel(input.userId)
+    const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
+      depositTransactionId: transaction._id.toString(),
+      depositAt: transaction.createdAt,
+    })
+
+    if (rewardOutcome.activated) {
+      await Transaction.updateOne(
+        { _id: transaction._id },
+        { $set: { "meta.qualifiesForActivation": true } },
+      )
+
+      transaction.meta = {
+        ...transaction.meta,
+        qualifiesForActivation: true,
+      }
+    }
+
+    const notificationBodyParts = [
+      `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
+    ]
+
+    if (rewardOutcome.activated) {
+      notificationBodyParts.push(
+        `You've now satisfied the qualifying deposit requirement of $${rewardOutcome.activationThreshold.toFixed(
+          2,
+        )} and your account is fully activated.`,
+      )
+    }
 
     await Notification.create({
       userId: input.userId,
       kind: "deposit-approved",
       title: "Deposit Approved",
-      body: `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
+      body: notificationBodyParts.join(" "),
     })
 
     return {
       status: "approved" as const,
       transaction,
       receiptMeta: receiptResult?.meta,
-      message: "Fake deposit processed successfully!",
+      message: rewardOutcome.activated
+        ? "Deposit processed and account activated!"
+        : "Fake deposit processed successfully!",
+      activated: rewardOutcome.activated,
     }
   }
 
@@ -234,5 +285,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     transaction,
     receiptMeta: receiptResult?.meta,
     message: `Deposit submitted for review (${walletOption.network})`,
+    activated: false,
   }
 }
