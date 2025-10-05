@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 
 import { Sidebar } from "@/components/layout/sidebar"
 import { Badge } from "@/components/ui/badge"
@@ -86,31 +86,27 @@ const MILLISECONDS_IN_MINUTE = 60 * MILLISECONDS_IN_SECOND
 const MILLISECONDS_IN_HOUR = 60 * MILLISECONDS_IN_MINUTE
 const MILLISECONDS_IN_DAY = 24 * MILLISECONDS_IN_HOUR
 
+const DEFAULT_LAUNCH_TIMESTAMP = Date.UTC(2025, 0, 15, 0, 0, 0)
+const ENVIRONMENT_LAUNCH_TIMESTAMP = Number(process.env.NEXT_PUBLIC_COIN_LAUNCH_TIMESTAMP ?? 0)
+const COIN_LAUNCH_TIMESTAMP =
+  Number.isFinite(ENVIRONMENT_LAUNCH_TIMESTAMP) && ENVIRONMENT_LAUNCH_TIMESTAMP > 0
+    ? ENVIRONMENT_LAUNCH_TIMESTAMP
+    : DEFAULT_LAUNCH_TIMESTAMP
+
+function calculateTimeLeft(target: number): TimeLeft {
+  const difference = Math.max(target - Date.now(), 0)
+
+  const days = Math.floor(difference / MILLISECONDS_IN_DAY)
+  const hours = Math.floor((difference % MILLISECONDS_IN_DAY) / MILLISECONDS_IN_HOUR)
+  const minutes = Math.floor((difference % MILLISECONDS_IN_HOUR) / MILLISECONDS_IN_MINUTE)
+  const seconds = Math.floor((difference % MILLISECONDS_IN_MINUTE) / MILLISECONDS_IN_SECOND)
+
+  return { days, hours, minutes, seconds }
+}
+
 export default function CoinsPage() {
   const [user, setUser] = useState<any>(null)
-  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => ({
-    days: 90,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-  }))
-
-  const launchTargetRef = useRef<number>()
-
-  if (!launchTargetRef.current) {
-    launchTargetRef.current = Date.now() + 90 * MILLISECONDS_IN_DAY
-  }
-
-  const calculateTimeLeft = useCallback((target: number): TimeLeft => {
-    const difference = Math.max(target - Date.now(), 0)
-
-    const days = Math.floor(difference / MILLISECONDS_IN_DAY)
-    const hours = Math.floor((difference % MILLISECONDS_IN_DAY) / MILLISECONDS_IN_HOUR)
-    const minutes = Math.floor((difference % MILLISECONDS_IN_HOUR) / MILLISECONDS_IN_MINUTE)
-    const seconds = Math.floor((difference % MILLISECONDS_IN_MINUTE) / MILLISECONDS_IN_SECOND)
-
-    return { days, hours, minutes, seconds }
-  }, [])
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => calculateTimeLeft(COIN_LAUNCH_TIMESTAMP))
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -130,15 +126,14 @@ export default function CoinsPage() {
 
   useEffect(() => {
     const updateCountdown = () => {
-      if (!launchTargetRef.current) return
-      setTimeLeft(calculateTimeLeft(launchTargetRef.current))
+      setTimeLeft(calculateTimeLeft(COIN_LAUNCH_TIMESTAMP))
     }
 
     updateCountdown()
     const timer = setInterval(updateCountdown, 1000)
 
     return () => clearInterval(timer)
-  }, [calculateTimeLeft])
+  }, [])
 
   const handleJoinWaitlist = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
