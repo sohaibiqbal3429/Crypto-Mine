@@ -190,7 +190,12 @@ export function AdminDashboard({
               <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
             </div>
 
-            
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-3">
+                <NotificationBell />
+                <ThemeToggle />
+              </div>
+
               <Button
                 onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
                 variant="secondary"
