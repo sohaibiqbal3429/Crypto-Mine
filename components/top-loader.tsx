@@ -1,11 +1,12 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-
 import Router from "next/router"
 
 const MIN_PROGRESS = 0.08
 const INCREMENT_INTERVAL = 300
+
+// From codex/implement-countdown-timer-logic-9ivujd
 const MIN_VISIBLE_DURATION = 400
 const RESET_FADE_DURATION = 260
 
@@ -15,6 +16,8 @@ export function TopLoader() {
   const intervalRef = useRef<number | null>(null)
   const barRef = useRef<HTMLDivElement | null>(null)
   const originalFetch = useRef<typeof window.fetch | null>(null)
+
+  // From codex/implement-countdown-timer-logic-9ivujd
   const settleTimeoutRef = useRef<number | null>(null)
   const fadeTimeoutRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
@@ -24,6 +27,7 @@ export function TopLoader() {
   }, [])
 
   useEffect(() => {
+    // From codex/implement-countdown-timer-logic-9ivujd
     const clearTimer = (ref: { current: number | null }) => {
       if (ref.current) {
         window.clearTimeout(ref.current)
@@ -37,6 +41,7 @@ export function TopLoader() {
     }
 
     const start = () => {
+      // codex extras: cancel any pending settle/fade timers
       clearTimer(settleTimeoutRef)
       clearTimer(fadeTimeoutRef)
 
@@ -68,11 +73,13 @@ export function TopLoader() {
 
           if (barRef.current) {
             const currentBar = barRef.current
+            // fade to opacity 0 on next frame to allow CSS transition
             requestAnimationFrame(() => {
               currentBar.style.opacity = "0"
             })
           }
 
+          // after fade, hide & reset transform
           fadeTimeoutRef.current = window.setTimeout(() => {
             if (activeRequests.current > 0) return
             set(0)
@@ -83,6 +90,7 @@ export function TopLoader() {
           }, RESET_FADE_DURATION)
         }
 
+        // ensure bar stays visible for at least MIN_VISIBLE_DURATION
         const elapsed = performance.now() - startTimeRef.current
         if (elapsed < MIN_VISIBLE_DURATION) {
           settleTimeoutRef.current = window.setTimeout(() => {
@@ -107,7 +115,8 @@ export function TopLoader() {
       window.fetch = async (...args) => {
         start()
         try {
-          return await originalFetch.current!(...args)
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          return await originalFetch.current!(...args as Parameters<typeof window.fetch>)
         } finally {
           done()
         }

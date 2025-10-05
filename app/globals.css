@@ -164,6 +164,7 @@ body {
   transform: none;
 }
 
+/* from codex branch – keep richer transitions */
 :where([data-slot$="content"], [data-slot$="overlay"]) {
   transition: opacity var(--t-med) var(--ease), transform var(--t-med) var(--ease);
   will-change: opacity, transform;
@@ -231,9 +232,7 @@ body {
 }
 
 /* Enhanced scrollbar with crypto theme colors */
-::-webkit-scrollbar {
-  width: 8px;
-}
+::-webkit-scrollbar { width: 8px; }
 
 ::-webkit-scrollbar-track {
   background: hsl(var(--muted));
@@ -252,34 +251,17 @@ body {
 
 /* Added crypto-themed animations and effects */
 @keyframes crypto-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
-  }
-  50% {
-    box-shadow: 0 0 30px hsl(var(--primary) / 0.5), 0 0 40px hsl(var(--accent) / 0.3);
-  }
+  0%, 100% { box-shadow: 0 0 20px hsl(var(--primary) / 0.3); }
+  50% { box-shadow: 0 0 30px hsl(var(--primary) / 0.5), 0 0 40px hsl(var(--accent) / 0.3); }
 }
 
 @keyframes mining-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
 }
 
-.crypto-glow {
-  animation: crypto-glow 3s ease-in-out infinite;
-}
-
-.mining-pulse {
-  animation: mining-pulse 2s ease-in-out infinite;
-}
+.crypto-glow { animation: crypto-glow 3s ease-in-out infinite; }
+.mining-pulse { animation: mining-pulse 2s ease-in-out infinite; }
 
 /* Enhanced card hover effects for better interactivity */
 .crypto-card {
