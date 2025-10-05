@@ -2,8 +2,21 @@ import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import CommissionRule from "@/models/CommissionRule"
-import Settings from "@/models/Settings"
+import Settings, { type ISettings } from "@/models/Settings"
 import Notification from "@/models/Notification"
+
+const MIN_DEPOSIT_FOR_REWARDS = 80
+const REFERRAL_LEVEL_COMMISSIONS = [0.05, 0.04, 0.03, 0.02, 0.01]
+const DEPOSIT_COMMISSION_PCT = 0.02
+
+function resolveMinRewardDeposit(settings?: ISettings | null): number {
+  const configuredMin = settings?.gating?.activeMinDeposit ?? MIN_DEPOSIT_FOR_REWARDS
+  return Math.max(configuredMin, MIN_DEPOSIT_FOR_REWARDS)
+}
+
+function roundCurrency(amount: number): number {
+  return Math.round(amount * 100) / 100
+}
 
 export async function calculateUserLevel(userId: string): Promise<number> {
   const [user, settings, directReferrals] = await Promise.all([
@@ -63,94 +76,166 @@ export async function calculateUserLevel(userId: string): Promise<number> {
   return userLevel
 }
 
-export async function processReferralCommission(referredUserId: string, depositAmount: number) {
-  const referredUser = await User.findById(referredUserId)
-  if (!referredUser?.referredBy) return
+interface ReferralChainEntry {
+  level: number
+  user: any
+}
 
-  const referrer = await User.findById(referredUser.referredBy)
-  if (!referrer) return
+async function buildReferralChain(startingUser: any, maxLevels: number): Promise<ReferralChainEntry[]> {
+  const chain: ReferralChainEntry[] = []
+  let current: any = startingUser
 
-  const settings = await Settings.findOne()
-  if (!settings) return
+  for (let level = 1; level <= maxLevels; level++) {
+    const sponsorId = current?.referredBy
+    if (!sponsorId) {
+      break
+    }
 
-  const { startAtDeposit, baseDirectPct, highTierPct, highTierStartAt } = settings.commission
+    const sponsor = await User.findById(sponsorId)
+    if (!sponsor) {
+      break
+    }
 
-  // Check if deposit meets minimum threshold for commission
-  if (depositAmount < startAtDeposit) return
-
-  // Calculate referrer's current level
-  const referrerLevel = await calculateUserLevel(referrer._id.toString())
-
-  // Determine commission percentage based on deposit tiers
-  const highTierThreshold = highTierStartAt ?? Number.POSITIVE_INFINITY
-  const effectiveHighTierPct = highTierPct ?? baseDirectPct
-  const commissionPct = depositAmount >= highTierThreshold ? effectiveHighTierPct : baseDirectPct
-
-  // Calculate commission
-  const commissionAmount = (depositAmount * commissionPct) / 100
-
-  // Credit commission to referrer
-  await Balance.updateOne(
-    { userId: referrer._id },
-    {
-      $inc: {
-        current: commissionAmount,
-        totalBalance: commissionAmount,
-        totalEarning: commissionAmount,
-      },
-    },
-  )
-
-  // Create commission transaction
-  await Transaction.create({
-    userId: referrer._id,
-    type: "commission",
-    amount: commissionAmount,
-    meta: {
-      source: "referral",
-      referredUserId,
-      depositAmount,
-      commissionPct,
-      level: referrerLevel,
-    },
-  })
-
-  // Create notification for referrer
-  await Notification.create({
-    userId: referrer._id,
-    kind: "referral-joined",
-    title: "Referral Commission Earned",
-    body: `You earned $${commissionAmount.toFixed(2)} commission from ${referredUser.name}'s deposit`,
-  })
-
-  // Check for joining bonus
-  if (depositAmount >= settings.joiningBonus.threshold) {
-    const bonusAmount = (depositAmount * settings.joiningBonus.pct) / 100
-
-    // Credit bonus to referred user
-    await Balance.updateOne(
-      { userId: referredUserId },
-      {
-        $inc: {
-          current: bonusAmount,
-          totalBalance: bonusAmount,
-          totalEarning: bonusAmount,
-        },
-      },
-    )
-
-    // Create bonus transaction
-    await Transaction.create({
-      userId: referredUserId,
-      type: "bonus",
-      amount: bonusAmount,
-      meta: {
-        source: "joining_bonus",
-        depositAmount,
-        bonusPct: settings.joiningBonus.pct,
-      },
-    })
+    chain.push({ level, user: sponsor })
+    current = sponsor
   }
+
+  return chain
+}
+
+export async function processReferralCommission(
+  referredUserId: string,
+  depositAmount: number,
+  settings?: ISettings | null,
+  minRewardDeposit?: number,
+) {
+  const referredUser = await User.findById(referredUserId)
+  if (!referredUser) return
+
+  const resolvedSettings = settings ?? (await Settings.findOne())
+  const requiredDeposit = minRewardDeposit ?? resolveMinRewardDeposit(resolvedSettings)
+
+  if (depositAmount < requiredDeposit) return
+
+  const referralChain = await buildReferralChain(referredUser, REFERRAL_LEVEL_COMMISSIONS.length)
+  if (referralChain.length === 0) return
+
+  for (const { level, user } of referralChain) {
+    const pct = REFERRAL_LEVEL_COMMISSIONS[level - 1]
+    const rewardAmount = roundCurrency(depositAmount * pct)
+    if (rewardAmount <= 0) continue
+
+    if (level === 1) {
+      const referrerLevel = await calculateUserLevel(user._id.toString())
+
+      await Balance.updateOne(
+        { userId: user._id },
+        {
+          $inc: {
+            current: rewardAmount,
+            totalBalance: rewardAmount,
+            totalEarning: rewardAmount,
+          },
+        },
+        { upsert: true },
+      )
+
+      await Transaction.create({
+        userId: user._id,
+        type: "commission",
+        amount: rewardAmount,
+        meta: {
+          source: "direct_referral",
+          referredUserId,
+          depositAmount,
+          commissionPct: pct * 100,
+          level: referrerLevel,
+        },
+      })
+
+      await Notification.create({
+        userId: user._id,
+        kind: "referral-joined",
+        title: "Referral Commission Earned",
+        body: `You earned $${rewardAmount.toFixed(2)} commission from ${referredUser.name}'s deposit`,
+      })
+    } else {
+      await Balance.updateOne(
+        { userId: user._id },
+        {
+          $inc: {
+            teamRewardsAvailable: rewardAmount,
+          },
+        },
+        { upsert: true },
+      )
+    }
+  }
+
+  if (resolvedSettings && depositAmount >= resolvedSettings.joiningBonus.threshold) {
+    const bonusAmount = roundCurrency((depositAmount * resolvedSettings.joiningBonus.pct) / 100)
+    if (bonusAmount > 0) {
+      await Balance.updateOne(
+        { userId: referredUserId },
+        {
+          $inc: {
+            current: bonusAmount,
+            totalBalance: bonusAmount,
+            totalEarning: bonusAmount,
+          },
+        },
+        { upsert: true },
+      )
+
+      await Transaction.create({
+        userId: referredUserId,
+        type: "bonus",
+        amount: bonusAmount,
+        meta: {
+          source: "joining_bonus",
+          depositAmount,
+          bonusPct: resolvedSettings.joiningBonus.pct,
+        },
+      })
+    }
+  }
+}
+
+export async function applyDepositRewards(userId: string, depositAmount: number) {
+  const settings = await Settings.findOne()
+  const requiredDeposit = resolveMinRewardDeposit(settings)
+
+  if (depositAmount >= requiredDeposit) {
+    const depositCommission = roundCurrency(depositAmount * DEPOSIT_COMMISSION_PCT)
+
+    if (depositCommission > 0) {
+      await Balance.updateOne(
+        { userId },
+        {
+          $inc: {
+            current: depositCommission,
+            totalBalance: depositCommission,
+            totalEarning: depositCommission,
+          },
+        },
+        { upsert: true },
+      )
+
+      await Transaction.create({
+        userId,
+        type: "commission",
+        amount: depositCommission,
+        meta: {
+          source: "deposit_commission",
+          depositAmount,
+          commissionPct: DEPOSIT_COMMISSION_PCT * 100,
+        },
+      })
+    }
+  }
+
+  await processReferralCommission(userId, depositAmount, settings, requiredDeposit)
+  await calculateUserLevel(userId)
 }
 
 export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> {

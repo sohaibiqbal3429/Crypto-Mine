@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Wallet, DollarSign, Users, ArrowDownToLine, Clock, Trophy } from "lucide-react"
+import { TrendingUp, Wallet, DollarSign, ArrowDownToLine, Clock, Trophy } from "lucide-react"
 
 interface KPICardsProps {
   kpis: {
@@ -41,13 +41,6 @@ export function KPICards({ kpis }: KPICardsProps) {
       bgColor: "bg-amber-50",
     },
     {
-      title: "Active Members",
-      value: kpis.activeMembers.toString(),
-      icon: Users,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
       title: "Total Withdraw",
       value: formatCurrency(kpis.totalWithdraw),
       icon: ArrowDownToLine,
@@ -71,7 +64,7 @@ export function KPICards({ kpis }: KPICardsProps) {
   ]
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
       {cards.map((card, index) => (
         <Card key={index} className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
