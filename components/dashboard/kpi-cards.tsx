@@ -55,7 +55,7 @@ export function KPICards({ kpis }: KPICardsProps) {
       bgColor: "bg-orange-50",
     },
     {
-      title: "Team Reward",
+      title: "Daily Team Reward",
       value: formatCurrency(kpis.teamReward),
       icon: Trophy,
       color: "text-indigo-600",
