@@ -43,24 +43,24 @@ export const STAKING_CONFIG = {
 export const LEVEL_CONFIG = {
   requirements: [
     { level: 0, depositRequired: 0, activeMembersRequired: 0 },
-    { level: 1, depositRequired: 30, activeMembersRequired: 5 },
-    { level: 2, depositRequired: 30, activeMembersRequired: 10 },
-    { level: 3, depositRequired: 30, activeMembersRequired: 15 },
-    { level: 4, depositRequired: 30, activeMembersRequired: 30 },
-    { level: 5, depositRequired: 30, activeMembersRequired: 43 },
+    { level: 1, depositRequired: 0, activeMembersRequired: 5 },
+    { level: 2, depositRequired: 0, activeMembersRequired: 10 },
+    { level: 3, depositRequired: 0, activeMembersRequired: 15 },
+    { level: 4, depositRequired: 0, activeMembersRequired: 30 },
+    { level: 5, depositRequired: 0, activeMembersRequired: 43 },
   ],
   perks: {
     directCommission: {
-      1: "7% base commission",
-      2: "8% direct commission",
-      3: "9% direct commission",
-      4: "9% direct commission + 1% daily team reward",
-      5: "Monthly bonus & salary eligibility once targets are met",
+      1: "7% direct commission + 1% Team A daily profit share",
+      2: "8% direct commission + 1% daily profit share across Teams A–C",
+      3: "8% direct commission with 8% team commission + 2% team reward across Teams A–D",
+      4: "9% direct commission + 2% team reward; $200 bonus when monthly direct sales reach 2,200 USDT",
+      5: "10% direct commission + 2% team reward; $400 monthly salary when direct sales reach 4,500 USDT",
     },
     salaryRequirement: {
-      activeMembers: 35,
-      directSales: 7000,
-      payout: 500,
+      activeMembers: 43,
+      directSales: 4500,
+      payout: 400,
     },
   },
 } as const

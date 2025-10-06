@@ -22,9 +22,7 @@ export async function GET(request: NextRequest) {
       calculateUserLevel(userPayload.userId),
       getTeamStats(userPayload.userId),
       CommissionRule.find().sort({ level: 1 }),
-      User.findById(userPayload.userId)
-        .select("directActiveCount totalActiveDirects lastLevelUpAt level")
-        .lean(),
+      User.findById(userPayload.userId),
     ])
 
     // Calculate progress to next level

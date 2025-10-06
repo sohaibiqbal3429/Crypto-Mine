@@ -239,6 +239,18 @@ class InMemoryCollection<T extends InMemoryDocument> {
     this.documents.splice(index, 1)
     return { acknowledged: true, deletedCount: 1 }
   }
+
+  async deleteMany(filter: QueryFilter = {}): Promise<{ acknowledged: boolean; deletedCount: number }> {
+    let deleted = 0
+    for (let index = this.documents.length - 1; index >= 0; index -= 1) {
+      if (matchesFilter(this.documents[index], filter)) {
+        this.documents.splice(index, 1)
+        deleted += 1
+      }
+    }
+
+    return { acknowledged: true, deletedCount: deleted }
+  }
 }
 
 class InMemoryDatabase {
@@ -257,6 +269,7 @@ class InMemoryDatabase {
     this.collections.set("transactions", new InMemoryCollection("transactions", createTransactions(users)))
     this.collections.set("notifications", new InMemoryCollection("notifications", createNotifications(users)))
     this.collections.set("walletAddresses", new InMemoryCollection("walletAddresses", createWalletAddresses(users)))
+    this.collections.set("levelHistories", new InMemoryCollection("levelHistories", []))
 
     this.initialized = true
   }
@@ -295,6 +308,7 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "Transaction", collection: db.getCollection("transactions") },
     { name: "Notification", collection: db.getCollection("notifications") },
     { name: "WalletAddress", collection: db.getCollection("walletAddresses") },
+    { name: "LevelHistory", collection: db.getCollection("levelHistories") },
   ] as const
 
   for (const { name, collection } of collections) {
@@ -313,6 +327,7 @@ function createModelProxy<T extends InMemoryDocument>(collection: InMemoryCollec
     updateOne: (filter: QueryFilter, update: UpdateSpec) => collection.updateOne(filter, update),
     updateMany: (filter: QueryFilter, update: UpdateSpec) => collection.updateMany(filter, update),
     deleteOne: (filter: QueryFilter) => collection.deleteOne(filter),
+    deleteMany: (filter: QueryFilter = {}) => collection.deleteMany(filter),
     findByIdAndUpdate: async (id: string, update: UpdateSpec) => {
       await collection.updateOne({ _id: id }, update)
       return collection.findById(id)
@@ -1069,40 +1084,40 @@ function createCommissionRules(): InMemoryDocument[] {
       _id: generateObjectId(),
       level: 4,
       directPct: 9,
-      teamDailyPct: 2,
-      teamRewardPct: 0,
-      activeMin: 23,
+      teamDailyPct: 0,
+      teamRewardPct: 2,
+      activeMin: 30,
       teamOverrides: [
         {
           team: "A",
           depth: 1,
           pct: 2,
-          kind: "team_commission",
-          payout: "commission",
+          kind: "team_reward",
+          payout: "reward",
           appliesTo: "profit",
         },
         {
           team: "B",
           depth: 2,
           pct: 2,
-          kind: "team_commission",
-          payout: "commission",
+          kind: "team_reward",
+          payout: "reward",
           appliesTo: "profit",
         },
         {
           team: "C",
           depth: 3,
           pct: 2,
-          kind: "team_commission",
-          payout: "commission",
+          kind: "team_reward",
+          payout: "reward",
           appliesTo: "profit",
         },
         {
           team: "D",
           depth: 4,
           pct: 2,
-          kind: "team_commission",
-          payout: "commission",
+          kind: "team_reward",
+          payout: "reward",
           appliesTo: "profit",
         },
       ],
@@ -1119,7 +1134,7 @@ function createCommissionRules(): InMemoryDocument[] {
       directPct: 10,
       teamDailyPct: 0,
       teamRewardPct: 2,
-      activeMin: 30,
+      activeMin: 43,
       teamOverrides: [
         {
           team: "A",

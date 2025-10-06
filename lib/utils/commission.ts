@@ -46,6 +46,22 @@ function roundCurrency(amount: number): number {
   return Math.round(amount * 100) / 100
 }
 
+function toPlainObject<T = any>(doc: any): T {
+  if (!doc) {
+    return doc as T
+  }
+
+  if (typeof doc.toObject === "function") {
+    return doc.toObject() as T
+  }
+
+  if (typeof doc === "object") {
+    return { ...(doc as Record<string, unknown>) } as T
+  }
+
+  return doc as T
+}
+
 interface QualificationEvent {
   achievedAt: Date
 }
@@ -252,17 +268,13 @@ export async function calculateUserLevel(
   userId: string,
   options: CalculateUserLevelOptions = {},
 ): Promise<number> {
-  const [user, settings, directReferrals] = await Promise.all([
-    User.findById(userId).select(
-      "level depositTotal directActiveCount totalActiveDirects lastLevelUpAt",
-    ),
-    Settings.findOne(),
+  const [user, directReferrals] = await Promise.all([
+    User.findById(userId),
     User.find({ referredBy: userId }).select("qualified qualifiedAt createdAt updatedAt"),
   ])
 
   if (!user) return 0
 
-  const minDeposit = settings?.gating?.minDeposit ?? 30
   const shouldPersist = options.persist ?? true
   const shouldNotify = options.notify ?? true
 
@@ -289,13 +301,10 @@ export async function calculateUserLevel(
   const { level, progressTowardNext, totalActiveDirects, achievements } =
     computeLevelProgress(qualificationEvents)
 
-  const meetsDepositRequirement = user.depositTotal >= minDeposit
-  const resolvedLevel = meetsDepositRequirement ? level : 0
-  const resolvedProgress = meetsDepositRequirement ? progressTowardNext : 0
+  const resolvedLevel = level
+  const resolvedProgress = progressTowardNext
   const resolvedLastLevelUpAt =
-    meetsDepositRequirement && achievements.length > 0
-      ? achievements[achievements.length - 1].achievedAt
-      : null
+    achievements.length > 0 ? achievements[achievements.length - 1].achievedAt : null
 
   const updates: Record<string, unknown> = {
     level: resolvedLevel,
@@ -313,16 +322,16 @@ export async function calculateUserLevel(
       )
     }
 
-    const validAchievements = meetsDepositRequirement ? achievements : []
+    if (typeof (LevelHistory as any)?.deleteMany === "function") {
+      await LevelHistory.deleteMany({
+        userId,
+        level: { $gt: resolvedLevel },
+      })
+    }
 
-    await LevelHistory.deleteMany({
-      userId,
-      level: { $gt: resolvedLevel },
-    })
-
-    if (validAchievements.length > 0) {
+    if (achievements.length > 0 && typeof (LevelHistory as any)?.updateOne === "function") {
       await Promise.all(
-        validAchievements.map((achievement) =>
+        achievements.map((achievement) =>
           LevelHistory.updateOne(
             { userId, level: achievement.level },
             { $set: { achievedAt: achievement.achievedAt } },
@@ -330,7 +339,7 @@ export async function calculateUserLevel(
           ),
         ),
       )
-    } else {
+    } else if (typeof (LevelHistory as any)?.deleteMany === "function") {
       await LevelHistory.deleteMany({ userId })
     }
 
@@ -803,8 +812,16 @@ export async function policyApplyRetroactiveAdjustments(
     const userId = deposit.userId.toString()
     let referredUser = userCache.get(userId)
     if (!referredUser) {
-      referredUser = await User.findById(userId).select("_id referredBy name")
-      userCache.set(userId, referredUser)
+      const fetchedUser = await User.findById(userId)
+      if (fetchedUser) {
+        const plainUser = toPlainObject(fetchedUser)
+        referredUser = {
+          _id: plainUser._id,
+          referredBy: plainUser.referredBy,
+          name: plainUser.name,
+        }
+        userCache.set(userId, referredUser)
+      }
     }
     if (!referredUser) continue
 
@@ -1032,7 +1049,7 @@ export async function applyDepositRewards(
 ) {
   const [settings, userDoc] = await Promise.all([
     Settings.findOne(),
-    User.findById(userId).select("depositTotal isActive qualified qualifiedAt referredBy"),
+    User.findById(userId),
   ])
   const requiredDeposit = resolveMinRewardDeposit(settings)
   const qualifiesForActivation = Boolean(
@@ -1146,12 +1163,23 @@ export async function applyDepositRewards(
 }
 
 export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> {
-  const user = await User.findById(userId).select(
-    "name email referralCode level depositTotal isActive qualified createdAt",
-  )
-  if (!user) return null
+  const userDoc = await User.findById(userId)
+  if (!userDoc) return null
 
-  if (maxDepth <= 0) return user
+  const plainUser = toPlainObject<any>(userDoc)
+  const baseUser: any = {
+    _id: plainUser._id,
+    name: plainUser.name,
+    email: plainUser.email,
+    referralCode: plainUser.referralCode,
+    level: plainUser.level,
+    depositTotal: plainUser.depositTotal,
+    isActive: plainUser.isActive,
+    qualified: plainUser.qualified,
+    createdAt: plainUser.createdAt,
+  }
+
+  if (maxDepth <= 0) return baseUser
 
   const directReferrals = await User.find({ referredBy: userId })
     .select("name email referralCode level depositTotal isActive qualified createdAt")
@@ -1166,7 +1194,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
   }
 
   return {
-    ...user.toObject(),
+    ...baseUser,
     children,
     directCount: directReferrals.length,
     activeCount: directReferrals.filter((r) => Boolean(r.qualified)).length,

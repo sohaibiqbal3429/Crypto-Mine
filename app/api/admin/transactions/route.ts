@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     await dbConnect()
 
-    const adminUser = await User.findById(userPayload.userId).select("role")
+    const adminUser = await User.findById(userPayload.userId)
     if (!adminUser || adminUser.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
