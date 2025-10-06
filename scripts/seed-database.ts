@@ -297,7 +297,7 @@ export async function seedDatabase(): Promise<SeedResult> {
       directPct: 9,
       teamDailyPct: 2,
       teamRewardPct: 0,
-      activeMin: 23,
+      activeMin: 30,
       teamOverrides: [
         {
           team: "A",
@@ -342,7 +342,7 @@ export async function seedDatabase(): Promise<SeedResult> {
       directPct: 10,
       teamDailyPct: 0,
       teamRewardPct: 2,
-      activeMin: 30,
+      activeMin: 43,
       teamOverrides: [
         {
           team: "A",

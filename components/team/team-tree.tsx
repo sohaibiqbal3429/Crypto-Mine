@@ -13,6 +13,7 @@ interface TeamMember {
   level: number
   depositTotal: number
   isActive: boolean
+  qualified?: boolean
   createdAt: string
   children?: TeamMember[]
   directCount: number
@@ -60,7 +61,7 @@ export function TeamTree({ teamTree, maxDepth = 3, currentDepth = 0 }: TeamTreeP
                 </div>
                 <div className="flex items-center space-x-2">
                   <Badge variant={teamTree.level > 0 ? "default" : "secondary"}>Level {teamTree.level}</Badge>
-                  {teamTree.depositTotal >= 80 && (
+                  {teamTree.qualified && (
                     <Badge variant="outline" className="text-green-600 border-green-600">
                       Active
                     </Badge>

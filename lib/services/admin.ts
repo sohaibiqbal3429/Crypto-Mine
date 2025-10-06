@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User, { type IUser } from "@/models/User"
 import Balance, { type IBalance } from "@/models/Balance"
 import Transaction, { type ITransaction } from "@/models/Transaction"
+import LevelHistory from "@/models/LevelHistory"
 import type {
   AdminInitialData,
   AdminSessionUser,
@@ -75,6 +76,20 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     IBalance & { _id: any }
   >
 
+  const userIds = userDocs.map((user) => user._id.toString())
+
+  const levelHistoryDocs = await LevelHistory.find({ userId: { $in: userIds } })
+    .sort({ level: 1 })
+    .lean()
+
+  const levelHistoryByUser = new Map<string, { level: number; achievedAt: string }[]>()
+  for (const history of levelHistoryDocs) {
+    const userId = history.userId.toString()
+    const list = levelHistoryByUser.get(userId) ?? []
+    list.push({ level: history.level, achievedAt: toIsoString(history.achievedAt) })
+    levelHistoryByUser.set(userId, list)
+  }
+
   const balanceByUser = new Map<string, IBalance>()
   for (const balance of balanceDocs) {
     balanceByUser.set(balance.userId.toString(), balance)
@@ -89,6 +104,9 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
       referralCode: userDoc.referralCode ?? "",
       role: userDoc.role ?? "user",
       level: toNumber(userDoc.level),
+      directActiveCount: toNumber(userDoc.directActiveCount),
+      totalActiveDirects: toNumber(userDoc.totalActiveDirects),
+      lastLevelUpAt: userDoc.lastLevelUpAt ? toIsoString(userDoc.lastLevelUpAt) : null,
       depositTotal: toNumber(userDoc.depositTotal),
       withdrawTotal: toNumber(userDoc.withdrawTotal),
       roiEarnedTotal: toNumber(userDoc.roiEarnedTotal),
@@ -102,6 +120,7 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
         staked: toNumber(balanceDoc?.staked),
         pendingWithdraw: toNumber(balanceDoc?.pendingWithdraw),
       },
+      levelHistory: levelHistoryByUser.get(userDoc._id.toString()) ?? [],
     }
   })
 

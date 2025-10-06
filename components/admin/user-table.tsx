@@ -27,6 +27,9 @@ interface User {
   referralCode: string
   role: string
   level: number
+  directActiveCount: number
+  totalActiveDirects: number
+  lastLevelUpAt: string | null
   depositTotal: number
   withdrawTotal: number
   roiEarnedTotal: number
@@ -40,6 +43,7 @@ interface User {
     staked: number
     pendingWithdraw: number
   }
+  levelHistory?: { level: number; achievedAt: string }[]
 }
 
 interface PaginationMeta {
@@ -146,6 +150,7 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
                   <TableHead>Deposits</TableHead>
                   <TableHead>Current Balance</TableHead>
                   <TableHead>Total Earnings</TableHead>
+                  <TableHead>Progress</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -153,7 +158,7 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                       No users found for the current search.
                     </TableCell>
                   </TableRow>
@@ -173,6 +178,37 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
                       <TableCell className="font-mono">${user.depositTotal.toFixed(2)}</TableCell>
                       <TableCell className="font-mono">${user.balance.current.toFixed(2)}</TableCell>
                       <TableCell className="font-mono text-green-600">${user.balance.totalEarning.toFixed(2)}</TableCell>
+                      <TableCell>
+                        <div className="space-y-1 text-xs text-muted-foreground">
+                          <div className="flex items-center justify-between">
+                            <span>Direct cycle</span>
+                            <span className="font-semibold text-foreground">{user.directActiveCount}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Total qualified</span>
+                            <span className="font-semibold text-foreground">{user.totalActiveDirects}</span>
+                          </div>
+                          <div>
+                            <span className="block">Last level up:</span>
+                            <span className="font-semibold text-foreground">
+                              {user.lastLevelUpAt ? new Date(user.lastLevelUpAt).toLocaleString() : "—"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block">Level history:</span>
+                            <span className="font-semibold text-foreground">
+                              {user.levelHistory && user.levelHistory.length > 0
+                                ? user.levelHistory
+                                    .map(
+                                      (entry) =>
+                                        `L${entry.level}: ${new Date(entry.achievedAt).toLocaleDateString()}`,
+                                    )
+                                    .join(" • ")
+                                : "No records"}
+                            </span>
+                          </div>
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={user.isActive ? "default" : "secondary"}>
                           {user.isActive ? "Active" : "Inactive"}

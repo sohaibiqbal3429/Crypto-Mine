@@ -23,6 +23,11 @@ const UserSchema = new mongoose.Schema(
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
+    directActiveCount: { type: Number, default: 0 },
+    totalActiveDirects: { type: Number, default: 0 },
+    lastLevelUpAt: { type: Date, default: null },
+    qualified: { type: Boolean, default: false },
+    qualifiedAt: { type: Date, default: null },
     groups: {
       A: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       B: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
@@ -83,6 +88,8 @@ async function setupDatabase() {
         referralCode: "AAAAAA",
         role: "admin",
         isActive: true,
+        qualified: true,
+        qualifiedAt: new Date(),
       })
 
       console.log("✅ Initial admin user created:", initialUser._id)

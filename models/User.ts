@@ -17,6 +17,11 @@ export interface IUser extends Document {
   withdrawTotal: number
   roiEarnedTotal: number
   level: number
+  directActiveCount: number
+  totalActiveDirects: number
+  lastLevelUpAt?: Date | null
+  qualified: boolean
+  qualifiedAt?: Date | null
   groups: {
     A: mongoose.Types.ObjectId[]
     B: mongoose.Types.ObjectId[]
@@ -43,6 +48,11 @@ const UserSchema = new Schema<IUser>(
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
+    directActiveCount: { type: Number, default: 0 },
+    totalActiveDirects: { type: Number, default: 0 },
+    lastLevelUpAt: { type: Date, default: null },
+    qualified: { type: Boolean, default: false },
+    qualifiedAt: { type: Date, default: null },
     groups: {
       A: [{ type: Schema.Types.ObjectId, ref: "User" }],
       B: [{ type: Schema.Types.ObjectId, ref: "User" }],

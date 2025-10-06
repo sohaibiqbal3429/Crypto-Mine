@@ -22,6 +22,10 @@ interface LevelData {
   levelProgress: any
   teamStats: any
   allRules: any[]
+  directActiveCount: number
+  totalActiveDirects: number
+  lastLevelUpAt: string | null
+  message: string
 }
 
 export default function TeamPage() {
@@ -153,7 +157,7 @@ export default function TeamPage() {
               {teamData?.teamTree ? (
                 <div className="space-y-6">
                   <div className="text-sm text-muted-foreground">
-                    Showing team members who have made deposits. Active members have deposited $80+ USDT.
+                    Showing team members who have made deposits. Active members have deposited at least $80 USDT in a single qualifying transaction.
                   </div>
                   <TeamTree teamTree={teamData.teamTree} />
                 </div>
@@ -174,6 +178,10 @@ export default function TeamPage() {
                   teamStats={levelData.teamStats}
                   currentRule={levelData.currentRule}
                   nextRule={levelData.nextRule}
+                  directActiveCount={levelData.directActiveCount}
+                  totalActiveDirects={levelData.totalActiveDirects}
+                  lastLevelUpAt={levelData.lastLevelUpAt}
+                  message={levelData.message}
                 />
               )}
             </TabsContent>

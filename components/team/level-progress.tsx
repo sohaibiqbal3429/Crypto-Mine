@@ -1,6 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Trophy, Users, Target } from "lucide-react"
@@ -81,9 +82,23 @@ interface LevelProgressProps {
   }
   currentRule: any
   nextRule: any
+  directActiveCount: number
+  totalActiveDirects: number
+  lastLevelUpAt: string | null
+  message: string
 }
 
-export function LevelProgress({ currentLevel, levelProgress, teamStats, currentRule, nextRule }: LevelProgressProps) {
+export function LevelProgress({
+  currentLevel,
+  levelProgress,
+  teamStats,
+  currentRule,
+  nextRule,
+  directActiveCount,
+  totalActiveDirects,
+  lastLevelUpAt,
+  message,
+}: LevelProgressProps) {
   const currentOverrides = buildOverrideSummaries(currentRule)
   const nextOverrides = buildOverrideSummaries(nextRule)
 
@@ -129,6 +144,26 @@ export function LevelProgress({ currentLevel, levelProgress, teamStats, currentR
               )}
             </div>
           )}
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="text-muted-foreground">Direct active referrals (current cycle)</p>
+              <p className="text-lg font-semibold">
+                {directActiveCount}
+                {levelProgress ? ` / ${levelProgress.requiredActive}` : ""}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/40 p-3">
+              <p className="text-muted-foreground">Total qualified direct referrals</p>
+              <p className="text-lg font-semibold">{totalActiveDirects}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/40 p-3 sm:col-span-2">
+              <p className="text-muted-foreground">Last level up</p>
+              <p className="text-lg font-semibold">
+                {lastLevelUpAt ? new Date(lastLevelUpAt).toLocaleString() : "No level ups yet"}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -158,6 +193,10 @@ export function LevelProgress({ currentLevel, levelProgress, teamStats, currentR
                 <span>{levelProgress.requiredActive - levelProgress.currentActive} more active members needed</span>
               )}
             </div>
+
+            <Alert variant="secondary" className="text-left">
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
 
             {nextRule && (
               <div className="space-y-2 text-sm border-t pt-3">

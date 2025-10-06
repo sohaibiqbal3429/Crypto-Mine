@@ -36,12 +36,16 @@ export interface AdminUserRecord {
   referralCode: string
   role: string
   level: number
+  directActiveCount: number
+  totalActiveDirects: number
+  lastLevelUpAt: string | null
   depositTotal: number
   withdrawTotal: number
   roiEarnedTotal: number
   isActive: boolean
   createdAt: string
   balance: AdminUserBalanceSnapshot
+  levelHistory: Array<{ level: number; achievedAt: string }>
 }
 
 export interface AdminStats {
