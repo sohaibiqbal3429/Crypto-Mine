@@ -107,9 +107,15 @@ export function MobileNavDrawer({ open, onOpenChange, anchorRef }: MobileNavDraw
     }
   }, [open])
 
+  const previousPathnameRef = useRef(pathname)
+
   useEffect(() => {
-    if (open) {
-      onOpenChange(false)
+    if (pathname !== previousPathnameRef.current) {
+      previousPathnameRef.current = pathname
+
+      if (open) {
+        onOpenChange(false)
+      }
     }
   }, [pathname, open, onOpenChange])
 
