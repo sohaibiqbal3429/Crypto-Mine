@@ -46,8 +46,8 @@ export const LEVEL_CONFIG = {
     { level: 1, depositRequired: 0, activeMembersRequired: 5 },
     { level: 2, depositRequired: 0, activeMembersRequired: 10 },
     { level: 3, depositRequired: 0, activeMembersRequired: 15 },
-    { level: 4, depositRequired: 0, activeMembersRequired: 30 },
-    { level: 5, depositRequired: 0, activeMembersRequired: 43 },
+    { level: 4, depositRequired: 0, activeMembersRequired: 23 },
+    { level: 5, depositRequired: 0, activeMembersRequired: 30 },
   ],
   perks: {
     directCommission: {
@@ -58,7 +58,7 @@ export const LEVEL_CONFIG = {
       5: "10% direct commission + 2% team reward; $400 monthly salary when direct sales reach 4,500 USDT",
     },
     salaryRequirement: {
-      activeMembers: 43,
+      activeMembers: 30,
       directSales: 4500,
       payout: 400,
     },

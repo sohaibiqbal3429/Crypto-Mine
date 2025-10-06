@@ -5,6 +5,7 @@ import Balance from "@/models/Balance"
 import MiningSession from "@/models/MiningSession"
 import Settings from "@/models/Settings"
 import { getUserFromRequest } from "@/lib/auth"
+import { hasQualifiedDeposit } from "@/lib/utils/leveling"
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,10 +43,10 @@ export async function GET(request: NextRequest) {
 
     const settings = await Settings.findOne()
 
-    const activeMembers = await User.countDocuments({
-      referredBy: user._id,
-      qualified: true,
-    })
+    const directReferrals = await User.find({ referredBy: user._id })
+      .select("qualified depositTotal")
+      .lean()
+    const activeMembers = directReferrals.filter((referral) => hasQualifiedDeposit(referral)).length
 
     const now = new Date()
     const nextEligibleAt = miningSession.nextEligibleAt ?? now

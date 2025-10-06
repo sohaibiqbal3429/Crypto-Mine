@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Settings } from "lucide-react"
+import { getNextLevelRequirement } from "@/lib/utils/leveling"
 
 interface User {
   _id: string
@@ -163,8 +164,15 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
                     </TableCell>
                   </TableRow>
                 ) : (
-                  users.map((user) => (
-                    <TableRow key={user._id}>
+                  users.map((user) => {
+                    const nextRequirement = getNextLevelRequirement(user.level)
+                    const remainingForNext =
+                      nextRequirement !== null
+                        ? Math.max(nextRequirement - user.directActiveCount, 0)
+                        : 0
+
+                    return (
+                      <TableRow key={user._id}>
                       <TableCell>
                         <div>
                           <div className="font-medium">{user.name}</div>
@@ -182,7 +190,20 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
                         <div className="space-y-1 text-xs text-muted-foreground">
                           <div className="flex items-center justify-between">
                             <span>Direct cycle</span>
-                            <span className="font-semibold text-foreground">{user.directActiveCount}</span>
+                            <span className="font-semibold text-foreground">
+                              {nextRequirement !== null
+                                ? `${user.directActiveCount} / ${nextRequirement}`
+                                : `${user.directActiveCount} / —`}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {nextRequirement === null
+                              ? "Max level achieved"
+                              : remainingForNext === 0
+                              ? "Requirements met — pending sync"
+                              : `${remainingForNext} more active member${remainingForNext === 1 ? "" : "s"} needed for Level ${
+                                  user.level + 1
+                                }`}
                           </div>
                           <div className="flex items-center justify-between">
                             <span>Total qualified</span>
@@ -226,8 +247,9 @@ export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTa
                           <Settings className="h-4 w-4" />
                         </Button>
                       </TableCell>
-                    </TableRow>
-                  ))
+                      </TableRow>
+                    )
+                  })
                 )}
               </TableBody>
             </Table>

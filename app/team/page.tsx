@@ -157,7 +157,7 @@ export default function TeamPage() {
               {teamData?.teamTree ? (
                 <div className="space-y-6">
                   <div className="text-sm text-muted-foreground">
-                    Showing team members who have made deposits. Active members have deposited at least $80 USDT in a single qualifying transaction.
+                    Showing team members who have made deposits. Active members have deposited at least $80 USDT in qualifying deposits.
                   </div>
                   <TeamTree teamTree={teamData.teamTree} />
                 </div>

@@ -4,6 +4,7 @@ import User, { type IUser } from "@/models/User"
 import Balance, { type IBalance } from "@/models/Balance"
 import Transaction, { type ITransaction } from "@/models/Transaction"
 import LevelHistory from "@/models/LevelHistory"
+import { recalculateAllUserLevels } from "@/lib/utils/commission"
 import type {
   AdminInitialData,
   AdminSessionUser,
@@ -35,6 +36,8 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
   if (!adminUserDoc || adminUserDoc.role !== "admin") {
     throw new Error("Admin access required")
   }
+
+  await recalculateAllUserLevels({ persist: true, notify: false })
 
   const [
     transactionDocsRaw,
