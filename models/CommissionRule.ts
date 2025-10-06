@@ -12,6 +12,11 @@ export interface TeamOverrideRule {
   depth: number
   pct: number
   /**
+   * Categorises the override so reporting and audit tooling can distinguish
+   * between daily overrides, team commissions and team rewards.
+   */
+  kind: "daily_override" | "team_commission" | "team_reward"
+  /**
    * Determines how the override is posted to the ledger.
    * "commission" credits the spendable balance immediately, while
    * "reward" accrues in the team rewards pool for later claims.
@@ -78,6 +83,11 @@ const CommissionRuleSchema = new Schema<ICommissionRule>(
           team: { type: String, enum: ["A", "B", "C", "D"], required: true },
           depth: { type: Number, required: true },
           pct: { type: Number, required: true },
+          kind: {
+            type: String,
+            enum: ["daily_override", "team_commission", "team_reward"],
+            default: "team_commission",
+          },
           payout: { type: String, enum: ["commission", "reward"], required: true },
           appliesTo: { type: String, enum: ["profit"], default: "profit" },
         },

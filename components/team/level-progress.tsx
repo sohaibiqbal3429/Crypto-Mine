@@ -5,6 +5,64 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Trophy, Users, Target } from "lucide-react"
 
+type OverrideKind = "daily_override" | "team_commission" | "team_reward"
+
+interface OverrideSummary {
+  kind: OverrideKind
+  pct: number
+  payout: "commission" | "reward"
+  teams: string[]
+}
+
+const overrideKindLabels: Record<OverrideKind, string> = {
+  daily_override: "Daily Override",
+  team_commission: "Team Commission",
+  team_reward: "Team Reward",
+}
+
+const overrideKindOrder: OverrideKind[] = [
+  "daily_override",
+  "team_commission",
+  "team_reward",
+]
+
+function buildOverrideSummaries(rule: any): OverrideSummary[] {
+  if (!rule?.teamOverrides?.length) return []
+
+  const map = new Map<string, OverrideSummary>()
+  for (const override of rule.teamOverrides as any[]) {
+    if (!override?.pct || !override?.team) continue
+    const kind = (override?.kind as OverrideKind | undefined) ??
+      ((override?.payout as string) === "reward" ? "team_reward" : "team_commission")
+    const key = `${kind}:${override.pct}:${override.payout}`
+    const entry = map.get(key) ?? {
+      kind,
+      pct: override.pct as number,
+      payout: override.payout as "commission" | "reward",
+      teams: [],
+    }
+
+    if (!entry.teams.includes(override.team)) {
+      entry.teams.push(override.team as string)
+    }
+
+    map.set(key, entry)
+  }
+
+  const summaries = Array.from(map.values()).map((summary) => ({
+    ...summary,
+    teams: summary.teams
+      .map((team) => `Team ${team}`)
+      .sort((a, b) => a.localeCompare(b)),
+  }))
+
+  summaries.sort(
+    (a, b) => overrideKindOrder.indexOf(a.kind) - overrideKindOrder.indexOf(b.kind),
+  )
+
+  return summaries
+}
+
 interface LevelProgressProps {
   currentLevel: number
   levelProgress: {
@@ -26,6 +84,9 @@ interface LevelProgressProps {
 }
 
 export function LevelProgress({ currentLevel, levelProgress, teamStats, currentRule, nextRule }: LevelProgressProps) {
+  const currentOverrides = buildOverrideSummaries(currentRule)
+  const nextOverrides = buildOverrideSummaries(nextRule)
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Current Level Status */}
@@ -50,13 +111,17 @@ export function LevelProgress({ currentLevel, levelProgress, teamStats, currentR
                 <span className="text-muted-foreground">Direct Commission:</span>
                 <span className="font-medium">{currentRule.directPct}%</span>
               </div>
-              {currentRule.teamDailyPct > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Team Daily:</span>
-                  <span className="font-medium">{currentRule.teamDailyPct}%</span>
+              {currentOverrides.map((summary) => (
+                <div key={`${summary.kind}-${summary.pct}`} className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    {overrideKindLabels[summary.kind]}:
+                  </span>
+                  <span className="font-medium">
+                    {summary.pct}% ({summary.teams.join(", ")})
+                  </span>
                 </div>
-              )}
-              {currentRule.teamRewardPct > 0 && (
+              ))}
+              {currentOverrides.length === 0 && currentRule.teamRewardPct > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Team Reward:</span>
                   <span className="font-medium">{currentRule.teamRewardPct}%</span>
@@ -104,16 +169,26 @@ export function LevelProgress({ currentLevel, levelProgress, teamStats, currentR
                       {nextRule.directPct}% (+{nextRule.directPct - (currentRule?.directPct || 7)}%)
                     </span>
                   </div>
-                  {nextRule.teamRewardPct > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Team Reward:</span>
-                      <span className="font-medium text-green-600">{nextRule.teamRewardPct}%</span>
+                  {nextOverrides.map((summary) => (
+                    <div key={`${summary.kind}-${summary.pct}`} className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        {overrideKindLabels[summary.kind]}:
+                      </span>
+                      <span className="font-medium text-green-600">
+                        {summary.pct}% ({summary.teams.join(", ")})
+                      </span>
                     </div>
-                  )}
+                  ))}
                   {nextRule.monthlyTargets?.bonus > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Monthly Bonus:</span>
                       <span className="font-medium text-green-600">${nextRule.monthlyTargets.bonus}</span>
+                    </div>
+                  )}
+                  {nextRule.monthlyTargets?.salary > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Monthly Salary:</span>
+                      <span className="font-medium text-green-600">${nextRule.monthlyTargets.salary}</span>
                     </div>
                   )}
                 </div>
