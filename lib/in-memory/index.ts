@@ -414,6 +414,51 @@ function populateDocument<T extends Record<string, any>>(
   return doc
 }
 
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string"
+}
+
+function toComparableDate(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return value
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value)
+    if (!Number.isNaN(date.getTime())) {
+      return date
+    }
+  }
+
+  return null
+}
+
+function compareValues(
+  actual: unknown,
+  expected: unknown,
+  comparator: (actual: number | string, expected: number | string) => boolean,
+): boolean {
+  if (isNumber(actual) && isNumber(expected)) {
+    return comparator(actual, expected)
+  }
+
+  if (isString(actual) && isString(expected)) {
+    return comparator(actual, expected)
+  }
+
+  const actualDate = actual instanceof Date ? actual : null
+  const expectedDate = toComparableDate(expected)
+  if (actualDate && expectedDate) {
+    return comparator(actualDate.getTime(), expectedDate.getTime())
+  }
+
+  return false
+}
+
 function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
   return Object.entries(filter).every(([key, expected]) => {
     if (key === "$or" && Array.isArray(expected)) {
@@ -430,13 +475,13 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
       return Object.entries(expected).every(([operator, value]) => {
         switch (operator) {
           case "$gte":
-            return actual >= value
+            return compareValues(actual, value, (a, b) => a >= b)
           case "$gt":
-            return actual > value
+            return compareValues(actual, value, (a, b) => a > b)
           case "$lte":
-            return actual <= value
+            return compareValues(actual, value, (a, b) => a <= b)
           case "$lt":
-            return actual < value
+            return compareValues(actual, value, (a, b) => a < b)
           case "$in":
             return Array.isArray(value) && value.includes(actual)
           case "$nin":
