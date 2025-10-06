@@ -5,8 +5,6 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { NotificationBell } from "@/components/notifications/notification-bell"
-import { ThemeToggle } from "@/components/theme-toggle"
 import Image from "next/image"
 import {
   Home,
@@ -74,13 +72,6 @@ export function Sidebar({ user }: SidebarProps) {
         <div className="flex items-center space-x-2">
           <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
           <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
-        </div>
-        <div className="mt-2 flex items-center md:hidden">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-sidebar-border/60 bg-sidebar/40 px-3 py-1.5 shadow-sm backdrop-blur-sm">
-            <NotificationBell />
-            <span className="h-4 w-px bg-sidebar-border/60" aria-hidden />
-            <ThemeToggle />
-          </div>
         </div>
       </div>
 
@@ -166,13 +157,6 @@ export function Sidebar({ user }: SidebarProps) {
         <SidebarContent />
       </div>
 
-      <div className="fixed top-8 right-6 z-[var(--z-header)] hidden md:flex">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-4 py-2 shadow-lg shadow-black/5 backdrop-blur">
-          <NotificationBell />
-          <span className="h-5 w-px bg-border/60" aria-hidden />
-          <ThemeToggle />
-        </div>
-      </div>
     </>
   )
 }

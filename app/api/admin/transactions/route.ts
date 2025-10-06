@@ -4,6 +4,49 @@ import User from "@/models/User"
 import Transaction from "@/models/Transaction"
 import { getUserFromRequest } from "@/lib/auth"
 
+function resolveAbsoluteUrl(url: string, origin: string): string {
+  if (!url) return url
+  if (/^https?:\/\//i.test(url)) {
+    return url
+  }
+
+  const normalized = url.startsWith("/") ? url : `/${url}`
+  return `${origin}${normalized}`
+}
+
+function serializeTransaction(transaction: any, origin: string) {
+  const meta = transaction.meta && typeof transaction.meta === "object" ? { ...transaction.meta } : {}
+  if (meta.receipt && typeof meta.receipt === "object") {
+    const receipt = { ...meta.receipt }
+    if (typeof receipt.url === "string") {
+      receipt.url = resolveAbsoluteUrl(receipt.url, origin)
+    }
+    meta.receipt = receipt
+  }
+
+  const populatedUser = transaction.userId && typeof transaction.userId === "object" ? transaction.userId : null
+
+  return {
+    _id: transaction._id?.toString?.() ?? "",
+    userId: populatedUser
+      ? {
+          _id: populatedUser._id?.toString?.() ?? "",
+          name: populatedUser.name ?? "",
+          email: populatedUser.email ?? "",
+          referralCode: populatedUser.referralCode ?? "",
+        }
+      : transaction.userId ?? null,
+    type: transaction.type ?? "unknown",
+    amount: Number(transaction.amount ?? 0),
+    status: transaction.status ?? "pending",
+    meta,
+    createdAt:
+      transaction.createdAt instanceof Date
+        ? transaction.createdAt.toISOString()
+        : new Date(transaction.createdAt ?? Date.now()).toISOString(),
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -35,11 +78,15 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
+      .lean()
 
     const total = await Transaction.countDocuments(query)
 
+    const origin = new URL(request.url).origin
+    const normalizedTransactions = transactions.map((transaction) => serializeTransaction(transaction, origin))
+
     return NextResponse.json({
-      transactions,
+      transactions: normalizedTransactions,
       pagination: {
         page,
         limit,
