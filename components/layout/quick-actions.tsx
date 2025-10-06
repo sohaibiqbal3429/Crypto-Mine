@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation"
 
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { cn } from "@/lib/utils"
 
-const AUTH_HIDDEN_ROUTES = [
+export const AUTH_HIDDEN_ROUTES = [
   /^\/login(?:\/.*)?$/,
   /^\/signin(?:\/.*)?$/,
   /^\/signup(?:\/.*)?$/,
@@ -14,7 +15,14 @@ const AUTH_HIDDEN_ROUTES = [
   /^\/auth\/(?:login|register|forgot|verify-otp)(?:\/.*)?$/,
 ]
 
-export default function QuickActions() {
+type QuickActionsVariant = "mobile" | "desktop" | "both"
+
+type QuickActionsProps = {
+  mobileClassName?: string
+  variant?: QuickActionsVariant
+}
+
+export default function QuickActions({ mobileClassName, variant = "both" }: QuickActionsProps = {}) {
   const pathname = usePathname() ?? "/"
 
   const shouldHide = useMemo(
@@ -26,13 +34,37 @@ export default function QuickActions() {
     return null
   }
 
-  return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[var(--z-header)] flex w-full justify-end px-2 sm:right-6 sm:top-6">
-      <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-border/70 bg-card/80 px-3 py-2 shadow-lg shadow-black/5 backdrop-blur">
-        <NotificationBell />
-        <span className="h-5 w-px bg-border/60" aria-hidden />
-        <ThemeToggle />
-      </div>
+  const showMobile = variant === "mobile" || variant === "both"
+  const showDesktop = variant === "desktop" || variant === "both"
+
+  const renderActions = () => (
+    <div className="flex items-center gap-2 md:gap-3">
+      <NotificationBell />
+      <span className="hidden h-5 w-px bg-border/60 md:block" aria-hidden />
+      <ThemeToggle />
     </div>
+  )
+
+  return (
+    <>
+      {showMobile ? (
+        <div
+          className={cn(
+            "md:hidden flex items-center rounded-2xl border border-border/60 bg-card/80 px-2 py-1 text-sm shadow-sm shadow-black/5 backdrop-blur supports-[backdrop-filter]:bg-card/60",
+            mobileClassName,
+          )}
+        >
+          {renderActions()}
+        </div>
+      ) : null}
+
+      {showDesktop ? (
+        <div className="pointer-events-none hidden md:fixed md:right-4 md:top-4 md:z-[var(--z-header)] md:flex md:w-full md:justify-end md:px-2 lg:right-6 lg:top-6">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-border/70 bg-card/80 px-3 py-2 shadow-lg shadow-black/5 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+            {renderActions()}
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }

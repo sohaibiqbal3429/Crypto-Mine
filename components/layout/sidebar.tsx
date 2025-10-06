@@ -3,40 +3,12 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import Image from "next/image"
+import { Menu, LogOut } from "lucide-react"
+
+import { PRIMARY_NAV_ITEMS, ADMIN_NAV_ITEM } from "@/components/layout/nav-config"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import Image from "next/image"
-import {
-  Home,
-  BarChart3,
-  Users,
-  Coins,
-  Pickaxe,
-  TrendingUp,
-  Wallet,
-  CreditCard,
-  History,
-  HelpCircle,
-  User,
-  FileText,
-  Menu,
-  LogOut,
-  Settings,
-} from "lucide-react"
-
-const navigation = [
-  { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Mining", href: "/mining", icon: Pickaxe },
-  { name: "Wallet", href: "/wallet", icon: Wallet },
-  { name: "Task", href: "/tasks", icon: BarChart3 },
-  { name: "Team", href: "/team", icon: Users },
-  { name: "List Coin", href: "/coins", icon: Coins },
-  { name: "E-Wallet", href: "/e-wallet", icon: CreditCard },
-  { name: "History", href: "/transactions", icon: History },
-  { name: "Support", href: "/support", icon: HelpCircle },
-  { name: "Profile", href: "/profile", icon: User },
-  { name: "Terms", href: "/terms", icon: FileText },
-]
 
 interface SidebarProps {
   user?: {
@@ -77,7 +49,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navigation.map((item) => {
+        {PRIMARY_NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
@@ -99,18 +71,18 @@ export function Sidebar({ user }: SidebarProps) {
 
         {user?.role === "admin" && (
           <Link
-            href="/admin"
+            href={ADMIN_NAV_ITEM.href}
             className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-              pathname === "/admin" || pathname.startsWith("/admin/")
+              pathname === ADMIN_NAV_ITEM.href || pathname.startsWith(`${ADMIN_NAV_ITEM.href}/`)
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             }`}
             onClick={() => setOpen(false)}
           >
-            <Settings className="mr-3 h-5 w-5" />
-            Admin Panel
+            <ADMIN_NAV_ITEM.icon className="mr-3 h-5 w-5" />
+            {ADMIN_NAV_ITEM.name}
           </Link>
-         )} 
+        )}
       </nav>
 
       {/* User info and logout */}
