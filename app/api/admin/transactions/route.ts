@@ -11,7 +11,12 @@ function resolveAbsoluteUrl(url: string, origin: string): string {
   }
 
   const normalized = url.startsWith("/") ? url : `/${url}`
-  return `${origin}${normalized}`
+  const withProxy = normalized.startsWith("/api/uploads/")
+    ? normalized
+    : normalized.startsWith("/uploads/")
+      ? `/api/uploads${normalized}`
+      : normalized
+  return `${origin}${withProxy}`
 }
 
 function serializeTransaction(transaction: any, origin: string) {

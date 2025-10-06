@@ -69,10 +69,18 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
   const [error, setError] = useState("")
   const [imageError, setImageError] = useState(false)
 
-  const receiptMeta =
-    selectedTransaction?.type === "deposit" && selectedTransaction.meta?.receipt
-      ? (selectedTransaction.meta.receipt as ReceiptMeta)
-      : null
+  const receiptFile = useMemo(() => {
+    if (selectedTransaction?.type !== "deposit") {
+      return null
+    }
+
+    const candidate = selectedTransaction.meta?.receipt
+    if (candidate && typeof candidate === "object") {
+      return candidate as ReceiptMeta
+    }
+
+    return null
+  }, [selectedTransaction])
 
   const selectedUser =
     selectedTransaction && typeof selectedTransaction.userId === "object"
@@ -81,35 +89,31 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
 
   const selectedAmount = selectedTransaction ? Number(selectedTransaction.amount) : Number.NaN
 
-  const resolvedReceiptUrl = useMemo(() => {
-    if (!receiptMeta?.url || typeof receiptMeta.url !== "string") {
+  const receiptUrl = useMemo(() => {
+    if (!receiptFile?.url || typeof receiptFile.url !== "string") {
       return null
     }
 
-    if (/^https?:\/\//i.test(receiptMeta.url)) {
-      return receiptMeta.url
-    }
-
-    return receiptMeta.url.startsWith("/") ? receiptMeta.url : `/${receiptMeta.url}`
-  }, [receiptMeta?.url])
+    return receiptFile.url
+  }, [receiptFile?.url])
 
   const isImageReceipt = useMemo(() => {
-    if (!receiptMeta) return false
-    if (receiptMeta.mimeType && /image\/(png|jpe?g|webp|gif)/i.test(receiptMeta.mimeType)) {
+    if (!receiptFile) return false
+    if (receiptFile.mimeType && /image\/(png|jpe?g|webp|gif)/i.test(receiptFile.mimeType)) {
       return true
     }
 
-    if (receiptMeta.url && typeof receiptMeta.url === "string") {
-      const cleanedUrl = receiptMeta.url.split("?")[0] ?? ""
+    if (receiptFile.url && typeof receiptFile.url === "string") {
+      const cleanedUrl = receiptFile.url.split("?")[0] ?? ""
       return /\.(png|jpe?g|webp|gif)$/i.test(cleanedUrl)
     }
 
     return false
-  }, [receiptMeta])
+  }, [receiptFile])
 
   useEffect(() => {
     setImageError(false)
-  }, [resolvedReceiptUrl])
+  }, [receiptUrl])
 
   const paginationStart = (pagination.page - 1) * pagination.limit + 1
   const paginationEnd = Math.min(pagination.page * pagination.limit, pagination.total)
@@ -381,13 +385,13 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
                   <p className="text-sm">{selectedTransaction.status}</p>
                 </div>
               </div>
-              {receiptMeta?.url && (
+              {receiptFile?.url && (
                 <div className="space-y-2">
                   <Label>Receipt Screenshot</Label>
-                  {isImageReceipt && resolvedReceiptUrl && !imageError ? (
+                  {isImageReceipt && receiptUrl && !imageError ? (
                     <img
-                      src={resolvedReceiptUrl}
-                      alt={receiptMeta.originalName ? `Deposit receipt ${receiptMeta.originalName}` : "Deposit receipt"}
+                      src={receiptUrl}
+                      alt={receiptFile.originalName ? receiptFile.originalName : "Receipt"}
                       className="max-h-72 w-auto rounded-md border bg-background object-contain"
                       onError={(event) => {
                         event.currentTarget.style.display = "none"
@@ -400,17 +404,17 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
                     </div>
                   )}
                   <div className="space-y-1 text-xs text-muted-foreground">
-                    {receiptMeta.originalName && <div>File: {receiptMeta.originalName}</div>}
-                    {typeof receiptMeta.size === "number" && (
-                      <div>Size: {(receiptMeta.size / 1024 / 1024).toFixed(2)} MB</div>
+                    {receiptFile.originalName && <div>File: {receiptFile.originalName}</div>}
+                    {typeof receiptFile.size === "number" && (
+                      <div>Size: {(receiptFile.size / 1024 / 1024).toFixed(2)} MB</div>
                     )}
-                    {receiptMeta.uploadedAt && (
-                      <div>Uploaded: {new Date(receiptMeta.uploadedAt).toLocaleString()}</div>
+                    {receiptFile.uploadedAt && (
+                      <div>Uploaded: {new Date(receiptFile.uploadedAt).toLocaleString()}</div>
                     )}
                   </div>
-                  {resolvedReceiptUrl && (
+                  {receiptUrl && (
                     <a
-                      href={resolvedReceiptUrl}
+                      href={receiptUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="text-sm font-medium text-primary hover:underline"

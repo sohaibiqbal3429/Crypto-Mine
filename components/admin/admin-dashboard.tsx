@@ -182,13 +182,8 @@ export function AdminDashboard({
 
       <main className="flex-1 md:ml-64 overflow-auto">
         <div className="p-6">
-          <div className="mb-8 flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
-              <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
+          <div className="mb-8 grid gap-4 lg:grid-cols-[auto,1fr] lg:items-start">
+            <div className="flex items-center gap-3">
               <Button
                 onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
                 variant="secondary"
@@ -198,6 +193,10 @@ export function AdminDashboard({
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
                 Refresh
               </Button>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
+              <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
             </div>
           </div>
 
