@@ -10,8 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { NotificationBell } from "@/components/notifications/notification-bell"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Clock, DollarSign, Loader2, RefreshCw, Users } from "lucide-react"
 import type {
   AdminStats,
@@ -191,11 +189,6 @@ export function AdminDashboard({
             </div>
 
             <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-3">
-                <NotificationBell />
-                <ThemeToggle />
-              </div>
-
               <Button
                 onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
                 variant="secondary"

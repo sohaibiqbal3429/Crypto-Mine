@@ -93,6 +93,20 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
     return receiptMeta.url.startsWith("/") ? receiptMeta.url : `/${receiptMeta.url}`
   }, [receiptMeta?.url])
 
+  const isImageReceipt = useMemo(() => {
+    if (!receiptMeta) return false
+    if (receiptMeta.mimeType && /image\/(png|jpe?g|webp|gif)/i.test(receiptMeta.mimeType)) {
+      return true
+    }
+
+    if (receiptMeta.url && typeof receiptMeta.url === "string") {
+      const cleanedUrl = receiptMeta.url.split("?")[0] ?? ""
+      return /\.(png|jpe?g|webp|gif)$/i.test(cleanedUrl)
+    }
+
+    return false
+  }, [receiptMeta])
+
   useEffect(() => {
     setImageError(false)
   }, [resolvedReceiptUrl])
@@ -370,15 +384,16 @@ export function TransactionTable({ transactions, pagination, onPageChange, onRef
               {receiptMeta?.url && (
                 <div className="space-y-2">
                   <Label>Receipt Screenshot</Label>
-                  {resolvedReceiptUrl && !imageError ? (
-                    <div className="overflow-hidden rounded-md border bg-muted/60">
-                      <img
-                        src={resolvedReceiptUrl}
-                        alt={`Deposit receipt ${receiptMeta.originalName ?? ""}`}
-                        className="max-h-96 w-full bg-background object-contain"
-                        onError={() => setImageError(true)}
-                      />
-                    </div>
+                  {isImageReceipt && resolvedReceiptUrl && !imageError ? (
+                    <img
+                      src={resolvedReceiptUrl}
+                      alt={receiptMeta.originalName ? `Deposit receipt ${receiptMeta.originalName}` : "Deposit receipt"}
+                      className="max-h-72 w-auto rounded-md border bg-background object-contain"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none"
+                        setImageError(true)
+                      }}
+                    />
                   ) : (
                     <div className="rounded-md border bg-muted/60 p-4 text-sm text-muted-foreground">
                       Receipt preview unavailable. Use the link below to view the original file.
