@@ -25,6 +25,12 @@ export interface ISettings extends Document {
     highTierPct: number
     highTierStartAt: number
   }
+  luckyDraw: {
+    entryFee: number
+    prize: number
+    cycleHours: number
+    autoDrawEnabled: boolean
+  }
 }
 
 const SettingsSchema = new Schema<ISettings>(
@@ -50,6 +56,12 @@ const SettingsSchema = new Schema<ISettings>(
       startAtDeposit: { type: Number, default: 50 },
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },
+    },
+    luckyDraw: {
+      entryFee: { type: Number, default: 10 },
+      prize: { type: Number, default: 30 },
+      cycleHours: { type: Number, default: 72 },
+      autoDrawEnabled: { type: Boolean, default: true },
     },
   },
   {
