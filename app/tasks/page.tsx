@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { CheckCircle, Clock, Gift, Users, DollarSign, Loader2 } from "lucide-react"
+import { Clock, Gift, Users, DollarSign, Loader2 } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 
 interface Task {
   id: string
@@ -17,7 +18,13 @@ interface Task {
   completed: boolean
   progress: number
   target: number
-  icon: any
+}
+
+const iconMap: Record<Task["type"], LucideIcon> = {
+  daily: Gift,
+  referral: Users,
+  deposit: DollarSign,
+  mining: Gift,
 }
 
 export default function TasksPage() {
@@ -28,49 +35,21 @@ export default function TasksPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const userRes = await fetch("/api/auth/me")
+        const [userRes, tasksRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/tasks")])
+
         if (userRes.ok) {
           const userData = await userRes.json()
           setUser(userData.user)
         }
 
-        // Mock tasks data - in real app, this would come from API
-        setTasks([
-         
-          {
-            id: "1",
-            title: "Refer 3 Friends",
-            description: "Invite 3 friends to join the platform",
-            reward: 2,
-            type: "referral",
-            completed: false,
-            progress: 1,
-            target: 3,
-            icon: Users,
-          },
-          {
-            id: "2",
-            title: "First Deposit",
-            description: "Make your first deposit of $100 or more",
-            reward: 2,
-            type: "deposit",
-            completed: false,
-            progress: 0,
-            target: 1,
-            icon: DollarSign,
-          },
-          {
-            id: "3",
-            title: "Mine 10 Times",
-            description: "Complete 10 mining sessions",
-            reward: 0.5,
-            type: "mining",
-            completed: false,
-            progress: 3,
-            target: 10,
-            icon: Gift,
-          },
-        ])
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json()
+          if (Array.isArray(tasksData.tasks)) {
+            setTasks(tasksData.tasks)
+          } else {
+            setTasks([])
+          }
+        }
       } catch (error) {
         console.error("Failed to fetch data:", error)
       } finally {
@@ -107,8 +86,8 @@ export default function TasksPage() {
 
           <div className="grid gap-6">
             {tasks.map((task) => {
-              const Icon = task.icon
-              const progressPercentage = (task.progress / task.target) * 100
+              const Icon = iconMap[task.type] ?? Gift
+              const progressPercentage = task.target > 0 ? (task.progress / task.target) * 100 : 0
 
               return (
                 <Card key={task.id} className="relative">
@@ -136,7 +115,9 @@ export default function TasksPage() {
                       <div className="flex items-center justify-between text-sm">
                         <span>Progress</span>
                         <span>
-                          {task.progress} / {task.target}
+                          {task.type === "deposit"
+                            ? `$${task.progress.toFixed(2)} / $${task.target.toFixed(2)}`
+                            : `${task.progress} / ${task.target}`}
                         </span>
                       </div>
                       <Progress value={progressPercentage} className="h-2" />

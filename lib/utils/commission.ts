@@ -1,3 +1,5 @@
+import mongoose from "mongoose"
+
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
@@ -13,6 +15,22 @@ import Notification from "@/models/Notification"
 const MIN_DEPOSIT_FOR_REWARDS = 80
 const DEPOSIT_COMMISSION_PCT = 0.02
 const POLICY_ADJUSTMENT_REASON = "policy_update_20240501"
+
+function toObjectIdString(id: unknown): string {
+  if (id instanceof mongoose.Types.ObjectId) {
+    return id.toString()
+  }
+
+  if (typeof id === "string") {
+    return id
+  }
+
+  if (id && typeof (id as { toString: () => string }).toString === "function") {
+    return (id as { toString: () => string }).toString()
+  }
+
+  throw new Error("Invalid ObjectId value")
+}
 
 function resolveMinRewardDeposit(settings?: ISettings | null): number {
   const configuredMin = settings?.gating?.activeMinDeposit ?? MIN_DEPOSIT_FOR_REWARDS
@@ -96,7 +114,7 @@ async function resolveDirectCommission(
   if (!sponsor) return null
 
   const shouldPersist = options.persistLevel ?? true
-  const sponsorLevel = await calculateUserLevel(sponsor._id.toString(), {
+  const sponsorLevel = await calculateUserLevel(toObjectIdString(sponsor._id), {
     persist: shouldPersist,
     notify: shouldPersist,
   })
@@ -135,7 +153,7 @@ async function resolveTeamProfitOverrides(
     const team = depthToTeam(depth)
     if (!team) continue
 
-    const sponsorLevel = await calculateUserLevel(sponsor._id.toString(), {
+    const sponsorLevel = await calculateUserLevel(toObjectIdString(sponsor._id), {
       persist: persistLevels,
       notify: persistLevels,
     })
@@ -501,7 +519,7 @@ export async function policyRecalculateCommissions(
   const sponsorMap = new Map<string, { sponsorId: string; name?: string }>()
   for (const depositor of depositors) {
     if (!depositor?.referredBy) continue
-    sponsorMap.set(depositor._id.toString(), {
+    sponsorMap.set(toObjectIdString(depositor._id), {
       sponsorId: depositor.referredBy.toString(),
       name: depositor.name as string | undefined,
     })
@@ -514,7 +532,7 @@ export async function policyRecalculateCommissions(
 
     const entry = salesMap.get(referral.sponsorId) ?? { total: 0, deposits: [] }
     entry.total = roundCurrency(entry.total + (deposit.amount ?? 0))
-    entry.deposits.push(deposit._id.toString())
+    entry.deposits.push(toObjectIdString(deposit._id))
     salesMap.set(referral.sponsorId, entry)
   }
 
@@ -546,7 +564,7 @@ export async function policyRecalculateCommissions(
   const payouts: MonthlyBonusPayoutResult[] = []
 
   for (const sponsor of sponsors) {
-    const sponsorId = sponsor._id.toString()
+    const sponsorId = toObjectIdString(sponsor._id)
     const salesEntry = salesMap.get(sponsorId)
     if (!salesEntry) continue
 
@@ -677,13 +695,13 @@ export async function policyApplyRetroactiveAdjustments(
     })
     if (!payout) continue
 
-    const sponsorId = payout.sponsor._id.toString()
+    const sponsorId = toObjectIdString(payout.sponsor._id)
 
     const paidTransactions = await Transaction.find({
       userId: payout.sponsor._id,
       type: { $in: ["commission", "adjust"] },
       $or: [
-        { "meta.depositTransactionId": deposit._id.toString() },
+        { "meta.depositTransactionId": toObjectIdString(deposit._id) },
         {
           "meta.source": { $in: ["direct_referral", "direct_commission_adjustment"] },
           "meta.referredUserId": userId,
@@ -709,7 +727,7 @@ export async function policyApplyRetroactiveAdjustments(
       amount: delta,
       expected: payout.amount,
       previouslyPaid: alreadyPaid,
-      referenceId: deposit._id.toString(),
+      referenceId: toObjectIdString(deposit._id),
       action: options.dryRun ? "calculated" : "adjusted",
     })
 
@@ -736,7 +754,7 @@ export async function policyApplyRetroactiveAdjustments(
       status: "approved",
       meta: {
         source: "direct_commission_adjustment",
-        depositTransactionId: deposit._id.toString(),
+        depositTransactionId: toObjectIdString(deposit._id),
         referredUserId: userId,
         expectedAmount: payout.amount,
         previouslyPaid: alreadyPaid,
@@ -755,7 +773,7 @@ export async function policyApplyRetroactiveAdjustments(
     .select("_id userId amount meta createdAt")
     .lean()
 
-  const profitIds = profitTransactions.map((tx) => tx._id.toString())
+  const profitIds = profitTransactions.map((tx) => toObjectIdString(tx._id))
   const overridePayments = profitIds.length
     ? await Transaction.find({
         "meta.profitTransactionId": { $in: profitIds },
@@ -777,7 +795,7 @@ export async function policyApplyRetroactiveAdjustments(
   for (const profit of profitTransactions) {
     const expectedOverrides = await applyTeamProfitOverrides(profit.userId.toString(), profit.amount ?? 0, {
       dryRun: true,
-      profitTransactionId: profit._id.toString(),
+      profitTransactionId: toObjectIdString(profit._id),
       profitDate: profit.createdAt,
       profitSource: profit.meta?.source ?? "mining",
       baseAmount: profit.meta?.baseAmount,
@@ -785,10 +803,10 @@ export async function policyApplyRetroactiveAdjustments(
 
     if (!expectedOverrides.length) continue
 
-    const existing = paymentsByProfit.get(profit._id.toString()) ?? []
+    const existing = paymentsByProfit.get(toObjectIdString(profit._id)) ?? []
 
     for (const payout of expectedOverrides) {
-      const sponsorId = payout.sponsor._id.toString()
+      const sponsorId = toObjectIdString(payout.sponsor._id)
       const matchedPayments = existing.filter(
         (tx) =>
           tx.userId?.toString() === sponsorId &&
@@ -813,7 +831,7 @@ export async function policyApplyRetroactiveAdjustments(
         amount: delta,
         expected: payout.amount,
         previouslyPaid: alreadyPaid,
-        referenceId: profit._id.toString(),
+        referenceId: toObjectIdString(profit._id),
         action: options.dryRun ? "calculated" : "adjusted",
       })
 
@@ -852,7 +870,7 @@ export async function policyApplyRetroactiveAdjustments(
         status: "approved",
         meta: {
           source: "team_override_adjustment",
-          profitTransactionId: profit._id.toString(),
+          profitTransactionId: toObjectIdString(profit._id),
           fromUserId: profit.userId.toString(),
           payoutType: payout.override.payout,
           team: payout.team,
@@ -974,7 +992,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
 
   const children = []
   for (const referral of directReferrals) {
-    const childTree = await buildTeamTree(referral._id.toString(), maxDepth - 1)
+    const childTree = await buildTeamTree(toObjectIdString(referral._id), maxDepth - 1)
     if (childTree) {
       children.push(childTree)
     }
@@ -1025,7 +1043,7 @@ async function getAllTeamMembers(userId: string, visited = new Set()): Promise<a
   let allMembers = [...directReferrals]
 
   for (const referral of directReferrals) {
-    const subTeam = await getAllTeamMembers(referral._id.toString(), visited)
+    const subTeam = await getAllTeamMembers(toObjectIdString(referral._id), visited)
     allMembers = allMembers.concat(subTeam)
   }
 
