@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Clock, Gift, Users, DollarSign, Loader2 } from "lucide-react"
+import { CheckCircle2, Clock, Gift, Users, DollarSign, Loader2 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
+import { formatCurrency } from "@/lib/utils/formatting"
 import type { LucideIcon } from "lucide-react"
 
 interface Task {
@@ -18,6 +20,7 @@ interface Task {
   completed: boolean
   progress: number
   target: number
+  rewardClaimed?: boolean
 }
 
 const iconMap: Record<Task["type"], LucideIcon> = {
@@ -31,38 +34,92 @@ export default function TasksPage() {
   const [user, setUser] = useState<any>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
+  const [claimingTaskId, setClaimingTaskId] = useState<string | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [userRes, tasksRes] = await Promise.all([fetch("/api/auth/me"), fetch("/api/tasks")])
-
-        if (userRes.ok) {
-          const userData = await userRes.json()
-          setUser(userData.user)
-        }
-
-        if (tasksRes.ok) {
-          const tasksData = await tasksRes.json()
-          if (Array.isArray(tasksData.tasks)) {
-            setTasks(tasksData.tasks)
-          } else {
-            setTasks([])
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch data:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchData()
+    void fetchData()
   }, [])
 
+  const fetchTasks = async () => {
+    try {
+      const tasksRes = await fetch("/api/tasks")
+      if (!tasksRes.ok) return
+
+      const tasksData = await tasksRes.json()
+      if (Array.isArray(tasksData.tasks)) {
+        setTasks(
+          tasksData.tasks.map((task: Task) => ({
+            ...task,
+            rewardClaimed: Boolean(task.rewardClaimed),
+          })),
+        )
+      } else {
+        setTasks([])
+      }
+    } catch (error) {
+      console.error("Failed to refresh tasks:", error)
+    }
+  }
+
+  const fetchData = async () => {
+    setLoading(true)
+    try {
+      await Promise.all([
+        (async () => {
+          const userRes = await fetch("/api/auth/me")
+          if (userRes.ok) {
+            const userData = await userRes.json()
+            setUser(userData.user)
+          }
+        })(),
+        fetchTasks(),
+      ])
+    } catch (error) {
+      console.error("Failed to fetch data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleClaimReward = async (taskId: string) => {
-    // In real app, this would call API to claim reward
-    console.log("Claiming reward for task:", taskId)
+    setClaimingTaskId(taskId)
+    try {
+      const response = await fetch("/api/tasks/claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ taskId }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        toast({
+          variant: "destructive",
+          title: "Unable to claim reward",
+          description: data.error || "Please try again later.",
+        })
+        return
+      }
+
+      toast({
+        title: "Reward successfully claimed",
+        description: `Added ${formatCurrency(data.reward ?? 0)} to your balance.`,
+      })
+
+      await fetchTasks()
+    } catch (error) {
+      console.error("Failed to claim reward:", error)
+      toast({
+        variant: "destructive",
+        title: "Unexpected error",
+        description: "We couldn't process your request. Please try again later.",
+      })
+    } finally {
+      setClaimingTaskId(null)
+    }
   }
 
   if (loading) {
@@ -104,8 +161,8 @@ export default function TasksPage() {
                       </div>
                       <div className="text-right">
                         <div className="text-lg font-bold text-amber-600">+${task.reward}</div>
-                        <Badge variant={task.completed ? "default" : "secondary"}>
-                          {task.completed ? "Completed" : "In Progress"}
+                        <Badge variant={task.rewardClaimed ? "default" : task.completed ? "default" : "secondary"}>
+                          {task.rewardClaimed ? "Reward Claimed" : task.completed ? "Completed" : "In Progress"}
                         </Badge>
                       </div>
                     </div>
@@ -122,9 +179,27 @@ export default function TasksPage() {
                       </div>
                       <Progress value={progressPercentage} className="h-2" />
                       {task.completed ? (
-                        <Button className="w-full" onClick={() => handleClaimReward(task.id)}>
-                          <Gift className="mr-2 h-4 w-4" />
-                          Claim Reward
+                        <Button
+                          className="w-full"
+                          onClick={() => handleClaimReward(task.id)}
+                          disabled={task.rewardClaimed || claimingTaskId === task.id}
+                        >
+                          {task.rewardClaimed ? (
+                            <>
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              Reward Claimed
+                            </>
+                          ) : claimingTaskId === task.id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Claiming...
+                            </>
+                          ) : (
+                            <>
+                              <Gift className="mr-2 h-4 w-4" />
+                              Claim Reward
+                            </>
+                          )}
                         </Button>
                       ) : (
                         <Button variant="outline" className="w-full bg-transparent" disabled>
