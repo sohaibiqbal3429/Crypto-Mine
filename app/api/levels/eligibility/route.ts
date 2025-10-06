@@ -2,7 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import CommissionRule from "@/models/CommissionRule"
 import { getUserFromRequest } from "@/lib/auth"
-import { calculateUserLevel, getTeamStats } from "@/lib/utils/commission"
+import {
+  calculateUserLevel,
+  getPolicyActiveRequirement,
+  getTeamStats,
+} from "@/lib/utils/commission"
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,11 +17,16 @@ export async function GET(request: NextRequest) {
 
     await dbConnect()
 
-    const [currentLevel, teamStats, allRules] = await Promise.all([
+    const [currentLevel, teamStats, rawRules] = await Promise.all([
       calculateUserLevel(userPayload.userId),
       getTeamStats(userPayload.userId),
-      CommissionRule.find().sort({ level: 1 }),
+      CommissionRule.find().sort({ level: 1 }).lean(),
     ])
+
+    const allRules = rawRules.map((rule) => ({
+      ...rule,
+      activeMin: getPolicyActiveRequirement(rule.level, rule.activeMin ?? 0),
+    }))
 
     // Calculate progress to next level
     const nextRule = allRules.find((rule) => rule.level > currentLevel)

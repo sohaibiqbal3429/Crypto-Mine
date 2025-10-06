@@ -14,7 +14,24 @@ import Notification from "@/models/Notification"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
 const DEPOSIT_COMMISSION_PCT = 0.02
-const POLICY_ADJUSTMENT_REASON = "policy_update_20240501"
+const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
+
+const LEVEL_ACTIVE_REQUIREMENTS: Record<number, number> = {
+  1: 5,
+  2: 15,
+  3: 30,
+  4: 53,
+  5: 83,
+}
+
+export function getPolicyActiveRequirement(level: number, fallback = 0): number {
+  const policyValue = LEVEL_ACTIVE_REQUIREMENTS[level]
+  const normalizedFallback = Number.isFinite(fallback) ? fallback : 0
+  if (typeof policyValue === "number") {
+    return Math.max(policyValue, normalizedFallback)
+  }
+  return normalizedFallback
+}
 
 function toObjectIdString(id: unknown): string {
   if (id instanceof mongoose.Types.ObjectId) {
@@ -80,6 +97,19 @@ async function getCommissionRuleForLevel(level: number): Promise<ICommissionRule
   return rule
 }
 
+export async function rebuildActiveMemberFlags() {
+  const settings = await Settings.findOne()
+  const threshold = resolveMinRewardDeposit(settings)
+
+  await User.updateMany({}, { $set: { isActive: false } })
+  await User.updateMany(
+    { depositTotal: { $gte: threshold }, referredBy: { $exists: true, $ne: null } },
+    { $set: { isActive: true } },
+  )
+
+  return { threshold }
+}
+
 function depthToTeam(depth: number): CommissionTeamCode | null {
   switch (depth) {
     case 1:
@@ -134,6 +164,7 @@ interface TeamOverridePayout {
   team: CommissionTeamCode
   depth: number
   amount: number
+  kind: TeamOverrideRule["kind"]
 }
 
 async function resolveTeamProfitOverrides(
@@ -172,7 +203,7 @@ async function resolveTeamProfitOverrides(
         continue
       }
 
-      payouts.push({ sponsor, sponsorLevel, override, team, depth, amount })
+      payouts.push({ sponsor, sponsorLevel, override, team, depth, amount, kind: override.kind })
     }
   }
 
@@ -191,7 +222,7 @@ export async function calculateUserLevel(
   const [user, settings, directReferrals] = await Promise.all([
     User.findById(userId),
     Settings.findOne(),
-    User.find({ referredBy: userId }).select("depositTotal"),
+    User.find({ referredBy: userId }).select("depositTotal isActive"),
   ])
 
   if (!user) return 0
@@ -206,27 +237,20 @@ export async function calculateUserLevel(
     return 0
   }
 
-  const activeDirectReferrals = directReferrals.filter((member) => member.depositTotal >= activeDepositThreshold)
+  const activeDirectReferrals = directReferrals.filter(
+    (member) => Boolean(member.isActive) || member.depositTotal >= activeDepositThreshold,
+  )
   const activeCount = activeDirectReferrals.length
-  const directSalesVolume = directReferrals.reduce((sum, member) => sum + member.depositTotal, 0)
-
   const rules = await CommissionRule.find().sort({ level: 1 })
 
-  let userLevel = 1
+  let userLevel = 0
   for (const rule of rules) {
-    if (activeCount >= rule.activeMin) {
+    const requiredActive = getPolicyActiveRequirement(rule.level, rule.activeMin ?? 0)
+    if (activeCount >= requiredActive) {
       userLevel = rule.level
     } else {
       break
     }
-  }
-
-  if (userLevel >= 5 && activeCount < 35) {
-    userLevel = 4
-  }
-
-  if (userLevel >= 5 && directSalesVolume < 7000) {
-    userLevel = 4
   }
 
   const shouldPersist = options.persist ?? true
@@ -246,6 +270,16 @@ export async function calculateUserLevel(
   }
 
   return userLevel
+}
+
+export async function recalculateAllUserLevels(options: CalculateUserLevelOptions = {}) {
+  const users = await User.find().select("_id")
+  for (const user of users) {
+    await calculateUserLevel(toObjectIdString(user._id), {
+      persist: options.persist ?? true,
+      notify: options.notify ?? false,
+    })
+  }
 }
 
 interface ReferralChainEntry {
@@ -418,6 +452,7 @@ export async function applyTeamProfitOverrides(
       team: payout.team,
       depth: payout.depth,
       overridePct: payout.override.pct,
+      overrideKind: payout.kind,
       sponsorLevel: payout.sponsorLevel,
       profitAmount,
       ...(typeof context.baseAmount === "number" ? { baseAmount: context.baseAmount } : {}),
@@ -496,6 +531,10 @@ export async function policyRecalculateCommissions(
   month?: string,
   options: PolicyRecalculateOptions = {},
 ) {
+  await rebuildActiveMemberFlags()
+  await recalculateAllUserLevels({ persist: true, notify: false })
+  commissionRuleCache.clear()
+
   const { start, end, monthKey } = resolveMonthRange(month)
 
   const deposits = await Transaction.find({
@@ -649,7 +688,7 @@ interface PolicyAdjustmentOptions extends PolicyRecalculateOptions {
   end?: Date
 }
 
-type AdjustmentType = "direct_commission" | "team_commission" | "team_reward"
+type AdjustmentType = "direct_commission" | "team_commission" | "team_reward" | "daily_override"
 
 interface PolicyAdjustmentResult {
   type: AdjustmentType
@@ -664,6 +703,10 @@ interface PolicyAdjustmentResult {
 export async function policyApplyRetroactiveAdjustments(
   options: PolicyAdjustmentOptions = {},
 ) {
+  await rebuildActiveMemberFlags()
+  await recalculateAllUserLevels({ persist: true, notify: false })
+  commissionRuleCache.clear()
+
   const adjustmentReason = options.adjustmentReason ?? POLICY_ADJUSTMENT_REASON
   const start = options.start ?? new Date(0)
   const end = options.end ?? new Date()
@@ -812,7 +855,8 @@ export async function policyApplyRetroactiveAdjustments(
           tx.userId?.toString() === sponsorId &&
           tx.meta?.team === payout.team &&
           Number(tx.meta?.overridePct) === payout.override.pct &&
-          tx.meta?.payoutType === payout.override.payout,
+          tx.meta?.payoutType === payout.override.payout &&
+          (tx.meta?.overrideKind ?? payout.kind) === payout.kind,
       )
 
       const alreadyPaid = roundCurrency(
@@ -822,8 +866,17 @@ export async function policyApplyRetroactiveAdjustments(
 
       if (Math.abs(delta) <= 0) continue
 
-      const type: AdjustmentType =
-        payout.override.payout === "commission" ? "team_commission" : "team_reward"
+      let type: AdjustmentType
+      switch (payout.kind) {
+        case "team_reward":
+          type = "team_reward"
+          break
+        case "daily_override":
+          type = "daily_override"
+          break
+        default:
+          type = "team_commission"
+      }
 
       results.push({
         type,
@@ -875,6 +928,7 @@ export async function policyApplyRetroactiveAdjustments(
           payoutType: payout.override.payout,
           team: payout.team,
           overridePct: payout.override.pct,
+          overrideKind: payout.kind,
           expectedAmount: payout.amount,
           previouslyPaid: alreadyPaid,
           policyVersion: POLICY_ADJUSTMENT_REASON,
@@ -1002,7 +1056,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
     ...user.toObject(),
     children,
     directCount: directReferrals.length,
-    activeCount: directReferrals.filter((r) => r.depositTotal >= 80).length,
+    activeCount: directReferrals.filter((r) => Boolean(r.isActive)).length,
   }
 }
 
@@ -1012,13 +1066,13 @@ export async function getTeamStats(userId: string) {
 
   // Calculate team statistics
   const totalMembers = allTeamMembers.length
-  const activeMembers = allTeamMembers.filter((member) => member.depositTotal >= 80).length
+  const activeMembers = allTeamMembers.filter((member) => Boolean(member.isActive)).length
   const totalTeamDeposits = allTeamMembers.reduce((sum, member) => sum + member.depositTotal, 0)
   const totalTeamEarnings = allTeamMembers.reduce((sum, member) => sum + member.roiEarnedTotal, 0)
 
   // Get direct referrals
   const directReferrals = await User.find({ referredBy: userId })
-  const directActive = directReferrals.filter((member) => member.depositTotal >= 80).length
+  const directActive = directReferrals.filter((member) => Boolean(member.isActive)).length
 
   return {
     totalMembers,
