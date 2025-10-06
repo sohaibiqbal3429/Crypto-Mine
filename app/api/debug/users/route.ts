@@ -50,6 +50,8 @@ export async function POST() {
       referralCode: "AAAAAA",
       role: "admin",
       isActive: true,
+      qualified: true,
+      qualifiedAt: new Date(),
     })
 
     // Create balance for initial user

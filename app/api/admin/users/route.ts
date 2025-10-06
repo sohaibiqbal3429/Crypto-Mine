@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
+import LevelHistory from "@/models/LevelHistory"
 import { getUserFromRequest } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -42,22 +43,41 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     // Get balance data for each user
-    const usersWithBalance = await Promise.all(
-      users.map(async (user) => {
-        const balance = await Balance.findOne({ userId: user._id })
-        return {
-          ...user.toObject(),
-          balance: balance || {
-            current: 0,
-            totalBalance: 0,
-            totalEarning: 0,
-            lockedCapital: 0,
-            staked: 0,
-            pendingWithdraw: 0,
-          },
-        }
-      }),
-    )
+    const userIds = users.map((user) => user._id)
+
+    const [balances, levelHistoryDocs] = await Promise.all([
+      Balance.find({ userId: { $in: userIds } }),
+      LevelHistory.find({ userId: { $in: userIds } }).sort({ level: 1 }),
+    ])
+
+    const balanceByUser = new Map<string, any>()
+    for (const balance of balances) {
+      balanceByUser.set(balance.userId.toString(), balance)
+    }
+
+    const historyByUser = new Map<string, { level: number; achievedAt: string }[]>()
+    for (const history of levelHistoryDocs) {
+      const id = history.userId.toString()
+      const list = historyByUser.get(id) ?? []
+      list.push({ level: history.level, achievedAt: history.achievedAt.toISOString() })
+      historyByUser.set(id, list)
+    }
+
+    const usersWithBalance = users.map((user) => {
+      const balance = balanceByUser.get(user._id.toString())
+      return {
+        ...user.toObject(),
+        balance: balance || {
+          current: 0,
+          totalBalance: 0,
+          totalEarning: 0,
+          lockedCapital: 0,
+          staked: 0,
+          pendingWithdraw: 0,
+        },
+        levelHistory: historyByUser.get(user._id.toString()) ?? [],
+      }
+    })
 
     const total = await User.countDocuments(query)
 

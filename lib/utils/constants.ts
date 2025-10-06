@@ -43,11 +43,11 @@ export const STAKING_CONFIG = {
 export const LEVEL_CONFIG = {
   requirements: [
     { level: 0, depositRequired: 0, activeMembersRequired: 0 },
-    { level: 1, depositRequired: 30, activeMembersRequired: 0 },
-    { level: 2, depositRequired: 30, activeMembersRequired: 5 },
-    { level: 3, depositRequired: 30, activeMembersRequired: 10 },
-    { level: 4, depositRequired: 30, activeMembersRequired: 15 },
-    { level: 5, depositRequired: 30, activeMembersRequired: 25 },
+    { level: 1, depositRequired: 30, activeMembersRequired: 5 },
+    { level: 2, depositRequired: 30, activeMembersRequired: 10 },
+    { level: 3, depositRequired: 30, activeMembersRequired: 15 },
+    { level: 4, depositRequired: 30, activeMembersRequired: 30 },
+    { level: 5, depositRequired: 30, activeMembersRequired: 43 },
   ],
   perks: {
     directCommission: {

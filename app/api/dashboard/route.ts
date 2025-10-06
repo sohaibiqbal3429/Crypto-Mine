@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const activeMembers = await User.countDocuments({
       referredBy: user._id,
-      depositTotal: { $gte: 80 },
+      qualified: true,
     })
 
     const now = new Date()
