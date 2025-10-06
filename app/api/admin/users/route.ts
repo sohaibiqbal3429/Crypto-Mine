@@ -4,6 +4,7 @@ import User from "@/models/User"
 import Balance from "@/models/Balance"
 import LevelHistory from "@/models/LevelHistory"
 import { getUserFromRequest } from "@/lib/auth"
+import { recalculateAllUserLevels } from "@/lib/utils/commission"
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,6 +35,8 @@ export async function GET(request: NextRequest) {
         { referralCode: { $regex: search, $options: "i" } },
       ]
     }
+
+    await recalculateAllUserLevels({ persist: true, notify: false })
 
     // Get users with balance data
     const users = await User.find(query)

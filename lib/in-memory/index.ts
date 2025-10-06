@@ -1086,7 +1086,7 @@ function createCommissionRules(): InMemoryDocument[] {
       directPct: 9,
       teamDailyPct: 0,
       teamRewardPct: 2,
-      activeMin: 30,
+      activeMin: 23,
       teamOverrides: [
         {
           team: "A",
@@ -1134,7 +1134,7 @@ function createCommissionRules(): InMemoryDocument[] {
       directPct: 10,
       teamDailyPct: 0,
       teamRewardPct: 2,
-      activeMin: 43,
+      activeMin: 30,
       teamOverrides: [
         {
           team: "A",

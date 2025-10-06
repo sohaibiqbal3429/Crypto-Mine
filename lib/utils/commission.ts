@@ -12,13 +12,17 @@ import CommissionRule, {
 import Settings, { type ISettings } from "@/models/Settings"
 import Notification from "@/models/Notification"
 import LevelHistory from "@/models/LevelHistory"
+import {
+  LEVEL_PROGRESS_REQUIREMENTS,
+  QUALIFYING_DIRECT_DEPOSIT,
+  hasQualifiedDeposit,
+} from "@/lib/utils/leveling"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
-const QUALIFYING_DIRECT_DEPOSIT = 80
 const DEPOSIT_COMMISSION_PCT = 0.02
 const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
 
-const LEVEL_THRESHOLDS = [5, 10, 15, 30, 43] as const
+const LEVEL_THRESHOLDS = LEVEL_PROGRESS_REQUIREMENTS
 export const LEVEL_PROGRESSION_THRESHOLDS = LEVEL_THRESHOLDS
 
 function toObjectIdString(id: unknown): string {
@@ -156,6 +160,11 @@ export async function rebuildActiveMemberFlags() {
     { $set: { isActive: true } },
   )
 
+  await User.updateMany(
+    { depositTotal: { $gte: QUALIFYING_DIRECT_DEPOSIT } },
+    { $set: { qualified: true } },
+  )
+
   return { threshold }
 }
 
@@ -270,7 +279,7 @@ export async function calculateUserLevel(
 ): Promise<number> {
   const [user, directReferrals] = await Promise.all([
     User.findById(userId),
-    User.find({ referredBy: userId }).select("qualified qualifiedAt createdAt updatedAt"),
+    User.find({ referredBy: userId }).select("qualified qualifiedAt depositTotal createdAt updatedAt"),
   ])
 
   if (!user) return 0
@@ -282,7 +291,7 @@ export async function calculateUserLevel(
   const qualifiedAtUpdates: Array<{ filter: any; update: any }> = []
 
   for (const referral of directReferrals) {
-    if (!referral.qualified) {
+    if (!hasQualifiedDeposit(referral)) {
       continue
     }
 
@@ -290,11 +299,21 @@ export async function calculateUserLevel(
       referral.qualifiedAt ?? referral.updatedAt ?? referral.createdAt ?? new Date(0)
     qualificationEvents.push({ achievedAt: fallbackDate })
 
-    if (!referral.qualifiedAt && shouldPersist) {
-      qualifiedAtUpdates.push({
-        filter: { _id: referral._id },
-        update: { $set: { qualifiedAt: fallbackDate } },
-      })
+    if (shouldPersist) {
+      const update: Record<string, unknown> = {}
+      if (!referral.qualified) {
+        update.qualified = true
+      }
+      if (!referral.qualifiedAt) {
+        update.qualifiedAt = fallbackDate
+      }
+
+      if (Object.keys(update).length > 0) {
+        qualifiedAtUpdates.push({
+          filter: { _id: referral._id },
+          update: { $set: update },
+        })
+      }
     }
   }
 
@@ -356,7 +375,15 @@ export async function calculateUserLevel(
   return resolvedLevel
 }
 
-export async function recalculateAllUserLevels(options: CalculateUserLevelOptions = {}) {
+interface RecalculateUserLevelsOptions extends CalculateUserLevelOptions {
+  syncActiveFlags?: boolean
+}
+
+export async function recalculateAllUserLevels(options: RecalculateUserLevelsOptions = {}) {
+  if (options.syncActiveFlags !== false) {
+    await rebuildActiveMemberFlags()
+  }
+
   const users = await User.find().select("_id")
   for (const user of users) {
     await calculateUserLevel(toObjectIdString(user._id), {
@@ -615,7 +642,6 @@ export async function policyRecalculateCommissions(
   month?: string,
   options: PolicyRecalculateOptions = {},
 ) {
-  await rebuildActiveMemberFlags()
   await recalculateAllUserLevels({ persist: true, notify: false })
   commissionRuleCache.clear()
 
@@ -787,7 +813,6 @@ interface PolicyAdjustmentResult {
 export async function policyApplyRetroactiveAdjustments(
   options: PolicyAdjustmentOptions = {},
 ) {
-  await rebuildActiveMemberFlags()
   await recalculateAllUserLevels({ persist: true, notify: false })
   commissionRuleCache.clear()
 
@@ -1057,9 +1082,9 @@ export async function applyDepositRewards(
   )
   const qualifiesForRewards = depositAmount >= requiredDeposit || qualifiesForActivation
 
-  const qualifiesForDirectActivation = depositAmount >= QUALIFYING_DIRECT_DEPOSIT
-  const newlyQualified =
-    qualifiesForDirectActivation && Boolean(userDoc) && !Boolean(userDoc?.qualified)
+  const updatedDepositTotal = Number(userDoc?.depositTotal ?? 0)
+  const qualifiesForDirectActivation = updatedDepositTotal >= QUALIFYING_DIRECT_DEPOSIT
+  const newlyQualified = qualifiesForDirectActivation && Boolean(userDoc) && !Boolean(userDoc?.qualified)
   const sponsorId = userDoc?.referredBy ? userDoc.referredBy.toString() : null
 
   if (newlyQualified && !options.dryRun) {
@@ -1175,7 +1200,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
     level: plainUser.level,
     depositTotal: plainUser.depositTotal,
     isActive: plainUser.isActive,
-    qualified: plainUser.qualified,
+    qualified: hasQualifiedDeposit(plainUser),
     createdAt: plainUser.createdAt,
   }
 
@@ -1197,7 +1222,7 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
     ...baseUser,
     children,
     directCount: directReferrals.length,
-    activeCount: directReferrals.filter((r) => Boolean(r.qualified)).length,
+    activeCount: directReferrals.filter((r) => hasQualifiedDeposit(r)).length,
   }
 }
 
@@ -1207,15 +1232,15 @@ export async function getTeamStats(userId: string) {
 
   // Calculate team statistics
   const totalMembers = allTeamMembers.length
-  const activeMembers = allTeamMembers.filter((member) => Boolean(member.qualified)).length
+  const activeMembers = allTeamMembers.filter((member) => hasQualifiedDeposit(member)).length
   const totalTeamDeposits = allTeamMembers.reduce((sum, member) => sum + member.depositTotal, 0)
   const totalTeamEarnings = allTeamMembers.reduce((sum, member) => sum + member.roiEarnedTotal, 0)
 
   // Get direct referrals
   const directReferrals = await User.find({ referredBy: userId })
-    .select("qualified")
+    .select("qualified depositTotal")
     .lean()
-  const directActive = directReferrals.filter((member) => Boolean(member.qualified)).length
+  const directActive = directReferrals.filter((member) => hasQualifiedDeposit(member)).length
 
   return {
     totalMembers,
