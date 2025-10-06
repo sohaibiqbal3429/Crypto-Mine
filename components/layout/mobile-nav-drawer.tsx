@@ -195,9 +195,9 @@ export function MobileNavDrawer({ open, onOpenChange, anchorRef }: MobileNavDraw
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[var(--z-header)] bg-background/60 opacity-0 transition-opacity duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] data-[state=open]:opacity-60" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[900] bg-black/50 opacity-0 transition-opacity duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] data-[state=open]:opacity-100" />
         <DialogPrimitive.Content
-          id="mobile-navigation"
+          id="mobile-drawer"
           aria-modal="true"
           aria-labelledby={titleId}
           onCloseAutoFocus={(event) => {
@@ -205,7 +205,7 @@ export function MobileNavDrawer({ open, onOpenChange, anchorRef }: MobileNavDraw
             anchorRef.current?.focus()
           }}
           className={cn(
-            "pointer-events-auto fixed inset-y-0 left-0 z-[calc(var(--z-header)+1)] flex h-dvh min-w-[80vw] max-w-[92vw] flex-col overflow-hidden rounded-r-3xl border-r border-border/60 bg-card/95 text-card-foreground shadow-2xl shadow-black/20 backdrop-blur supports-[backdrop-filter]:bg-card/80 will-change-[transform,opacity]",
+            "pointer-events-auto fixed left-0 top-0 z-[1000] flex h-screen w-[86vw] flex-col overflow-hidden border-r border-border/60 bg-card text-card-foreground shadow-2xl shadow-black/20 will-change-[transform,opacity]",
             "transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)]",
             "data-[state=closed]:-translate-x-6 data-[state=closed]:scale-[0.98] data-[state=closed]:opacity-0",
             "data-[state=open]:translate-x-0 data-[state=open]:scale-100 data-[state=open]:opacity-100",

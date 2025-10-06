@@ -30,7 +30,7 @@ export function AppHeader() {
   return (
     <>
       <header
-        className="sticky top-0 z-[calc(var(--z-header)+5)] border-b border-border/50 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm shadow-black/5 md:hidden"
+        className="sticky top-0 z-[100] border-b border-border/50 bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60 shadow-sm shadow-black/5 md:hidden"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="flex min-h-[56px] items-center gap-3 px-3 pb-2 pt-2">
@@ -41,9 +41,9 @@ export function AppHeader() {
               "flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/60 text-foreground transition",
               "hover:bg-muted/60 active:scale-95",
             )}
-            aria-label="Open navigation menu"
+            aria-label="Open menu"
             aria-expanded={drawerOpen}
-            aria-controls="mobile-navigation"
+            aria-controls="mobile-drawer"
             onClick={() => setDrawerOpen(true)}
           >
             <Menu className="h-5 w-5" aria-hidden />
