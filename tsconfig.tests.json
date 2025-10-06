@@ -13,6 +13,6 @@
     "declaration": false,
     "baseUrl": "."
   },
-  "include": ["tests/**/*.ts", "lib/utils/locked-capital.ts"],
+  "include": ["tests/**/*.ts", "lib/utils/locked-capital.ts", "types/**/*.d.ts"],
   "exclude": ["node_modules"]
 }

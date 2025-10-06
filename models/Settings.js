@@ -14,6 +14,7 @@ const SettingsSchema = new mongoose.Schema(
       minWithdraw: { type: Number, default: 30 },
       joinNeedsReferral: { type: Boolean, default: true },
       activeMinDeposit: { type: Number, default: 80 },
+      capitalLockDays: { type: Number, default: 30 },
     },
     joiningBonus: {
       threshold: { type: Number, default: 100 },
@@ -24,6 +25,12 @@ const SettingsSchema = new mongoose.Schema(
       startAtDeposit: { type: Number, default: 50 },
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },
+    },
+    luckyDraw: {
+      entryFee: { type: Number, default: 10 },
+      prize: { type: Number, default: 30 },
+      cycleHours: { type: Number, default: 72 },
+      autoDrawEnabled: { type: Boolean, default: true },
     },
   },
   {
