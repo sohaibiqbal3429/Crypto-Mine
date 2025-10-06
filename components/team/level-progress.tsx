@@ -1,9 +1,12 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { cn } from "@/lib/utils"
 import { Trophy, Users, Target } from "lucide-react"
 
 type OverrideKind = "daily_override" | "team_commission" | "team_reward"
@@ -101,11 +104,45 @@ export function LevelProgress({
 }: LevelProgressProps) {
   const currentOverrides = buildOverrideSummaries(currentRule)
   const nextOverrides = buildOverrideSummaries(nextRule)
+  const [levelHighlight, setLevelHighlight] = useState(false)
+  const [progressHighlight, setProgressHighlight] = useState(false)
+  const previousLevelRef = useRef(currentLevel)
+  const previousProgressRef = useRef(levelProgress?.currentActive ?? 0)
+
+  useEffect(() => {
+    if (previousLevelRef.current === currentLevel) {
+      return
+    }
+
+    previousLevelRef.current = currentLevel
+    setLevelHighlight(true)
+    const timeout = window.setTimeout(() => setLevelHighlight(false), 900)
+    return () => window.clearTimeout(timeout)
+  }, [currentLevel])
+
+  useEffect(() => {
+    const currentActive = levelProgress?.currentActive ?? 0
+    if (previousProgressRef.current === currentActive) {
+      return
+    }
+
+    previousProgressRef.current = currentActive
+    setProgressHighlight(true)
+    const timeout = window.setTimeout(() => setProgressHighlight(false), 700)
+    return () => window.clearTimeout(timeout)
+  }, [levelProgress?.currentActive])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Current Level Status */}
-      <Card>
+      <Card
+        className={cn(
+          "transition-all duration-500",
+          levelHighlight
+            ? "ring-2 ring-amber-300/60 shadow-xl shadow-amber-200/30"
+            : "ring-1 ring-transparent",
+        )}
+      >
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Trophy className="h-5 w-5 text-amber-600" />
@@ -146,7 +183,14 @@ export function LevelProgress({
           )}
 
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg border bg-muted/40 p-3">
+            <div
+              className={cn(
+                "rounded-lg border bg-muted/40 p-3 transition-all duration-500",
+                progressHighlight
+                  ? "border-primary/60 bg-primary/5 shadow-inner shadow-primary/20"
+                  : "",
+              )}
+            >
               <p className="text-muted-foreground">Direct active referrals (current cycle)</p>
               <p className="text-lg font-semibold">
                 {directActiveCount}
