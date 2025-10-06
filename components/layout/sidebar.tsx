@@ -1,14 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
-import { Menu, LogOut } from "lucide-react"
+import { LogOut } from "lucide-react"
 
 import { PRIMARY_NAV_ITEMS, ADMIN_NAV_ITEM } from "@/components/layout/nav-config"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 interface SidebarProps {
   user?: {
@@ -22,11 +20,6 @@ interface SidebarProps {
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    setOpen(false)
-  }, [pathname])
 
   const handleLogout = async () => {
     try {
@@ -61,7 +54,6 @@ export function Sidebar({ user }: SidebarProps) {
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}
-              onClick={() => setOpen(false)}
             >
               <item.icon className="mr-3 h-5 w-5" />
               {item.name}
@@ -77,7 +69,6 @@ export function Sidebar({ user }: SidebarProps) {
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             }`}
-            onClick={() => setOpen(false)}
           >
             <ADMIN_NAV_ITEM.icon className="mr-3 h-5 w-5" />
             {ADMIN_NAV_ITEM.name}
@@ -97,7 +88,6 @@ export function Sidebar({ user }: SidebarProps) {
             variant="ghost"
             size="sm"
             onClick={() => {
-              setOpen(false)
               void handleLogout()
             }}
             className="w-full justify-start text-sidebar-foreground "
@@ -111,24 +101,8 @@ export function Sidebar({ user }: SidebarProps) {
   )
 
   return (
-    <>
-      {/* Mobile sidebar */}
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden h-14 w-14">
-            <Menu className="h-10 w-10" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-64 p-0 [&_[data-slot='sheet-close']]:hidden">
-          <SidebarContent />
-        </SheetContent>
-      </Sheet>
-
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0">
-        <SidebarContent />
-      </div>
-
-    </>
+    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
+      <SidebarContent />
+    </aside>
   )
 }
