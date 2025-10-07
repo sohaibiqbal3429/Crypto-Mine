@@ -178,10 +178,13 @@ export function BlindBoxAdminPanel() {
 
   const winnerOptions = useMemo(
     () =>
-      participants.map((participant) => ({
-        id: participant.user?.id ?? participant.id,
-        label: `${participant.user?.name ?? "Unnamed"} (${participant.hashedUserId.slice(0, 10)}...)`,
-      })),
+      participants.map((participant) => {
+        const hashed = participant.hashedUserId ? participant.hashedUserId.slice(0, 10) : "unknown"
+        return {
+          id: participant.user?.id ?? participant.id,
+          label: `${participant.user?.name ?? "Unnamed"} (${hashed}...)`,
+        }
+      }),
     [participants],
   )
 
@@ -241,7 +244,9 @@ export function BlindBoxAdminPanel() {
                             <div className="font-medium">{participant.user?.name ?? "Unknown"}</div>
                             <div className="text-xs text-muted-foreground">{participant.user?.email ?? "-"}</div>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{participant.hashedUserId.slice(0, 24)}...</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {participant.hashedUserId ? `${participant.hashedUserId.slice(0, 24)}...` : "Unavailable"}
+                          </TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {new Date(participant.joinedAt).toLocaleString()}
                           </TableCell>
