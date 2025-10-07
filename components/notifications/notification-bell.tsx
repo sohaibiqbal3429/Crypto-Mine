@@ -104,6 +104,14 @@ export function NotificationBell() {
         return "⚠️"
       case "mining-reward":
         return "⛏️"
+      case "blindbox-submitted":
+        return "🧾"
+      case "blindbox-approved":
+        return "✅"
+      case "blindbox-rejected":
+        return "⚠️"
+      case "blindbox-won":
+        return "🎁"
       default:
         return "📢"
     }

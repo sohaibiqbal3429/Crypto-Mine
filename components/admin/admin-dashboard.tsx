@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable } from "@/components/admin/transaction-table"
 import { UserTable } from "@/components/admin/user-table"
 import { LuckyDrawPanel } from "@/components/admin/lucky-draw-panel"
+import { BlindBoxAdminPanel } from "@/components/admin/blind-box-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -208,11 +209,12 @@ export function AdminDashboard({
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
               <TabsTrigger value="lucky-draw">Lucky Draw</TabsTrigger>
+              <TabsTrigger value="blind-box">Blind Box</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -339,6 +341,9 @@ export function AdminDashboard({
             </TabsContent>
             <TabsContent value="lucky-draw">
               <LuckyDrawPanel />
+            </TabsContent>
+            <TabsContent value="blind-box">
+              <BlindBoxAdminPanel />
             </TabsContent>
           </Tabs>
 
