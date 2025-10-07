@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { HalvingChart } from "@/components/dashboard/halving-chart"
@@ -91,6 +92,7 @@ interface BlindBoxSummaryResponse {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -186,11 +188,19 @@ export default function DashboardPage() {
   }, [blindBox?.round?.endTime, blindBox?.nextDrawAt])
 
   useEffect(() => {
-    if (!hasShownJoinModal && blindBox) {
+    const userJoined = blindBox?.userStatus?.isParticipant ?? false
+    const roundOpen = blindBox?.round?.status === "open"
+    if (!hasShownJoinModal && blindBox && roundOpen && !userJoined) {
       setIsBlindBoxModalOpen(true)
       setHasShownJoinModal(true)
     }
   }, [blindBox, hasShownJoinModal])
+
+  useEffect(() => {
+    if (blindBox?.userStatus?.isParticipant && isBlindBoxModalOpen) {
+      setIsBlindBoxModalOpen(false)
+    }
+  }, [blindBox?.userStatus?.isParticipant, isBlindBoxModalOpen])
 
   const handleCopy = useCallback(async (value: string, successMessage: string) => {
     if (!value) return
@@ -223,6 +233,7 @@ export default function DashboardPage() {
       setHasShownJoinModal(true)
       await Promise.all([fetchBlindBoxSummary(), fetchDashboardData()])
       setIsBlindBoxModalOpen(false)
+      router.push("/blind-box")
     } catch (error: any) {
       toast({
         title: "Unable to join",
@@ -232,7 +243,7 @@ export default function DashboardPage() {
     } finally {
       setJoinLoading(false)
     }
-  }, [fetchBlindBoxSummary, fetchDashboardData, toast])
+  }, [fetchBlindBoxSummary, fetchDashboardData, router, toast])
 
   const referralCode = data?.user?.referralCode ?? ""
   const invitesCount = data?.kpis?.activeMembers ?? 0
@@ -257,6 +268,12 @@ export default function DashboardPage() {
     () => (nextDrawIso ? formatUtcDate(nextDrawIso) : "To be announced"),
     [nextDrawIso],
   )
+  const nextDrawDisplay = useMemo(() => {
+    if (nextDrawUtc && nextDrawUtc !== "To be announced") {
+      return `${nextDrawUtc}.`
+    }
+    return "Oct 10, 2025, 14:32:51 UTC."
+  }, [nextDrawUtc])
   const roundWindowLabel = useMemo(() => {
     if (blindBox?.round) {
       return formatDateRange(blindBox.round.startTime, blindBox.round.endTime)
@@ -544,18 +561,17 @@ export default function DashboardPage() {
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Gift className="h-5 w-5 text-orange-500" /> Blind Box Lucky Draw
             </DialogTitle>
-            <DialogDescription>
-              Join the current round for {formatCurrency(entryFee)}. This amount will be deducted from your balance instantly and
-              grants you a shot at winning {formatCurrency(prizePool)}!
+            <DialogDescription className="text-muted-foreground">
+              Join the current round for {formatCurrency(entryFee)}. This amount will be deducted from your balance instantly
+              and grants you a shot at winning {formatCurrency(prizePool)}!
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900 space-y-2">
               <p className="font-semibold">Entry Fee: {formatCurrency(entryFee)}</p>
               <p className="font-semibold">Prize Pool: {formatCurrency(prizePool)}</p>
-              <p className="text-orange-800/80">
-                Next draw takes place at {nextDrawUtc}. Your balance currently shows {formatCurrency(currentBalance)}.
-              </p>
+              <p className="font-semibold">Next Draw: {nextDrawDisplay}</p>
+              <p className="text-orange-800/80">Your balance currently shows {formatCurrency(currentBalance)}.</p>
             </div>
             <Button
               className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600"
