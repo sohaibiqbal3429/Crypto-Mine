@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 
 import { BlindBoxDashboard } from "@/components/blindbox/blind-box-dashboard"
 import { Sidebar } from "@/components/layout/sidebar"
-import { BLIND_BOX_CONSTANTS, getBlindBoxSummaryForUser, listBlindBoxRounds } from "@/lib/services/blindbox"
+import { getBlindBoxSummaryForUser, listBlindBoxRounds } from "@/lib/services/blindbox"
 import { fetchWalletContext } from "@/lib/services/wallet"
 import { verifyToken } from "@/lib/auth"
 
@@ -36,11 +36,7 @@ export default async function BlindBoxPage() {
       <Sidebar user={walletContext.user} />
       <main className="relative flex-1 overflow-y-auto md:ml-64">
         <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 md:px-10">
-          <BlindBoxDashboard
-            initialSummary={summary}
-            constants={BLIND_BOX_CONSTANTS}
-            initialHistory={history}
-          />
+          <BlindBoxDashboard initialSummary={summary} initialHistory={history} />
         </div>
       </main>
     </div>

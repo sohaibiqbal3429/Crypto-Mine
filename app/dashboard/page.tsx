@@ -53,45 +53,41 @@ interface DashboardData {
   }
 }
 
-interface LuckyDrawConfig {
-  entryFee: number
-  prize: number
+interface BlindBoxConfig {
+  depositAmount: number
+  rewardAmount: number
   cycleHours: number
   autoDrawEnabled: boolean
 }
 
-interface LuckyDrawRoundPayload {
+interface BlindBoxRoundPayload {
   id: string
-  status: "open" | "closed" | "completed"
-  entryFee: number
-  prize: number
-  startsAt: string
-  endsAt: string
-  totalEntries: number
-  hasJoined: boolean
-}
-
-interface LuckyDrawPreviousRoundPayload {
-  id: string
-  status: "open" | "closed" | "completed"
-  prize: number
-  totalEntries: number
+  status: "open" | "completed"
+  startTime: string
+  endTime: string
+  totalParticipants: number
+  rewardAmount: number
+  depositAmount: number
   winnerSnapshot: {
-    userId: string
     name: string
-    referralCode: string
+    referralCode?: string | null
     email?: string | null
-    creditedAt: string | null
+    creditedAt?: string | null
   } | null
-  endsAt: string
-  completedAt: string
+  winnerUserId: string | null
 }
 
-interface LuckyDrawSummaryResponse {
-  round: LuckyDrawRoundPayload | null
-  config: LuckyDrawConfig
+interface BlindBoxSummaryResponse {
+  round: BlindBoxRoundPayload | null
+  previousRound: BlindBoxRoundPayload | null
   nextDrawAt: string | null
-  previousRound: LuckyDrawPreviousRoundPayload | null
+  participants: number
+  config: BlindBoxConfig
+  userStatus: {
+    isParticipant: boolean
+    joinedAt: string | null
+    lastEntryTransactionId: string | null
+  }
 }
 
 export default function DashboardPage() {
@@ -103,10 +99,11 @@ export default function DashboardPage() {
   const [isLeaderboardModalOpen, setIsLeaderboardModalOpen] = useState(false)
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
   const [referralLink, setReferralLink] = useState("")
-  const [luckyDraw, setLuckyDraw] = useState<LuckyDrawSummaryResponse | null>(null)
-  const [luckyDrawLoading, setLuckyDrawLoading] = useState(true)
+  const [blindBox, setBlindBox] = useState<BlindBoxSummaryResponse | null>(null)
+  const [blindBoxLoading, setBlindBoxLoading] = useState(true)
   const [joinLoading, setJoinLoading] = useState(false)
   const [countdown, setCountdown] = useState("--:--:--:--")
+  const [hasShownJoinModal, setHasShownJoinModal] = useState(false)
   const { toast } = useToast()
 
   const fetchDashboardData = useCallback(async () => {
@@ -126,28 +123,28 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const fetchLuckyDrawSummary = useCallback(async () => {
+  const fetchBlindBoxSummary = useCallback(async () => {
     try {
-      setLuckyDrawLoading(true)
-      const response = await fetch("/api/lucky-draw/round/current")
+      setBlindBoxLoading(true)
+      const response = await fetch("/api/blindbox/summary")
       if (!response.ok) {
-        throw new Error("Failed to load lucky draw details")
+        throw new Error("Failed to load blind box details")
       }
 
-      const summary = (await response.json()) as LuckyDrawSummaryResponse
-      setLuckyDraw(summary)
+      const summary = (await response.json()) as BlindBoxSummaryResponse
+      setBlindBox(summary)
     } catch (error) {
-      console.error("Failed to fetch lucky draw summary:", error)
-      setLuckyDraw(null)
+      console.error("Failed to fetch blind box summary:", error)
+      setBlindBox(null)
     } finally {
-      setLuckyDrawLoading(false)
+      setBlindBoxLoading(false)
     }
   }, [])
 
   useEffect(() => {
     fetchDashboardData()
-    fetchLuckyDrawSummary()
-  }, [fetchDashboardData, fetchLuckyDrawSummary])
+    fetchBlindBoxSummary()
+  }, [fetchDashboardData, fetchBlindBoxSummary])
 
   useEffect(() => {
     if (data?.user?.referralCode && typeof window !== "undefined") {
@@ -160,7 +157,7 @@ export default function DashboardPage() {
   }, [data?.user?.referralCode])
 
   useEffect(() => {
-    const targetIso = luckyDraw?.round?.endsAt ?? luckyDraw?.nextDrawAt ?? null
+    const targetIso = blindBox?.round?.endTime ?? blindBox?.nextDrawAt ?? null
     if (!targetIso) {
       setCountdown("--:--:--:--")
       return
@@ -186,7 +183,14 @@ export default function DashboardPage() {
 
     const interval = window.setInterval(updateCountdown, 1000)
     return () => window.clearInterval(interval)
-  }, [luckyDraw?.round?.endsAt, luckyDraw?.nextDrawAt])
+  }, [blindBox?.round?.endTime, blindBox?.nextDrawAt])
+
+  useEffect(() => {
+    if (!hasShownJoinModal && blindBox) {
+      setIsBlindBoxModalOpen(true)
+      setHasShownJoinModal(true)
+    }
+  }, [blindBox, hasShownJoinModal])
 
   const handleCopy = useCallback(async (value: string, successMessage: string) => {
     if (!value) return
@@ -203,19 +207,12 @@ export default function DashboardPage() {
   }, [])
 
   const handleConfirmJoin = useCallback(async () => {
-    if (!luckyDraw?.round) return
-
+    setJoinLoading(true)
     try {
-      setJoinLoading(true)
-      const response = await fetch("/api/lucky-draw/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roundId: luckyDraw.round.id }),
-      })
-
+      const response = await fetch("/api/blindbox/join", { method: "POST" })
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || "Unable to join the lucky draw")
+        throw new Error(data.error || "Unable to join the blind box")
       }
 
       toast({
@@ -223,7 +220,8 @@ export default function DashboardPage() {
         description: "Good luck — we'll announce the winner soon.",
       })
 
-      await Promise.all([fetchLuckyDrawSummary(), fetchDashboardData()])
+      setHasShownJoinModal(true)
+      await Promise.all([fetchBlindBoxSummary(), fetchDashboardData()])
       setIsBlindBoxModalOpen(false)
     } catch (error: any) {
       toast({
@@ -234,23 +232,23 @@ export default function DashboardPage() {
     } finally {
       setJoinLoading(false)
     }
-  }, [fetchDashboardData, fetchLuckyDrawSummary, luckyDraw?.round, toast])
+  }, [fetchBlindBoxSummary, fetchDashboardData, toast])
 
   const referralCode = data?.user?.referralCode ?? ""
   const invitesCount = data?.kpis?.activeMembers ?? 0
   const referralEarnings = data?.kpis?.teamReward ?? 0
   const formattedReferralEarnings = useMemo(() => formatCurrency(referralEarnings), [referralEarnings])
   const fallbackParticipantCount = useMemo(() => Math.max(3566, invitesCount * 12 + 500), [invitesCount])
-  const rawParticipantCount = luckyDraw?.round?.totalEntries ?? 0
+  const rawParticipantCount = blindBox?.round?.totalParticipants ?? blindBox?.participants ?? 0
   const participantCount = rawParticipantCount > 0 ? rawParticipantCount : fallbackParticipantCount
   const participantLabel = useMemo(
     () => new Intl.NumberFormat("en-US").format(participantCount),
     [participantCount],
   )
   const referralStatsText = `${invitesCount} active invites | ${formattedReferralEarnings} earned from referrals`
-  const prizePool = luckyDraw?.round?.prize ?? luckyDraw?.config?.prize ?? 30
-  const entryFee = luckyDraw?.round?.entryFee ?? luckyDraw?.config?.entryFee ?? 10
-  const nextDrawIso = luckyDraw?.round?.endsAt ?? luckyDraw?.nextDrawAt ?? null
+  const prizePool = blindBox?.round?.rewardAmount ?? blindBox?.config?.rewardAmount ?? 30
+  const entryFee = blindBox?.round?.depositAmount ?? blindBox?.config?.depositAmount ?? 10
+  const nextDrawIso = blindBox?.round?.endTime ?? blindBox?.nextDrawAt ?? null
   const nextDrawFriendly = useMemo(
     () => (nextDrawIso ? formatShortDate(nextDrawIso) : "soon"),
     [nextDrawIso],
@@ -260,24 +258,26 @@ export default function DashboardPage() {
     [nextDrawIso],
   )
   const roundWindowLabel = useMemo(() => {
-    if (luckyDraw?.round) {
-      return formatDateRange(luckyDraw.round.startsAt, luckyDraw.round.endsAt)
+    if (blindBox?.round) {
+      return formatDateRange(blindBox.round.startTime, blindBox.round.endTime)
     }
     return "To be announced"
-  }, [luckyDraw?.round?.startsAt, luckyDraw?.round?.endsAt])
+  }, [blindBox?.round?.startTime, blindBox?.round?.endTime])
   const currentBalance = data?.kpis?.currentBalance ?? 0
   const canAffordEntry = currentBalance >= entryFee
-  const alreadyJoined = luckyDraw?.round?.hasJoined ?? false
-  const roundAcceptingEntries = luckyDraw?.round?.status === "open"
-  const joinDisabled = !luckyDraw?.round || alreadyJoined || !canAffordEntry || !roundAcceptingEntries || joinLoading
-  const joinTooltip = !canAffordEntry
-    ? "Insufficient balance"
-    : alreadyJoined
-      ? "You're already in this round"
-      : !roundAcceptingEntries
-        ? "This round has closed"
-        : ""
-  const winnerSnapshot = luckyDraw?.previousRound?.winnerSnapshot ?? null
+  const alreadyJoined = blindBox?.userStatus?.isParticipant ?? false
+  const roundAcceptingEntries = blindBox?.round?.status === "open"
+  const joinDisabled = !blindBox?.round || alreadyJoined || !canAffordEntry || !roundAcceptingEntries || joinLoading
+  const joinTooltip = !blindBox?.round
+    ? "The blind box round is loading"
+    : !canAffordEntry
+      ? "Insufficient balance"
+      : alreadyJoined
+        ? "You're already in this round"
+        : !roundAcceptingEntries
+          ? "This round has closed"
+          : ""
+  const winnerSnapshot = blindBox?.previousRound?.winnerSnapshot ?? null
 
   if (loading) {
     return (
@@ -325,7 +325,7 @@ export default function DashboardPage() {
             <HalvingChart />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-orange-400 via-rose-500 to-amber-400 text-white shadow-2xl">
               <div className="pointer-events-none absolute -top-24 -right-32 h-72 w-72 rounded-full bg-white/25 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-24 -left-28 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
@@ -347,7 +347,7 @@ export default function DashboardPage() {
                     <Sparkles className="h-10 w-10 text-white/70" />
                   </div>
                 </div>
-                {luckyDrawLoading ? (
+                {blindBoxLoading ? (
                   <div className="flex items-center gap-3 rounded-3xl bg-white/10 px-4 py-3 text-white/85">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Calculating the next reward window…</span>
@@ -355,7 +355,7 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <p className="max-w-2xl text-base leading-relaxed text-white/90">
-                      Pay {formatCurrency(entryFee)} to join the game and enter the lucky draw to win {formatCurrency(prizePool)}.
+                      Pay {formatCurrency(entryFee)} to join the Blind Box and get a chance to win {formatCurrency(prizePool)}.
                     </p>
                     <div className="flex flex-wrap items-center gap-3">
                       {joinTooltip ? (
@@ -436,7 +436,7 @@ export default function DashboardPage() {
                           </h3>
                         </div>
                         <Badge variant="outline" className="bg-white/20 border-white/40 text-white">
-                          <CalendarDays className="mr-2 h-4 w-4" /> Every {luckyDraw?.config?.cycleHours ?? 72}h
+                          <CalendarDays className="mr-2 h-4 w-4" /> Every {blindBox?.config?.cycleHours ?? 72}h
                         </Badge>
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -473,68 +473,68 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
 
-            <Card className="relative overflow-hidden border-none rounded-[28px] bg-gradient-to-br from-emerald-300 via-emerald-200 to-teal-200 text-emerald-900 shadow-2xl">
-              <div className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-white/40 blur-3xl" />
-              <div className="pointer-events-none absolute -bottom-16 -left-20 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
-              <CardHeader className="space-y-3 pb-0">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-900/70">Mintmine Pro Rewards Center</p>
-                    <CardTitle className="text-2xl font-bold leading-tight flex items-center gap-2">
-                      <UsersIcon className="h-6 w-6" /> Invite &amp; Earn
-                    </CardTitle>
-                  </div>
-                  <Share2 className="h-7 w-7 text-emerald-900/70" />
+          <Card className="relative overflow-hidden border-none rounded-[28px] bg-gradient-to-br from-emerald-300 via-emerald-200 to-teal-200 text-emerald-900 shadow-2xl">
+            <div className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-white/40 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-16 -left-20 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
+            <CardHeader className="space-y-3 pb-0">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-900/70">Mintmine Pro Rewards Center</p>
+                  <CardTitle className="text-2xl font-bold leading-tight flex items-center gap-2">
+                    <UsersIcon className="h-6 w-6" /> Invite &amp; Earn
+                  </CardTitle>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <p className="text-base leading-relaxed text-emerald-900/90">
-                  Earn 10% of your friends' daily mining rewards when they join with your link.
-                </p>
-                <div className="rounded-2xl bg-white/70 p-4 shadow-sm">
-                  <p className="text-sm font-semibold text-emerald-900/80">Your Referral Code</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
-                    <span className="rounded-xl bg-emerald-100 px-3 py-2 font-mono text-sm font-bold tracking-wide text-emerald-700">
-                      {referralCode || "Unavailable"}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleCopy(referralCode, "Referral code copied!")}
-                      disabled={!referralCode}
-                      className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                    >
-                      <Copy className="mr-2 h-4 w-4" /> Copy Code
-                    </Button>
-                  </div>
-                  <p className="mt-3 text-sm text-emerald-700/80">{referralStatsText}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <Share2 className="h-7 w-7 text-emerald-900/70" />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-base leading-relaxed text-emerald-900/90">
+                Earn 10% of your friends' daily mining rewards when they join with your link.
+              </p>
+              <div className="rounded-2xl bg-white/70 p-4 shadow-sm">
+                <p className="text-sm font-semibold text-emerald-900/80">Your Referral Code</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className="rounded-xl bg-emerald-100 px-3 py-2 font-mono text-sm font-bold tracking-wide text-emerald-700">
+                    {referralCode || "Unavailable"}
+                  </span>
                   <Button
-                    onClick={() => setIsShareModalOpen(true)}
-                    className="bg-white text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 shadow-lg hover:shadow-xl transition duration-200"
-                  >
-                    Share &amp; Invite
-                  </Button>
-                  <Button
-                    variant="secondary"
+                    size="sm"
+                    variant="outline"
                     onClick={() => handleCopy(referralCode, "Referral code copied!")}
                     disabled={!referralCode}
-                    className="bg-emerald-600/10 text-emerald-900 border border-emerald-500/30 hover:bg-emerald-600/20"
+                    className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
                   >
-                    Copy Referral Code
+                    <Copy className="mr-2 h-4 w-4" /> Copy Code
                   </Button>
                 </div>
-                {copyMessage && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-900">
-                    <Sparkles className="h-4 w-4" />
-                    <span>{copyMessage}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                <p className="mt-3 text-sm text-emerald-700/80">{referralStatsText}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={() => setIsShareModalOpen(true)}
+                  className="bg-white text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 shadow-lg hover:shadow-xl transition duration-200"
+                >
+                  Share &amp; Invite
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleCopy(referralCode, "Referral code copied!")}
+                  disabled={!referralCode}
+                  className="bg-emerald-600/10 text-emerald-900 border border-emerald-500/30 hover:bg-emerald-600/20"
+                >
+                  Copy Referral Code
+                </Button>
+              </div>
+              {copyMessage && (
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-900">
+                  <Sparkles className="h-4 w-4" />
+                  <span>{copyMessage}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </main>
 
@@ -546,7 +546,7 @@ export default function DashboardPage() {
             </DialogTitle>
             <DialogDescription>
               Join the current round for {formatCurrency(entryFee)}. This amount will be deducted from your balance instantly and
-              grants you a shot at {formatCurrency(prizePool)}.
+              grants you a shot at winning {formatCurrency(prizePool)}!
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

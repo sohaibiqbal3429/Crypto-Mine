@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -21,22 +20,6 @@ interface AdminBlindBoxConfig {
   rewardAmount: number
   cycleHours: number
   autoDrawEnabled: boolean
-}
-
-interface AdminBlindBoxDeposit {
-  id: string
-  txId: string
-  amount: number
-  network: string
-  address: string
-  createdAt: string
-  status: "pending" | "approved" | "rejected"
-  user: {
-    id: string
-    name: string
-    email: string
-    referralCode: string
-  } | null
 }
 
 interface AdminBlindBoxParticipant {
@@ -72,7 +55,6 @@ interface AdminBlindBoxOverview {
   round: AdminBlindBoxRoundSummary | null
   previousRound: AdminBlindBoxRoundSummary | null
   participants: AdminBlindBoxParticipant[]
-  pendingDeposits: AdminBlindBoxDeposit[]
   config: AdminBlindBoxConfig
 }
 
@@ -87,15 +69,14 @@ export function BlindBoxAdminPanel() {
     cycleHours: 72,
     autoDrawEnabled: true,
   })
-  const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null)
   const [manualWinnerId, setManualWinnerId] = useState<string>("")
-  const [rejectionReason, setRejectionReason] = useState("")
-  const [activeTab, setActiveTab] = useState("deposits")
+  const [activeTab, setActiveTab] = useState("overview")
 
   const activeRound = overview?.round
   const participants = overview?.participants ?? []
-  const pendingDeposits = overview?.pendingDeposits ?? []
   const config = overview?.config ?? settingsDraft
+  const nextDrawAt = activeRound ? new Date(activeRound.endTime).toLocaleString() : "To be scheduled"
+  const roundStatusLabel = activeRound ? (activeRound.status === "open" ? "Open" : "Completed") : "Not started"
 
   useEffect(() => {
     void refreshAll()
@@ -137,61 +118,6 @@ export function BlindBoxAdminPanel() {
       setLoading(false)
     }
   }, [toast])
-
-  const handleApproveDeposit = useCallback(
-    async (depositId: string) => {
-      setSelectedDepositId(depositId)
-      try {
-        const response = await fetch(`/api/admin/blindbox/deposits/${depositId}/approve`, { method: "POST" })
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          throw new Error(data.error || "Unable to approve deposit")
-        }
-        toast({ title: "Deposit approved" })
-        await refreshAll()
-      } catch (error: any) {
-        console.error("Approve blind box deposit error", error)
-        toast({
-          title: "Unable to approve",
-          description: error?.message ?? "Please try again later.",
-          variant: "destructive",
-        })
-      } finally {
-        setSelectedDepositId(null)
-      }
-    },
-    [refreshAll, toast],
-  )
-
-  const handleRejectDeposit = useCallback(
-    async (depositId: string) => {
-      setSelectedDepositId(depositId)
-      try {
-        const response = await fetch(`/api/admin/blindbox/deposits/${depositId}/reject`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: rejectionReason }),
-        })
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          throw new Error(data.error || "Unable to reject deposit")
-        }
-        toast({ title: "Deposit rejected" })
-        setRejectionReason("")
-        await refreshAll()
-      } catch (error: any) {
-        console.error("Reject blind box deposit error", error)
-        toast({
-          title: "Unable to reject",
-          description: error?.message ?? "Please try again later.",
-          variant: "destructive",
-        })
-      } finally {
-        setSelectedDepositId(null)
-      }
-    },
-    [refreshAll, rejectionReason, toast],
-  )
 
   const handleDraw = useCallback(async () => {
     if (!activeRound) {
@@ -265,7 +191,7 @@ export function BlindBoxAdminPanel() {
         <div>
           <h2 className="text-2xl font-bold">Blind Box Management</h2>
           <p className="text-sm text-muted-foreground">
-            Review deposits, manage participants, and control automated lucky draw rounds.
+            Track live rounds, review participants, and finalize payouts with a single click.
           </p>
         </div>
         <Button variant="secondary" onClick={() => void refreshAll()} disabled={loading} className="gap-2">
@@ -275,95 +201,11 @@ export function BlindBoxAdminPanel() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="deposits">Deposits</TabsTrigger>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="participants">Participants</TabsTrigger>
-          <TabsTrigger value="control">Draw Control</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="deposits" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" /> Pending deposits
-              </CardTitle>
-              <CardDescription>Manually verify each deposit before participants enter the draw.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {pendingDeposits.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-muted-foreground/30 p-6 text-center text-sm text-muted-foreground">
-                  No pending deposits. Great job staying on top of reviews!
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User</TableHead>
-                      <TableHead>TxID</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Submitted</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingDeposits.map((deposit) => (
-                      <TableRow key={deposit.id}>
-                        <TableCell className="space-y-1">
-                          <div className="font-medium">{deposit.user?.name ?? "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground">{deposit.user?.email ?? "-"}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-mono text-xs">{deposit.txId}</div>
-                        </TableCell>
-                        <TableCell>${deposit.amount.toFixed(2)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {new Date(deposit.createdAt).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border-destructive/40 text-destructive"
-                            onClick={() => void handleRejectDeposit(deposit.id)}
-                            disabled={selectedDepositId === deposit.id}
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="bg-emerald-500 text-white hover:bg-emerald-600"
-                            onClick={() => void handleApproveDeposit(deposit.id)}
-                            disabled={selectedDepositId === deposit.id}
-                          >
-                            {selectedDepositId === deposit.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              "Approve"
-                            )}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="rounded-lg border border-muted-foreground/20 bg-muted/10 p-4">
-            <Label htmlFor="rejection-reason" className="text-sm font-medium">
-              Optional rejection reason
-            </Label>
-            <Textarea
-              id="rejection-reason"
-              value={rejectionReason}
-              onChange={(event) => setRejectionReason(event.target.value)}
-              placeholder="Add a short explanation that will be sent with the rejection notification"
-              className="mt-2"
-              rows={3}
-            />
-          </div>
-        </TabsContent>
 
         <TabsContent value="participants" className="space-y-6">
           <Card>
@@ -389,7 +231,7 @@ export function BlindBoxAdminPanel() {
                     {participants.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
-                          No participants yet. Approve deposits to populate this list.
+                          No participants yet. Encourage members to join from their dashboard.
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -413,7 +255,7 @@ export function BlindBoxAdminPanel() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="control" className="space-y-6">
+        <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 lg:grid-cols-[2fr,1fr]">
             <Card>
               <CardHeader>
@@ -467,7 +309,7 @@ export function BlindBoxAdminPanel() {
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
                   <span>Participants</span>
-                  <span className="font-medium text-foreground">{participants.length}</span>
+                  <span className="font-medium text-foreground">{activeRound?.totalParticipants ?? participants.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Prize</span>
@@ -478,15 +320,26 @@ export function BlindBoxAdminPanel() {
                   <span className="font-medium text-foreground">${config.depositAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between">
+                  <span>Next draw</span>
+                  <span className="font-medium text-foreground">{nextDrawAt}</span>
+                </div>
+                <div className="flex items-center justify-between">
                   <span>Auto draw</span>
                   <Badge variant={config.autoDrawEnabled ? "default" : "secondary"}>
                     {config.autoDrawEnabled ? "Enabled" : "Disabled"}
                   </Badge>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span>Status</span>
+                  <span className="font-medium text-foreground">{roundStatusLabel}</span>
+                </div>
               </CardContent>
             </Card>
           </div>
 
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg font-semibold">Recent rounds</CardTitle>

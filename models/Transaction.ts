@@ -17,6 +17,7 @@ export interface ITransaction extends Document {
     | "luckyDrawEntry"
     | "luckyDrawReward"
     | "blindBoxDeposit"
+    | "blindBoxEntry"
     | "blindBoxReward"
   amount: number
   meta: any
@@ -42,6 +43,7 @@ const TransactionSchema = new Schema<ITransaction>(
         "luckyDrawEntry",
         "luckyDrawReward",
         "blindBoxDeposit",
+        "blindBoxEntry",
         "blindBoxReward",
       ],
       required: true,
