@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 
-import { createModelProxy } from "../lib/in-memory/model-factory.js"
+import { createModelProxy } from "../lib/in-memory/model-factory"
 
 const SettingsSchema = new mongoose.Schema(
   {
