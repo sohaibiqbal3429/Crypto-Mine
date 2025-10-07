@@ -7,7 +7,7 @@ export type BlindBoxParticipantStatus = "active" | "eliminated"
 export interface IBlindBoxParticipant extends Document {
   userId: mongoose.Types.ObjectId
   roundId: mongoose.Types.ObjectId
-  depositId: mongoose.Types.ObjectId
+  depositId?: mongoose.Types.ObjectId | null
   hashedUserId: string
   status: BlindBoxParticipantStatus
   createdAt: Date
@@ -18,7 +18,7 @@ const BlindBoxParticipantSchema = new Schema<IBlindBoxParticipant>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     roundId: { type: Schema.Types.ObjectId, ref: "BlindBoxRound", required: true },
-    depositId: { type: Schema.Types.ObjectId, ref: "BlindBoxDeposit", required: true },
+    depositId: { type: Schema.Types.ObjectId, ref: "BlindBoxDeposit", required: false, default: null },
     hashedUserId: { type: String, required: true },
     status: { type: String, enum: ["active", "eliminated"], default: "active" },
   },

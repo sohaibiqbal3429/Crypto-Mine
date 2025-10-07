@@ -1,31 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getUserFromRequest } from "@/lib/auth"
-import { BlindBoxServiceError, getBlindBoxSummaryForUser } from "@/lib/services/blindbox"
+import { BlindBoxServiceError, getBlindBoxSummaryForUser, joinBlindBoxRound } from "@/lib/services/blindbox"
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request)
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    await joinBlindBoxRound(user.userId)
     const summary = await getBlindBoxSummaryForUser(user.userId)
 
     return NextResponse.json({
-      round: summary.round,
-      previousRound: summary.previousRound,
-      nextDrawAt: summary.nextDrawAt,
+      success: true,
+      roundId: summary.round?.id ?? null,
       participants: summary.participants,
-      config: summary.config,
       userStatus: summary.userStatus,
+      nextDrawAt: summary.nextDrawAt,
     })
   } catch (error: any) {
     if (error instanceof BlindBoxServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
-    console.error("Blind box summary error:", error)
+    console.error("Blind box join error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

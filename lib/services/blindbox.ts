@@ -3,10 +3,6 @@ import { randomInt } from "crypto"
 
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
-import BlindBoxDeposit, {
-  type BlindBoxDepositStatus,
-  type IBlindBoxDeposit,
-} from "@/models/BlindBoxDeposit"
 import BlindBoxParticipant from "@/models/BlindBoxParticipant"
 import BlindBoxRound from "@/models/BlindBoxRound"
 import Notification from "@/models/Notification"
@@ -17,8 +13,6 @@ import User from "@/models/User"
 const DEFAULT_DEPOSIT_AMOUNT = 10
 const DEFAULT_REWARD_AMOUNT = 30
 const DEFAULT_CYCLE_HOURS = 72
-const BLIND_BOX_DEPOSIT_ADDRESS = "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw"
-const BLIND_BOX_NETWORK = "TRC20"
 
 export type BlindBoxRoundStatus = "open" | "completed"
 
@@ -54,9 +48,8 @@ export interface BlindBoxSummaryResponse {
   config: BlindBoxConfig
   userStatus: {
     isParticipant: boolean
-    hasPendingDeposit: boolean
-    pendingTxId: string | null
-    lastDepositStatus: BlindBoxDepositStatus | null
+    joinedAt: string | null
+    lastEntryTransactionId: string | null
   }
 }
 
@@ -173,66 +166,59 @@ function hashUserId(userId: string) {
   return crypto.createHash("sha256").update(userId).digest("hex")
 }
 
-export async function submitBlindBoxDeposit({
-  userId,
-  txId,
-}: {
-  userId: string
-  txId: string
-}) {
-  const { config } = await ensureSettings()
-  const sanitizedTxId = txId.trim()
-  if (!sanitizedTxId) {
-    throw new BlindBoxServiceError("Transaction hash is required", 400)
+export async function joinBlindBoxRound(userId: string) {
+  const { round, config } = await ensureCurrentBlindBoxRound()
+  if (!round) {
+    throw new BlindBoxServiceError("No active blind box round is available", 400)
   }
 
   await dbConnect()
-  const existing = await BlindBoxDeposit.findOne({ txId: sanitizedTxId })
-  if (existing) {
-    throw new BlindBoxServiceError("This transaction hash has already been submitted", 409)
+
+  if (round.endTime <= new Date()) {
+    throw new BlindBoxServiceError("The current round has already closed", 400)
   }
 
-  const deposit = await BlindBoxDeposit.create({
+  const existing = await BlindBoxParticipant.findOne({ roundId: round._id, userId })
+  if (existing) {
+    throw new BlindBoxServiceError("You have already joined this round", 409)
+  }
+
+  const balanceUpdate = await Balance.updateOne(
+    { userId, current: { $gte: config.depositAmount } },
+    { $inc: { current: -config.depositAmount, totalBalance: -config.depositAmount } },
+  )
+
+  if (balanceUpdate.modifiedCount === 0) {
+    throw new BlindBoxServiceError("Insufficient balance", 402)
+  }
+
+  const participant = await BlindBoxParticipant.create({
     userId,
-    amount: config.depositAmount,
-    network: BLIND_BOX_NETWORK,
-    address: BLIND_BOX_DEPOSIT_ADDRESS,
-    txId: sanitizedTxId,
-    status: "pending",
-    type: "blindbox",
+    roundId: round._id,
+    depositId: null,
+    hashedUserId: hashUserId(userId),
+    status: "active",
   })
 
-  await Transaction.create({
+  await BlindBoxRound.updateOne({ _id: round._id }, { $inc: { totalParticipants: 1 } })
+
+  const transaction = await Transaction.create({
     userId,
-    type: "blindBoxDeposit",
+    type: "blindBoxEntry",
     amount: config.depositAmount,
-    status: "pending",
-    meta: { txId: sanitizedTxId },
+    status: "approved",
+    meta: { roundId: String(round._id) },
   })
 
   await Notification.create({
     userId,
-    title: "Blind Box deposit submitted",
-    body: "We have received your transaction hash. Our team will verify it shortly.",
-    kind: "blindbox-submitted",
-    metadata: { txId: sanitizedTxId },
+    title: "Blind Box entry confirmed",
+    body: `You have successfully joined the current Blind Box round for $${config.depositAmount}.`,
+    kind: "blindbox-joined",
+    metadata: { roundId: String(round._id) },
   })
 
-  return deposit
-}
-
-export async function listBlindBoxDeposits(status?: BlindBoxDepositStatus) {
-  await ensureSettings()
-  const query: Record<string, any> = {}
-  if (status) {
-    query.status = status
-  }
-
-  const deposits = await BlindBoxDeposit.find(query)
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .populate("userId", "name email referralCode")
-  return deposits
+  return { participant, transactionId: transaction._id.toString(), round }
 }
 
 export async function getBlindBoxParticipants(roundId: string) {
@@ -257,111 +243,6 @@ export async function getBlindBoxParticipants(roundId: string) {
     status: participant.status,
     hashedUserId: participant.hashedUserId,
   }))
-}
-
-async function addParticipantToRound(roundId: string, deposit: IBlindBoxDeposit) {
-  const hashedUserId = hashUserId(String(deposit.userId))
-  const existing = await BlindBoxParticipant.findOne({ roundId, userId: deposit.userId })
-  if (existing) {
-    return existing
-  }
-
-  const participant = await BlindBoxParticipant.create({
-    roundId,
-    userId: deposit.userId,
-    depositId: deposit._id,
-    hashedUserId,
-    status: "active",
-  })
-
-  await BlindBoxRound.updateOne({ _id: roundId }, { $inc: { totalParticipants: 1 } })
-  return participant
-}
-
-export async function approveBlindBoxDeposit({ depositId, adminId }: { depositId: string; adminId: string }) {
-  const { round } = await ensureCurrentBlindBoxRound()
-  if (!round) {
-    throw new BlindBoxServiceError("Unable to determine active round", 500)
-  }
-
-  const deposit = await BlindBoxDeposit.findById(depositId)
-  if (!deposit) {
-    throw new BlindBoxServiceError("Deposit not found", 404)
-  }
-
-  if (deposit.status !== "pending") {
-    throw new BlindBoxServiceError("Deposit has already been reviewed", 409)
-  }
-
-  await BlindBoxDeposit.updateOne(
-    { _id: deposit._id },
-    { status: "approved", reviewedAt: new Date(), reviewedBy: adminId },
-  )
-
-  await addParticipantToRound(round._id.toString(), deposit)
-
-  await Notification.create({
-    userId: deposit.userId,
-    title: "Blind Box deposit approved",
-    body: "Your deposit has been verified. You are now entered into the current Blind Box round.",
-    kind: "blindbox-approved",
-    metadata: { roundId: String(round._id), txId: deposit.txId },
-  })
-
-  await Transaction.updateMany(
-    { userId: deposit.userId, type: "blindBoxDeposit", "meta.txId": deposit.txId },
-    { $set: { status: "approved", meta: { txId: deposit.txId, roundId: String(round._id) } } },
-  )
-
-  return true
-}
-
-export async function rejectBlindBoxDeposit({
-  depositId,
-  adminId,
-  reason,
-}: {
-  depositId: string
-  adminId: string
-  reason?: string
-}) {
-  await ensureSettings()
-  const deposit = await BlindBoxDeposit.findById(depositId)
-  if (!deposit) {
-    throw new BlindBoxServiceError("Deposit not found", 404)
-  }
-
-  if (deposit.status !== "pending") {
-    throw new BlindBoxServiceError("Deposit has already been reviewed", 409)
-  }
-
-  await BlindBoxDeposit.updateOne(
-    { _id: deposit._id },
-    {
-      status: "rejected",
-      reviewedAt: new Date(),
-      reviewedBy: adminId,
-      rejectionReason: reason ?? null,
-    },
-  )
-
-  await Notification.create({
-    userId: deposit.userId,
-    title: "Blind Box deposit rejected",
-    body:
-      reason
-        ? `Your Blind Box deposit was rejected: ${reason}`
-        : "We could not verify your Blind Box deposit. Please contact support.",
-    kind: "blindbox-rejected",
-    metadata: { txId: deposit.txId },
-  })
-
-  await Transaction.updateMany(
-    { userId: deposit.userId, type: "blindBoxDeposit", "meta.txId": deposit.txId },
-    { $set: { status: "rejected", meta: { txId: deposit.txId, reason: reason ?? null } } },
-  )
-
-  return true
 }
 
 async function creditWinner(roundId: string, userId: string, rewardAmount: number, trigger: "auto" | "manual") {
@@ -473,16 +354,10 @@ export async function getBlindBoxSummaryForUser(userId: string): Promise<BlindBo
     activeParticipants = await BlindBoxParticipant.countDocuments({ roundId: round._id, status: "active" })
   }
 
-  const [latestDeposit, participant] = await Promise.all([
-    BlindBoxDeposit.findOne({ userId }).sort({ createdAt: -1 }),
+  const [participant, latestEntryTransaction] = await Promise.all([
     round ? BlindBoxParticipant.findOne({ roundId: round._id, userId }) : null,
+    Transaction.findOne({ userId, type: "blindBoxEntry" }).sort({ createdAt: -1 }),
   ])
-
-  const pendingDeposit =
-    latestDeposit && latestDeposit.status === "pending" &&
-    (!round || latestDeposit.createdAt <= round.endTime)
-      ? latestDeposit
-      : null
 
   return {
     round: round
@@ -534,9 +409,8 @@ export async function getBlindBoxSummaryForUser(userId: string): Promise<BlindBo
     config,
     userStatus: {
       isParticipant: Boolean(participant),
-      hasPendingDeposit: Boolean(pendingDeposit),
-      pendingTxId: pendingDeposit ? pendingDeposit.txId : null,
-      lastDepositStatus: latestDeposit ? latestDeposit.status : null,
+      joinedAt: participant ? participant.createdAt.toISOString() : null,
+      lastEntryTransactionId: latestEntryTransaction ? latestEntryTransaction._id.toString() : null,
     },
   }
 }
@@ -575,11 +449,6 @@ export async function runBlindBoxAutoDraw() {
   return round
 }
 
-export const BLIND_BOX_CONSTANTS = {
-  address: BLIND_BOX_DEPOSIT_ADDRESS,
-  network: BLIND_BOX_NETWORK,
-}
-
 export async function listBlindBoxRounds(limit = 20) {
   await ensureSettings()
   const rounds = await BlindBoxRound.find({})
@@ -612,30 +481,7 @@ export async function getBlindBoxAdminSummary() {
   const { round, config } = await ensureCurrentBlindBoxRound()
   const previousRound = await loadLatestCompletedRound()
 
-  const [participants, pendingDeposits] = await Promise.all([
-    round ? getBlindBoxParticipants(round._id.toString()) : Promise.resolve([] as any[]),
-    BlindBoxDeposit.find({ status: "pending" })
-      .sort({ createdAt: 1 })
-      .limit(200)
-      .populate("userId", "name email referralCode"),
-  ])
-
-  const normalizedDeposits = pendingDeposits.map((deposit) => ({
-    id: deposit._id.toString(),
-    user:
-      deposit.userId && typeof deposit.userId === "object" && "_id" in deposit.userId
-        ? {
-            id: (deposit.userId as any)._id.toString(),
-            name: (deposit.userId as any).name ?? "",
-            email: (deposit.userId as any).email ?? "",
-            referralCode: (deposit.userId as any).referralCode ?? "",
-          }
-        : null,
-    txId: deposit.txId,
-    amount: deposit.amount,
-    status: deposit.status,
-    createdAt: deposit.createdAt.toISOString(),
-  }))
+  const participants = round ? await getBlindBoxParticipants(round._id.toString()) : []
 
   return {
     round: round
@@ -669,7 +515,6 @@ export async function getBlindBoxAdminSummary() {
         }
       : null,
     participants,
-    pendingDeposits: normalizedDeposits,
     config,
   }
 }

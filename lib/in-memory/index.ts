@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs"
-import { randomBytes } from "crypto"
+import { createHash, randomBytes } from "crypto"
 import mongoose from "mongoose"
 
 export type InMemoryDocument = {
@@ -25,10 +25,10 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
-  luckyDrawRounds: { winnerUserId: { collection: "users" } },
-  luckyDrawEntries: {
+  blindBoxRounds: { winnerUserId: { collection: "users" } },
+  blindBoxParticipants: {
     userId: { collection: "users" },
-    roundId: { collection: "luckyDrawRounds" },
+    roundId: { collection: "blindBoxRounds" },
   },
 }
 
@@ -271,13 +271,16 @@ class InMemoryDatabase {
     this.collections.set("miningSessions", new InMemoryCollection("miningSessions", createMiningSessions(users)))
     this.collections.set("settings", new InMemoryCollection("settings", createSettings()))
     this.collections.set("commissionRules", new InMemoryCollection("commissionRules", createCommissionRules()))
-    const luckyDrawRounds = createLuckyDrawRounds(users)
-    this.collections.set("luckyDrawRounds", new InMemoryCollection("luckyDrawRounds", luckyDrawRounds.rounds))
+    const blindBoxSeed = createBlindBoxSeed(users)
+    this.collections.set("blindBoxRounds", new InMemoryCollection("blindBoxRounds", blindBoxSeed.rounds))
     this.collections.set(
-      "luckyDrawEntries",
-      new InMemoryCollection("luckyDrawEntries", luckyDrawRounds.entries),
+      "blindBoxParticipants",
+      new InMemoryCollection("blindBoxParticipants", blindBoxSeed.participants),
     )
-    this.collections.set("transactions", new InMemoryCollection("transactions", createTransactions(users, luckyDrawRounds)))
+    this.collections.set(
+      "transactions",
+      new InMemoryCollection("transactions", createTransactions(users, blindBoxSeed)),
+    )
     this.collections.set("notifications", new InMemoryCollection("notifications", createNotifications(users)))
     this.collections.set("walletAddresses", new InMemoryCollection("walletAddresses", createWalletAddresses(users)))
     this.collections.set("levelHistories", new InMemoryCollection("levelHistories", []))
@@ -316,8 +319,8 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "MiningSession", collection: db.getCollection("miningSessions") },
     { name: "Settings", collection: db.getCollection("settings") },
     { name: "CommissionRule", collection: db.getCollection("commissionRules") },
-    { name: "LuckyDrawRound", collection: db.getCollection("luckyDrawRounds") },
-    { name: "LuckyDrawEntry", collection: db.getCollection("luckyDrawEntries") },
+    { name: "BlindBoxRound", collection: db.getCollection("blindBoxRounds") },
+    { name: "BlindBoxParticipant", collection: db.getCollection("blindBoxParticipants") },
     { name: "Transaction", collection: db.getCollection("transactions") },
     { name: "Notification", collection: db.getCollection("notifications") },
     { name: "WalletAddress", collection: db.getCollection("walletAddresses") },
@@ -1194,52 +1197,84 @@ function createCommissionRules(): InMemoryDocument[] {
   ]
 }
 
-type LuckyDrawSeed = {
+type BlindBoxSeed = {
   rounds: InMemoryDocument[]
-  entries: InMemoryDocument[]
+  participants: InMemoryDocument[]
+  entryTransactions: InMemoryDocument[]
   rewardTransactions: InMemoryDocument[]
 }
 
-function createLuckyDrawRounds(users: InMemoryDocument[]): LuckyDrawSeed {
+function hashUserId(value: string): string {
+  return createHash("sha256").update(value).digest("hex")
+}
+
+function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
   const now = new Date()
   const cycleHours = 72
   const cycleMs = cycleHours * 60 * 60 * 1000
-  const entryFee = 10
-  const prize = 30
+  const depositAmount = 10
+  const rewardAmount = 30
 
   const currentRoundId = generateObjectId()
   const previousRoundId = generateObjectId()
 
-  const currentStartsAt = new Date(now.getTime() - 12 * 60 * 60 * 1000)
-  const currentEndsAt = new Date(currentStartsAt.getTime() + cycleMs)
-  const previousStartsAt = new Date(currentStartsAt.getTime() - cycleMs)
-  const previousEndsAt = currentStartsAt
+  const currentStartTime = new Date(now.getTime() - 12 * 60 * 60 * 1000)
+  const currentEndTime = new Date(currentStartTime.getTime() + cycleMs)
+  const previousStartTime = new Date(currentStartTime.getTime() - cycleMs)
+  const previousEndTime = currentStartTime
 
-  const entries: InMemoryDocument[] = []
+  const participants: InMemoryDocument[] = []
+  const entryTransactions: InMemoryDocument[] = []
 
   const previousParticipants = users.slice(0, Math.min(users.length, 5))
-  let previousWinner: InMemoryDocument | null = previousParticipants[0] ?? null
+  const previousWinner = previousParticipants[0] ?? null
 
   previousParticipants.forEach((user, index) => {
-    entries.push({
+    const joinedAt = new Date(previousStartTime.getTime() + index * 60 * 60 * 1000)
+    participants.push({
       _id: generateObjectId(),
-      roundId: previousRoundId,
       userId: user._id,
-      joinedAt: new Date(previousStartsAt.getTime() + index * 60 * 60 * 1000),
-      createdAt: previousStartsAt,
-      updatedAt: previousEndsAt,
+      roundId: previousRoundId,
+      hashedUserId: hashUserId(String(user._id)),
+      status: "active",
+      depositId: null,
+      createdAt: joinedAt,
+      updatedAt: previousEndTime,
+    })
+    entryTransactions.push({
+      _id: generateObjectId(),
+      userId: user._id,
+      type: "blindBoxEntry",
+      amount: depositAmount,
+      status: "approved",
+      meta: { roundId: previousRoundId },
+      createdAt: joinedAt,
+      updatedAt: joinedAt,
     })
   })
 
   const currentParticipants = users.slice(0, Math.min(users.length, 3))
   currentParticipants.forEach((user, index) => {
-    entries.push({
+    const joinedAt = new Date(currentStartTime.getTime() + index * 45 * 60 * 1000)
+    participants.push({
       _id: generateObjectId(),
-      roundId: currentRoundId,
       userId: user._id,
-      joinedAt: new Date(currentStartsAt.getTime() + index * 45 * 60 * 1000),
-      createdAt: currentStartsAt,
-      updatedAt: currentStartsAt,
+      roundId: currentRoundId,
+      hashedUserId: hashUserId(String(user._id)),
+      status: "active",
+      depositId: null,
+      createdAt: joinedAt,
+      updatedAt: joinedAt,
+    })
+    entryTransactions.push({
+      _id: generateObjectId(),
+      userId: user._id,
+      type: "blindBoxEntry",
+      amount: depositAmount,
+      status: "approved",
+      meta: { roundId: currentRoundId },
+      createdAt: joinedAt,
+      updatedAt: joinedAt,
     })
   })
 
@@ -1251,12 +1286,12 @@ function createLuckyDrawRounds(users: InMemoryDocument[]): LuckyDrawSeed {
     rewardTransactions.push({
       _id: payoutTxId,
       userId: previousWinner._id,
-      type: "luckyDrawReward",
-      amount: prize,
+      type: "blindBoxReward",
+      amount: rewardAmount,
       status: "approved",
-      meta: { roundId: previousRoundId, note: "Lucky draw demo payout" },
-      createdAt: previousEndsAt,
-      updatedAt: previousEndsAt,
+      meta: { roundId: previousRoundId, note: "Blind box demo payout" },
+      createdAt: previousEndTime,
+      updatedAt: previousEndTime,
     })
   }
 
@@ -1264,11 +1299,11 @@ function createLuckyDrawRounds(users: InMemoryDocument[]): LuckyDrawSeed {
     {
       _id: previousRoundId,
       status: "completed",
-      startsAt: previousStartsAt,
-      endsAt: previousEndsAt,
-      entryFee,
-      prize,
-      totalEntries: previousParticipants.length,
+      startTime: previousStartTime,
+      endTime: previousEndTime,
+      depositAmount,
+      rewardAmount,
+      totalParticipants: previousParticipants.length,
       winnerUserId: previousWinner?._id ?? null,
       payoutTxId,
       winnerSnapshot: previousWinner
@@ -1277,36 +1312,32 @@ function createLuckyDrawRounds(users: InMemoryDocument[]): LuckyDrawSeed {
             name: previousWinner.name,
             referralCode: previousWinner.referralCode,
             email: previousWinner.email,
-            creditedAt: previousEndsAt,
+            creditedAt: previousEndTime,
           }
         : null,
-      closedAt: previousEndsAt,
-      completedAt: previousEndsAt,
-      createdAt: previousStartsAt,
-      updatedAt: previousEndsAt,
+      createdAt: previousStartTime,
+      updatedAt: previousEndTime,
     },
     {
       _id: currentRoundId,
       status: "open",
-      startsAt: currentStartsAt,
-      endsAt: currentEndsAt,
-      entryFee,
-      prize,
-      totalEntries: currentParticipants.length,
+      startTime: currentStartTime,
+      endTime: currentEndTime,
+      depositAmount,
+      rewardAmount,
+      totalParticipants: currentParticipants.length,
       winnerUserId: null,
       payoutTxId: null,
       winnerSnapshot: null,
-      closedAt: null,
-      completedAt: null,
-      createdAt: currentStartsAt,
+      createdAt: currentStartTime,
       updatedAt: now,
     },
   ]
 
-  return { rounds, entries, rewardTransactions }
+  return { rounds, participants, entryTransactions, rewardTransactions }
 }
 
-function createTransactions(users: InMemoryDocument[], luckyDrawSeed?: LuckyDrawSeed): InMemoryDocument[] {
+function createTransactions(users: InMemoryDocument[], blindBoxSeed?: BlindBoxSeed): InMemoryDocument[] {
   const now = new Date()
   const transactions: InMemoryDocument[] = []
 
@@ -1357,8 +1388,12 @@ function createTransactions(users: InMemoryDocument[], luckyDrawSeed?: LuckyDraw
     )
   })
 
-  if (luckyDrawSeed?.rewardTransactions?.length) {
-    transactions.push(...luckyDrawSeed.rewardTransactions)
+  if (blindBoxSeed?.entryTransactions?.length) {
+    transactions.push(...blindBoxSeed.entryTransactions)
+  }
+
+  if (blindBoxSeed?.rewardTransactions?.length) {
+    transactions.push(...blindBoxSeed.rewardTransactions)
   }
 
   return transactions
