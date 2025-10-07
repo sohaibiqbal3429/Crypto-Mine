@@ -31,6 +31,12 @@ export interface ISettings extends Document {
     cycleHours: number
     autoDrawEnabled: boolean
   }
+  blindBox: {
+    depositAmount: number
+    rewardAmount: number
+    cycleHours: number
+    autoDrawEnabled: boolean
+  }
 }
 
 const SettingsSchema = new Schema<ISettings>(
@@ -60,6 +66,12 @@ const SettingsSchema = new Schema<ISettings>(
     luckyDraw: {
       entryFee: { type: Number, default: 10 },
       prize: { type: Number, default: 30 },
+      cycleHours: { type: Number, default: 72 },
+      autoDrawEnabled: { type: Boolean, default: true },
+    },
+    blindBox: {
+      depositAmount: { type: Number, default: 10 },
+      rewardAmount: { type: Number, default: 30 },
       cycleHours: { type: Number, default: 72 },
       autoDrawEnabled: { type: Boolean, default: true },
     },

@@ -16,6 +16,8 @@ export interface ITransaction extends Document {
     | "teamReward"
     | "luckyDrawEntry"
     | "luckyDrawReward"
+    | "blindBoxDeposit"
+    | "blindBoxReward"
   amount: number
   meta: any
   status?: "pending" | "approved" | "rejected"
@@ -39,6 +41,8 @@ const TransactionSchema = new Schema<ITransaction>(
         "teamReward",
         "luckyDrawEntry",
         "luckyDrawReward",
+        "blindBoxDeposit",
+        "blindBoxReward",
       ],
       required: true,
     },

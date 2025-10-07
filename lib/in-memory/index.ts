@@ -947,6 +947,7 @@ function createSettings(): InMemoryDocument[] {
       joiningBonus: { threshold: 100, pct: 5 },
       commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
       luckyDraw: { entryFee: 10, prize: 30, cycleHours: 72, autoDrawEnabled: true },
+      blindBox: { depositAmount: 10, rewardAmount: 30, cycleHours: 72, autoDrawEnabled: true },
       createdAt: now,
       updatedAt: now,
     },

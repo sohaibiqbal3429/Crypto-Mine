@@ -14,8 +14,13 @@ export interface INotification extends Document {
     | "cap-reached"
     | "team-reward-claimed"
     | "mining-reward"
+    | "blindbox-submitted"
+    | "blindbox-approved"
+    | "blindbox-rejected"
+    | "blindbox-won"
   title: string
   body: string
+  metadata?: Record<string, any>
   read: boolean
   createdAt: Date
 }
@@ -35,11 +40,16 @@ const NotificationSchema = new Schema<INotification>(
         "cap-reached",
         "team-reward-claimed",
         "mining-reward",
+        "blindbox-submitted",
+        "blindbox-approved",
+        "blindbox-rejected",
+        "blindbox-won",
       ],
       required: true,
     },
     title: { type: String, required: true },
     body: { type: String, required: true },
+    metadata: { type: Schema.Types.Mixed, default: {} },
     read: { type: Boolean, default: false },
   },
   {
