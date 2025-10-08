@@ -3,7 +3,7 @@ import crypto from "crypto"
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
 import GiftBoxCycle, { type GiftBoxCycleStatus, type IGiftBoxCycle } from "@/models/GiftBoxCycle"
-import GiftBoxDeposit from "@/models/GiftBoxDeposit"
+import GiftBoxDeposit, { type GiftBoxDepositStatus } from "@/models/GiftBoxDeposit"
 import GiftBoxParticipant from "@/models/GiftBoxParticipant"
 import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
@@ -58,6 +58,16 @@ export interface GiftBoxSummaryResponse {
     isParticipant: boolean
     joinedAt: string | null
     lastEntryTransactionId: string | null
+    pendingDeposit: {
+      id: string
+      status: GiftBoxDepositStatus
+      submittedAt: string
+      reviewedAt: string | null
+      rejectionReason: string | null
+      txId: string
+      network: string
+      address: string
+    } | null
   }
 }
 
@@ -266,27 +276,17 @@ export async function joinGiftBoxCycle(userId: string, deposit: GiftBoxDepositDe
     network,
     address,
     txId: normalizedTxId,
-    status: "approved",
+    status: "pending",
     cycleId: cycle._id,
-    reviewedAt: new Date(),
+    reviewedAt: null,
     reviewedBy: null,
   })
 
-  const participant = await GiftBoxParticipant.create({
-    userId,
-    cycleId: cycle._id,
-    depositId: depositRecord._id,
-    hashedUserId: hashUserId(userId),
-    status: "active",
-  })
-
-  await GiftBoxCycle.updateOne({ _id: cycle._id }, { $inc: { totalParticipants: 1 } })
-
-  const depositTransaction = await Transaction.create({
+  await Transaction.create({
     userId,
     type: "giftBoxDeposit",
     amount: config.ticketPrice,
-    status: "approved",
+    status: "pending",
     meta: {
       cycleId: String(cycle._id),
       depositId: depositRecord._id.toString(),
@@ -296,27 +296,152 @@ export async function joinGiftBoxCycle(userId: string, deposit: GiftBoxDepositDe
     },
   })
 
-  const entryTransaction = await Transaction.create({
+  await Notification.create({
     userId,
+    title: "Deposit submitted for review",
+    body: `Your $${config.ticketPrice} Gift Box deposit is pending admin approval. We'll notify you once it's processed.`,
+    kind: "giftbox-deposit-submitted",
+    metadata: { cycleId: String(cycle._id), depositId: depositRecord._id.toString() },
+  })
+
+  return { deposit: depositRecord, cycle }
+}
+
+export async function approveGiftBoxDeposit(depositId: string, adminUserId: string) {
+  await dbConnect()
+  const deposit = await GiftBoxDeposit.findById(depositId)
+  if (!deposit) {
+    throw new GiftBoxServiceError("Deposit not found", 404)
+  }
+
+  if (deposit.status !== "pending") {
+    throw new GiftBoxServiceError("This deposit has already been reviewed", 409)
+  }
+
+  const cycle = deposit.cycleId ? await GiftBoxCycle.findById(deposit.cycleId) : null
+  if (!cycle || cycle.status !== "open") {
+    throw new GiftBoxServiceError("The associated giveaway cycle is not accepting deposits", 400)
+  }
+
+  const existingParticipant = await GiftBoxParticipant.findOne({ cycleId: cycle._id, userId: deposit.userId })
+  if (existingParticipant) {
+    await GiftBoxDeposit.updateOne(
+      { _id: deposit._id },
+      {
+        $set: {
+          status: "approved",
+          reviewedAt: new Date(),
+          reviewedBy: adminUserId,
+          rejectionReason: null,
+        },
+      },
+    )
+    await Transaction.updateMany(
+      { type: "giftBoxDeposit", "meta.depositId": deposit._id.toString() },
+      { $set: { status: "approved" } },
+    )
+    await Notification.create({
+      userId: deposit.userId,
+      title: "Gift Box entry approved",
+      body: "Your deposit has been verified. You're officially entered into the Gift Box Giveaway!",
+      kind: "giftbox-deposit-approved",
+      metadata: { cycleId: String(cycle._id), depositId: deposit._id.toString(), entryTransactionId: null },
+    })
+    return GiftBoxParticipant.findById(existingParticipant._id)
+  }
+
+  const participant = await GiftBoxParticipant.create({
+    userId: deposit.userId,
+    cycleId: cycle._id,
+    depositId: deposit._id,
+    hashedUserId: hashUserId(deposit.userId.toString()),
+    status: "active",
+  })
+
+  await GiftBoxCycle.updateOne({ _id: cycle._id }, { $inc: { totalParticipants: 1 } })
+
+  const depositTransaction = await Transaction.findOneAndUpdate(
+    { type: "giftBoxDeposit", "meta.depositId": deposit._id.toString() },
+    { $set: { status: "approved" } },
+    { new: true },
+  )
+
+  const entryTransaction = await Transaction.create({
+    userId: deposit.userId,
     type: "giftBoxEntry",
-    amount: config.ticketPrice,
+    amount: deposit.amount,
     status: "approved",
     meta: {
       cycleId: String(cycle._id),
-      depositId: depositRecord._id.toString(),
-      depositTransactionId: depositTransaction._id.toString(),
+      depositId: deposit._id.toString(),
+      depositTransactionId: depositTransaction ? depositTransaction._id.toString() : null,
     },
   })
 
+  await GiftBoxDeposit.updateOne(
+    { _id: deposit._id },
+    {
+      $set: {
+        status: "approved",
+        reviewedAt: new Date(),
+        reviewedBy: adminUserId,
+        rejectionReason: null,
+      },
+    },
+  )
+
   await Notification.create({
-    userId,
-    title: "Giveaway entry confirmed",
-    body: `You have successfully joined the Gift Box Giveaway for $${config.ticketPrice}.`,
-    kind: "giftbox-joined",
-    metadata: { cycleId: String(cycle._id) },
+    userId: deposit.userId,
+    title: "Gift Box entry approved",
+    body: "Your deposit has been verified. You're officially entered into the Gift Box Giveaway!",
+    kind: "giftbox-deposit-approved",
+    metadata: { cycleId: String(cycle._id), depositId: deposit._id.toString(), entryTransactionId: entryTransaction._id.toString() },
   })
 
-  return { participant, transactionId: entryTransaction._id.toString(), cycle }
+  return participant
+}
+
+export async function rejectGiftBoxDeposit(depositId: string, adminUserId: string, reason?: string) {
+  await dbConnect()
+  const deposit = await GiftBoxDeposit.findById(depositId)
+  if (!deposit) {
+    throw new GiftBoxServiceError("Deposit not found", 404)
+  }
+
+  if (deposit.status !== "pending") {
+    throw new GiftBoxServiceError("This deposit has already been reviewed", 409)
+  }
+
+  const rejectionReason = reason && reason.trim().length > 0 ? reason.trim() : "Deposit could not be verified."
+
+  await GiftBoxDeposit.updateOne(
+    { _id: deposit._id },
+    {
+      $set: {
+        status: "rejected",
+        reviewedAt: new Date(),
+        reviewedBy: adminUserId,
+        rejectionReason,
+      },
+    },
+  )
+
+  await Transaction.updateMany(
+    { type: "giftBoxDeposit", "meta.depositId": deposit._id.toString() },
+    { $set: { status: "rejected" } },
+  )
+
+  await Notification.create({
+    userId: deposit.userId,
+    title: "Gift Box deposit rejected",
+    body: `Your Gift Box deposit was rejected. Reason: ${rejectionReason}`,
+    kind: "giftbox-deposit-rejected",
+    metadata: {
+      cycleId: deposit.cycleId ? deposit.cycleId.toString() : null,
+      depositId: deposit._id.toString(),
+      reason: rejectionReason,
+    },
+  })
 }
 
 export async function getGiftBoxParticipants(cycleId: string) {
@@ -480,9 +605,10 @@ export async function getGiftBoxSummaryForUser(userId: string): Promise<GiftBoxS
     activeParticipants = await GiftBoxParticipant.countDocuments({ cycleId: cycle._id, status: "active" })
   }
 
-  const [participant, latestEntryTransaction] = await Promise.all([
+  const [participant, latestEntryTransaction, latestDeposit] = await Promise.all([
     cycle ? GiftBoxParticipant.findOne({ cycleId: cycle._id, userId }) : null,
     Transaction.findOne({ userId, type: "giftBoxEntry" }).sort({ createdAt: -1 }),
+    cycle ? GiftBoxDeposit.findOne({ cycleId: cycle._id, userId }).sort({ createdAt: -1 }) : null,
   ])
 
   const mapCycle = (entity: IGiftBoxCycle | null): GiftBoxCycleSummaryPayload | null => {
@@ -521,6 +647,18 @@ export async function getGiftBoxSummaryForUser(userId: string): Promise<GiftBoxS
       isParticipant: Boolean(participant),
       joinedAt: participant ? participant.createdAt.toISOString() : null,
       lastEntryTransactionId: latestEntryTransaction ? latestEntryTransaction._id.toString() : null,
+      pendingDeposit: latestDeposit
+        ? {
+            id: latestDeposit._id.toString(),
+            status: latestDeposit.status,
+            submittedAt: latestDeposit.createdAt.toISOString(),
+            reviewedAt: latestDeposit.reviewedAt ? latestDeposit.reviewedAt.toISOString() : null,
+            rejectionReason: latestDeposit.rejectionReason ?? null,
+            txId: latestDeposit.txId,
+            network: latestDeposit.network,
+            address: latestDeposit.address,
+          }
+        : null,
     },
   }
 }
@@ -606,6 +744,12 @@ export async function getGiftBoxAdminSummary() {
   const previousCycle = await loadLatestCompletedCycle()
 
   const participants = cycle ? await getGiftBoxParticipants(cycle._id.toString()) : []
+  const pendingDeposits =
+    cycle
+      ? await GiftBoxDeposit.find({ cycleId: cycle._id, status: "pending" })
+          .sort({ createdAt: 1 })
+          .populate("userId", "name email referralCode")
+      : []
 
   return {
     cycle: cycle
@@ -642,6 +786,23 @@ export async function getGiftBoxAdminSummary() {
         }
       : null,
     participants,
+    pendingDeposits: pendingDeposits.map((deposit) => ({
+      id: deposit._id.toString(),
+      user:
+        deposit.userId && typeof deposit.userId === "object" && "_id" in deposit.userId
+          ? {
+              id: (deposit.userId as any)._id.toString(),
+              name: (deposit.userId as any).name ?? "",
+              email: (deposit.userId as any).email ?? "",
+              referralCode: (deposit.userId as any).referralCode ?? "",
+            }
+          : null,
+      txId: deposit.txId,
+      network: deposit.network,
+      address: deposit.address,
+      amount: deposit.amount,
+      submittedAt: deposit.createdAt.toISOString(),
+    })),
     config,
   }
 }

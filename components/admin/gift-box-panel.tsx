@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2, Percent, RefreshCcw, ShieldCheck, Sparkles, Users } from "lucide-react"
+import { Loader2, Lock, Percent, RefreshCcw, ShieldCheck, Sparkles, Users } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +29,8 @@ const DEFAULT_GIFT_BOX_CONFIG: AdminGiftBoxConfig = {
 function createDefaultGiftBoxConfig(): AdminGiftBoxConfig {
   return { ...DEFAULT_GIFT_BOX_CONFIG }
 }
+
+const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
 function sanitizeConfig(raw: any): AdminGiftBoxConfig {
   const safeNumber = (value: unknown, fallback: number, options: { min?: number; max?: number } = {}) => {
@@ -99,6 +101,45 @@ function sanitizeParticipant(raw: any): AdminGiftBoxParticipant | null {
   }
 }
 
+function sanitizeDeposit(raw: any): AdminGiftBoxDeposit | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const id = typeof raw.id === "string" ? raw.id : typeof raw._id === "string" ? raw._id : null
+  if (!id) {
+    return null
+  }
+
+  const amount = typeof raw.amount === "number" && Number.isFinite(raw.amount) ? raw.amount : 0
+  const submittedAt = typeof raw.submittedAt === "string" ? raw.submittedAt : null
+
+  let user: AdminGiftBoxParticipant["user"] = null
+  if (raw.user && typeof raw.user === "object") {
+    const rawUser = raw.user as Record<string, unknown>
+    const userId =
+      typeof rawUser.id === "string"
+        ? rawUser.id
+        : typeof rawUser._id === "string"
+          ? (rawUser._id as string)
+          : id
+    user = {
+      id: userId,
+      name: typeof rawUser.name === "string" ? rawUser.name : "",
+      email: typeof rawUser.email === "string" ? rawUser.email : "",
+      referralCode: typeof rawUser.referralCode === "string" ? rawUser.referralCode : "",
+    }
+  }
+
+  return {
+    id,
+    user,
+    amount,
+    txId: typeof raw.txId === "string" ? raw.txId : "",
+    network: typeof raw.network === "string" ? raw.network : "",
+    address: typeof raw.address === "string" ? raw.address : "",
+    submittedAt,
+  }
+}
+
 function sanitizeFairness(raw: any): AdminGiftBoxCycleSummary["fairnessProof"] {
   if (!raw || typeof raw !== "object") return null
   if (typeof raw.serverSeed !== "string" || typeof raw.hash !== "string") {
@@ -157,11 +198,15 @@ function sanitizeOverview(raw: any): AdminGiftBoxOverview | null {
   const participants = Array.isArray(raw.participants)
     ? (raw.participants.map(sanitizeParticipant).filter(Boolean) as AdminGiftBoxParticipant[])
     : []
+  const pendingDeposits = Array.isArray(raw.pendingDeposits)
+    ? (raw.pendingDeposits.map(sanitizeDeposit).filter(Boolean) as AdminGiftBoxDeposit[])
+    : []
 
   return {
     cycle: sanitizeCycle(raw.cycle),
     previousCycle: sanitizeCycle(raw.previousCycle),
     participants,
+    pendingDeposits,
     config: sanitizeConfig(raw.config ?? {}),
   }
 }
@@ -210,6 +255,16 @@ interface AdminGiftBoxParticipant {
   hashedUserId: string | null
 }
 
+interface AdminGiftBoxDeposit {
+  id: string
+  user: AdminGiftBoxParticipant["user"]
+  amount: number
+  txId: string
+  network: string
+  address: string
+  submittedAt: string | null
+}
+
 interface AdminGiftBoxCycleSummary {
   id: string
   startTime: string
@@ -237,6 +292,7 @@ interface AdminGiftBoxOverview {
   cycle: AdminGiftBoxCycleSummary | null
   previousCycle: AdminGiftBoxCycleSummary | null
   participants: AdminGiftBoxParticipant[]
+  pendingDeposits: AdminGiftBoxDeposit[]
   config: AdminGiftBoxConfig
 }
 
@@ -246,15 +302,17 @@ export function GiftBoxAdminPanel() {
   const [overview, setOverview] = useState<AdminGiftBoxOverview | null>(null)
   const [history, setHistory] = useState<AdminGiftBoxCycleSummary[]>([])
   const [settingsDraft, setSettingsDraft] = useState<AdminGiftBoxConfig>(createDefaultGiftBoxConfig)
-  const [manualWinnerId, setManualWinnerId] = useState<string>("")
+  const [manualWinnerId, setManualWinnerId] = useState<string | null>(null)
   const [serverSeedOverride, setServerSeedOverride] = useState("")
   const [clientSeedOverride, setClientSeedOverride] = useState("")
   const [nonceOverride, setNonceOverride] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
   const [dataError, setDataError] = useState<string | null>(null)
+  const [reviewingDepositId, setReviewingDepositId] = useState<string | null>(null)
 
   const activeCycle = overview?.cycle
   const participants = overview?.participants ?? []
+  const pendingDeposits = overview?.pendingDeposits ?? []
   const config = overview?.config ?? settingsDraft
   const nextDrawAt = activeCycle ? new Date(activeCycle.endTime).toLocaleString() : "To be scheduled"
   const cycleStatusLabel = activeCycle ? (activeCycle.status === "open" ? "Open" : "Completed") : "Not started"
@@ -313,6 +371,68 @@ export function GiftBoxAdminPanel() {
     }
   }, [toast])
 
+  const handleApproveDeposit = useCallback(
+    async (depositId: string) => {
+      setReviewingDepositId(depositId)
+      try {
+        const response = await fetch(`/api/admin/giftbox/deposits/${depositId}/approve`, { method: "POST" })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to approve deposit")
+        }
+        toast({ title: "Deposit approved", description: "Participant added to the Gift Box cycle." })
+        await refreshAll()
+      } catch (error: any) {
+        console.error("Approve gift box deposit error", error)
+        toast({
+          title: "Approval failed",
+          description: error?.message ?? "Please try again later.",
+          variant: "destructive",
+        })
+      } finally {
+        setReviewingDepositId(null)
+      }
+    },
+    [refreshAll, toast],
+  )
+
+  const handleRejectDeposit = useCallback(
+    async (depositId: string) => {
+      const reasonInput = window.prompt(
+        "Provide a reason for rejecting this deposit.",
+        "Unable to verify the transaction hash.",
+      )
+      if (reasonInput === null) {
+        return
+      }
+      const reason = reasonInput.trim()
+      setReviewingDepositId(depositId)
+      try {
+        const response = await fetch(`/api/admin/giftbox/deposits/${depositId}/reject`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason }),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to reject deposit")
+        }
+        toast({ title: "Deposit rejected", description: "The entrant has been notified." })
+        await refreshAll()
+      } catch (error: any) {
+        console.error("Reject gift box deposit error", error)
+        toast({
+          title: "Rejection failed",
+          description: error?.message ?? "Please try again later.",
+          variant: "destructive",
+        })
+      } finally {
+        setReviewingDepositId(null)
+      }
+    },
+    [refreshAll, toast],
+  )
+
   const handleDraw = useCallback(async () => {
     if (!activeCycle) {
       toast({ title: "No active cycle", variant: "destructive" })
@@ -337,7 +457,7 @@ export function GiftBoxAdminPanel() {
         throw new Error(data.error || "Unable to finalize cycle")
       }
       toast({ title: "Cycle finalized", description: "A new giveaway cycle has been started." })
-      setManualWinnerId("")
+      setManualWinnerId(null)
       setServerSeedOverride("")
       setClientSeedOverride("")
       setNonceOverride("")
@@ -459,6 +579,84 @@ export function GiftBoxAdminPanel() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-primary" /> Deposit review queue
+              </CardTitle>
+              <CardDescription>Approve or reject Gift Box deposits submitted by players.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pendingDeposits.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No deposits are waiting for approval.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Player</TableHead>
+                        <TableHead>Transaction</TableHead>
+                        <TableHead className="hidden lg:table-cell">Network</TableHead>
+                        <TableHead className="hidden lg:table-cell">Amount</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingDeposits.map((deposit) => {
+                        const submittedAt = deposit.submittedAt ? new Date(deposit.submittedAt) : null
+                        const submittedLabel = submittedAt ? submittedAt.toLocaleString() : "Unknown"
+                        const shortTx = deposit.txId ? `${deposit.txId.slice(0, 12)}…` : "--"
+                        const isProcessing = reviewingDepositId === deposit.id
+
+                        return (
+                          <TableRow key={deposit.id}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{deposit.user?.name || "Unnamed"}</span>
+                                <span className="text-xs text-muted-foreground">{deposit.user?.email || "No email"}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-mono text-sm">{shortTx}</span>
+                                <span className="text-xs text-muted-foreground">{deposit.address}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">{deposit.network}</TableCell>
+                            <TableCell className="hidden lg:table-cell">
+                              {currencyFormatter.format(deposit.amount || 0)}
+                            </TableCell>
+                            <TableCell>{submittedLabel}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => void handleApproveDeposit(deposit.id)}
+                                  disabled={isProcessing}
+                                >
+                                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => void handleRejectDeposit(deposit.id)}
+                                  disabled={isProcessing}
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-primary" /> Manual draw controls
               </CardTitle>
               <CardDescription>
@@ -469,12 +667,15 @@ export function GiftBoxAdminPanel() {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
                   <Label>Winner override</Label>
-                  <Select value={manualWinnerId} onValueChange={setManualWinnerId}>
+                  <Select
+                    value={manualWinnerId ?? "__random"}
+                    onValueChange={(value) => setManualWinnerId(value === "__random" ? null : value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Random winner" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Random (fairness proof)</SelectItem>
+                      <SelectItem value="__random">Random (fairness proof)</SelectItem>
                       {winnerOptions.map((option) => (
                         <SelectItem key={option.id} value={option.id}>
                           {option.label}
