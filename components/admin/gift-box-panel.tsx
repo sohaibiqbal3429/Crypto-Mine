@@ -3,17 +3,189 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2, Percent, RefreshCcw, ShieldCheck, Sparkles, Users } from "lucide-react"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
+
+const DEFAULT_GIFT_BOX_CONFIG: AdminGiftBoxConfig = {
+  ticketPrice: 10,
+  payoutPercentage: 90,
+  cycleHours: 72,
+  winnersCount: 1,
+  autoDrawEnabled: true,
+  refundPercentage: 0,
+  depositAddress: "",
+}
+
+function createDefaultGiftBoxConfig(): AdminGiftBoxConfig {
+  return { ...DEFAULT_GIFT_BOX_CONFIG }
+}
+
+function sanitizeConfig(raw: any): AdminGiftBoxConfig {
+  const safeNumber = (value: unknown, fallback: number, options: { min?: number; max?: number } = {}) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return fallback
+    }
+    if (typeof options.min === "number" && value < options.min) {
+      return options.min
+    }
+    if (typeof options.max === "number" && value > options.max) {
+      return options.max
+    }
+    return value
+  }
+
+  return {
+    ticketPrice: safeNumber(raw?.ticketPrice, DEFAULT_GIFT_BOX_CONFIG.ticketPrice, { min: 0 }),
+    payoutPercentage: safeNumber(raw?.payoutPercentage, DEFAULT_GIFT_BOX_CONFIG.payoutPercentage, {
+      min: 0,
+      max: 100,
+    }),
+    cycleHours: safeNumber(raw?.cycleHours, DEFAULT_GIFT_BOX_CONFIG.cycleHours, { min: 1 }),
+    winnersCount: Math.max(1, Math.floor(safeNumber(raw?.winnersCount, DEFAULT_GIFT_BOX_CONFIG.winnersCount, { min: 1 }))),
+    autoDrawEnabled:
+      typeof raw?.autoDrawEnabled === "boolean" ? raw.autoDrawEnabled : DEFAULT_GIFT_BOX_CONFIG.autoDrawEnabled,
+    refundPercentage: safeNumber(raw?.refundPercentage, DEFAULT_GIFT_BOX_CONFIG.refundPercentage, {
+      min: 0,
+      max: 100,
+    }),
+    depositAddress: typeof raw?.depositAddress === "string" ? raw.depositAddress : DEFAULT_GIFT_BOX_CONFIG.depositAddress,
+  }
+}
+
+function sanitizeParticipant(raw: any): AdminGiftBoxParticipant | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const id = typeof raw.id === "string" ? raw.id : typeof raw._id === "string" ? raw._id : null
+  const joinedAt = typeof raw.joinedAt === "string" ? raw.joinedAt : null
+  if (!id || !joinedAt) {
+    return null
+  }
+
+  const status = raw.status === "eliminated" ? "eliminated" : "active"
+
+  let user: AdminGiftBoxParticipant["user"] = null
+  if (raw.user && typeof raw.user === "object") {
+    const rawUser = raw.user as Record<string, unknown>
+    const userId =
+      typeof rawUser.id === "string"
+        ? rawUser.id
+        : typeof rawUser._id === "string"
+          ? (rawUser._id as string)
+          : id
+    user = {
+      id: userId,
+      name: typeof rawUser.name === "string" ? rawUser.name : "",
+      email: typeof rawUser.email === "string" ? rawUser.email : "",
+      referralCode: typeof rawUser.referralCode === "string" ? rawUser.referralCode : "",
+    }
+  }
+
+  return {
+    id,
+    user,
+    joinedAt,
+    status,
+    hashedUserId: typeof raw.hashedUserId === "string" ? raw.hashedUserId : null,
+  }
+}
+
+function sanitizeFairness(raw: any): AdminGiftBoxCycleSummary["fairnessProof"] {
+  if (!raw || typeof raw !== "object") return null
+  if (typeof raw.serverSeed !== "string" || typeof raw.hash !== "string") {
+    return null
+  }
+
+  const nonce = typeof raw.nonce === "number" && Number.isFinite(raw.nonce) ? raw.nonce : 0
+  const winnerIndex = typeof raw.winnerIndex === "number" && Number.isFinite(raw.winnerIndex) ? raw.winnerIndex : 0
+
+  return {
+    serverSeed: raw.serverSeed,
+    clientSeed: typeof raw.clientSeed === "string" ? raw.clientSeed : "",
+    nonce,
+    hash: raw.hash,
+    winnerIndex,
+  }
+}
+
+function sanitizeWinnerSnapshot(raw: any): AdminGiftBoxCycleSummary["winnerSnapshot"] {
+  if (!raw || typeof raw !== "object") return null
+  if (typeof raw.name !== "string") return null
+
+  return {
+    name: raw.name,
+    referralCode: typeof raw.referralCode === "string" ? raw.referralCode : null,
+    email: typeof raw.email === "string" ? raw.email : null,
+    creditedAt: typeof raw.creditedAt === "string" ? raw.creditedAt : null,
+  }
+}
+
+function sanitizeCycle(raw: any): AdminGiftBoxCycleSummary | null {
+  if (!raw || typeof raw !== "object") return null
+  if (typeof raw.id !== "string" || typeof raw.startTime !== "string" || typeof raw.endTime !== "string") {
+    return null
+  }
+
+  return {
+    id: raw.id,
+    startTime: raw.startTime,
+    endTime: raw.endTime,
+    status: raw.status === "completed" ? "completed" : "open",
+    totalParticipants: typeof raw.totalParticipants === "number" && Number.isFinite(raw.totalParticipants)
+      ? raw.totalParticipants
+      : 0,
+    ticketPrice: typeof raw.ticketPrice === "number" && Number.isFinite(raw.ticketPrice) ? raw.ticketPrice : 0,
+    payoutPercentage:
+      typeof raw.payoutPercentage === "number" && Number.isFinite(raw.payoutPercentage) ? raw.payoutPercentage : 0,
+    winnerSnapshot: sanitizeWinnerSnapshot(raw.winnerSnapshot),
+    fairnessProof: sanitizeFairness(raw.fairnessProof),
+  }
+}
+
+function sanitizeOverview(raw: any): AdminGiftBoxOverview | null {
+  if (!raw || typeof raw !== "object") return null
+
+  const participants = Array.isArray(raw.participants)
+    ? (raw.participants.map(sanitizeParticipant).filter(Boolean) as AdminGiftBoxParticipant[])
+    : []
+
+  return {
+    cycle: sanitizeCycle(raw.cycle),
+    previousCycle: sanitizeCycle(raw.previousCycle),
+    participants,
+    config: sanitizeConfig(raw.config ?? {}),
+  }
+}
+
+function sanitizeHistory(raw: any): AdminGiftBoxCycleSummary[] {
+  if (Array.isArray(raw)) {
+    return raw.map(sanitizeCycle).filter(Boolean) as AdminGiftBoxCycleSummary[]
+  }
+
+  if (raw && typeof raw === "object" && Array.isArray(raw.cycles)) {
+    return raw.cycles.map(sanitizeCycle).filter(Boolean) as AdminGiftBoxCycleSummary[]
+  }
+
+  return []
+}
+
+async function safeParseJson<T>(response: Response): Promise<T | null> {
+  try {
+    return await response.json()
+  } catch (error) {
+    console.error("Failed to parse JSON response", error)
+    return null
+  }
+}
 
 interface AdminGiftBoxConfig {
   ticketPrice: number
@@ -73,20 +245,13 @@ export function GiftBoxAdminPanel() {
   const [loading, setLoading] = useState(false)
   const [overview, setOverview] = useState<AdminGiftBoxOverview | null>(null)
   const [history, setHistory] = useState<AdminGiftBoxCycleSummary[]>([])
-  const [settingsDraft, setSettingsDraft] = useState<AdminGiftBoxConfig>({
-    ticketPrice: 10,
-    payoutPercentage: 90,
-    cycleHours: 72,
-    winnersCount: 1,
-    autoDrawEnabled: true,
-    refundPercentage: 0,
-    depositAddress: "",
-  })
+  const [settingsDraft, setSettingsDraft] = useState<AdminGiftBoxConfig>(createDefaultGiftBoxConfig)
   const [manualWinnerId, setManualWinnerId] = useState<string>("")
   const [serverSeedOverride, setServerSeedOverride] = useState("")
   const [clientSeedOverride, setClientSeedOverride] = useState("")
   const [nonceOverride, setNonceOverride] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [dataError, setDataError] = useState<string | null>(null)
 
   const activeCycle = overview?.cycle
   const participants = overview?.participants ?? []
@@ -100,7 +265,7 @@ export function GiftBoxAdminPanel() {
 
   useEffect(() => {
     if (overview?.config) {
-      setSettingsDraft(overview.config)
+      setSettingsDraft({ ...overview.config })
     }
   }, [overview?.config])
 
@@ -119,12 +284,25 @@ export function GiftBoxAdminPanel() {
         const data = await historyRes.json().catch(() => ({}))
         throw new Error(data.error || "Unable to load cycle history")
       }
-      const overviewData = await overviewRes.json()
-      const historyData = await historyRes.json()
-      setOverview(overviewData)
-      setHistory(historyData.cycles ?? [])
+      const overviewData = await safeParseJson<unknown>(overviewRes)
+      const historyData = await safeParseJson<unknown>(historyRes)
+
+      const sanitizedOverview = sanitizeOverview(overviewData)
+      if (!sanitizedOverview) {
+        throw new Error("Received malformed data for the Gift Box overview")
+      }
+
+      const sanitizedHistory = sanitizeHistory(historyData)
+
+      setOverview(sanitizedOverview)
+      setHistory(sanitizedHistory)
+      setDataError(null)
     } catch (error: any) {
       console.error("Gift box admin overview error", error)
+      setOverview(null)
+      setHistory([])
+      setDataError(error?.message ?? "Please try again later.")
+      setSettingsDraft(createDefaultGiftBoxConfig())
       toast({
         title: "Unable to load gift box data",
         description: error?.message ?? "Please try again later.",
@@ -142,6 +320,7 @@ export function GiftBoxAdminPanel() {
     }
     setLoading(true)
     try {
+      const parsedNonce = Number.parseInt(nonceOverride, 10)
       const response = await fetch(`/api/admin/giftbox/cycle/${activeCycle.id}/draw`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -150,7 +329,7 @@ export function GiftBoxAdminPanel() {
           startNextCycle: true,
           serverSeed: serverSeedOverride || undefined,
           clientSeed: clientSeedOverride || undefined,
-          nonce: nonceOverride ? Number.parseInt(nonceOverride, 10) : undefined,
+          nonce: Number.isFinite(parsedNonce) ? parsedNonce : undefined,
         }),
       })
       if (!response.ok) {
@@ -207,7 +386,7 @@ export function GiftBoxAdminPanel() {
         const hashed = participant.hashedUserId ? participant.hashedUserId.slice(0, 10) : "unknown"
         return {
           id: participant.user?.id ?? participant.id,
-          label: `${participant.user?.name ?? "Unnamed"} (${hashed}…)`,
+          label: `${participant.user?.name?.trim() ? participant.user?.name : "Unnamed"} (${hashed}…)`,
         }
       }),
     [participants],
@@ -226,6 +405,12 @@ export function GiftBoxAdminPanel() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />} Refresh
         </Button>
       </div>
+
+      {dataError && (
+        <Alert variant="destructive">
+          <AlertDescription>{dataError}</AlertDescription>
+        </Alert>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
