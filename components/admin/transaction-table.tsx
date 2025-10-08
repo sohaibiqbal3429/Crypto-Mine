@@ -293,13 +293,18 @@ export function TransactionTable({
           <div className="text-xs text-muted-foreground">
             {new Date(transaction.createdAt).toLocaleString()}
           </div>
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto md:justify-end">
             {requiresAction ? (
               <Badge variant="outline" className="uppercase">
                 Action needed
               </Badge>
             ) : null}
-            <Button size="sm" variant="ghost" onClick={() => openDetails(transaction)} className="gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => openDetails(transaction)}
+              className="gap-1 w-full justify-center md:w-auto"
+            >
               <Eye className="h-4 w-4" /> Review
             </Button>
           </div>
@@ -427,7 +432,7 @@ export function TransactionTable({
         </div>
       </CardContent>
       <Dialog open={detailOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto space-y-6">
+        <DialogContent className="max-h-[90vh] w-full max-w-5xl overflow-y-auto space-y-6">
           <DialogHeader>
             <DialogTitle>Transaction details</DialogTitle>
             <DialogDescription>Review the request and approve or reject it from this panel.</DialogDescription>
