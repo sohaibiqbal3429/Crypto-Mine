@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 
+import { ImportantUpdateModal } from "@/components/dashboard/important-update-modal"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { HalvingChart } from "@/components/dashboard/halving-chart"
@@ -84,6 +85,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-background">
+      <ImportantUpdateModal />
       <Sidebar user={user} />
 
       <main className="flex-1 overflow-auto md:ml-64">
