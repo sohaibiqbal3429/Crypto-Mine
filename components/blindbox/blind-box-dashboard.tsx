@@ -1,13 +1,15 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CalendarDays, Clock, Crown, Gift, Sparkles, Users } from "lucide-react"
+import { CalendarDays, Clock, Copy, Crown, Gift, Sparkles, Users } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
+
+const BLIND_BOX_DEPOSIT_ADDRESS = "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw"
 
 interface BlindBoxRoundSummary {
   id: string
@@ -175,6 +177,22 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
     }
   }, [refreshSummary, toast])
 
+  const handleCopyAddress = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(BLIND_BOX_DEPOSIT_ADDRESS)
+      toast({
+        title: "Address copied",
+        description: "Send exactly $10 USDT (TRC20) to join the next draw.",
+      })
+    } catch (error) {
+      toast({
+        title: "Unable to copy",
+        description: "Copy the deposit address manually.",
+        variant: "destructive",
+      })
+    }
+  }, [toast])
+
   const alreadyJoined = summary.userStatus.isParticipant
   const entryFee = summary.config.depositAmount
   const prizePool = summary.config.rewardAmount
@@ -194,13 +212,12 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
         <div className="relative p-10 space-y-8">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="space-y-4">
-              <p className="text-sm font-semibold uppercase tracking-[0.4em] text-white/75">Blind Box Lucky Draw</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.4em] text-white/75">Blind Box</p>
               <h1 className="flex flex-wrap items-center gap-3 text-4xl font-extrabold tracking-tight">
                 <Gift className="h-10 w-10" /> Join &amp; Win Every {summary.config.cycleHours} Hours
               </h1>
               <p className="max-w-2xl text-base text-white/85">
-                Pay {formatCurrency(entryFee)} to enter the current round instantly. Each entry gives you a shot at winning
-                {" "}
+                Deposit {formatCurrency(entryFee)} USDT (TRC20) to the address below and confirm your entry to compete for
                 {formatCurrency(prizePool)} credited directly to your balance. Draws happen on a fixed schedule so you always know
                 when the next winner will be announced.
               </p>
@@ -227,7 +244,7 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
                 disabled={alreadyJoined || joining}
                 className="bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 shadow-lg"
               >
-                {joining ? "Joining..." : alreadyJoined ? "Joined" : "Confirm & Join"}
+                {joining ? "Joining..." : alreadyJoined ? "Joined" : "Confirm Entry"}
               </Button>
               <Button
                 variant="secondary"
@@ -244,7 +261,7 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
             <div className="rounded-2xl bg-white/15 p-4">
               <p className="text-xs uppercase tracking-[0.3em] text-white/70">Entry Fee</p>
               <p className="mt-2 text-2xl font-bold">{formatCurrency(entryFee)}</p>
-              <p className="text-sm text-white/80">Deducted immediately from the participant's balance.</p>
+              <p className="text-sm text-white/80">Collected once your wallet deposit is confirmed.</p>
             </div>
             <div className="rounded-2xl bg-white/15 p-4">
               <p className="text-xs uppercase tracking-[0.3em] text-white/70">Prize Pool</p>
@@ -255,6 +272,24 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
               <p className="text-xs uppercase tracking-[0.3em] text-white/70">Countdown</p>
               <p className="mt-2 text-2xl font-bold">{countdown}</p>
               <p className="text-sm text-white/80">Draw closes at {nextDrawLabel}.</p>
+            </div>
+            <div className="rounded-2xl bg-white/15 p-4 sm:col-span-3">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/70">Deposit Address</p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-mono text-sm text-white/90">{BLIND_BOX_DEPOSIT_ADDRESS}</p>
+                <Button
+                  type="button"
+                  onClick={() => void handleCopyAddress()}
+                  className="w-full bg-white/20 text-white hover:bg-white/30 sm:w-auto"
+                  variant="secondary"
+                >
+                  <Copy className="mr-2 h-4 w-4" /> Copy address
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-white/75">
+                Send exactly {formatCurrency(entryFee)} in USDT (TRC20). Once your wallet reflects the deposit you can confirm
+                your entry instantly.
+              </p>
             </div>
           </div>
 

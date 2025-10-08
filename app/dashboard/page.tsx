@@ -6,16 +6,7 @@ import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { HalvingChart } from "@/components/dashboard/halving-chart"
 import { Sidebar } from "@/components/layout/sidebar"
-import {
-  CalendarDays,
-  Copy,
-  Gift,
-  Loader2,
-  Share2,
-  Sparkles,
-  Trophy,
-  Users as UsersIcon,
-} from "lucide-react"
+import { CalendarDays, Gift, Loader2, Sparkles, Trophy } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,10 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { useToast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
 
 interface DashboardData {
@@ -96,17 +85,13 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [isShareModalOpen, setIsShareModalOpen] = useState(false)
   const [isBlindBoxModalOpen, setIsBlindBoxModalOpen] = useState(false)
   const [isLeaderboardModalOpen, setIsLeaderboardModalOpen] = useState(false)
-  const [copyMessage, setCopyMessage] = useState<string | null>(null)
-  const [referralLink, setReferralLink] = useState("")
   const [blindBox, setBlindBox] = useState<BlindBoxSummaryResponse | null>(null)
   const [blindBoxLoading, setBlindBoxLoading] = useState(true)
   const [joinLoading, setJoinLoading] = useState(false)
   const [countdown, setCountdown] = useState("--:--:--:--")
   const [hasShownJoinModal, setHasShownJoinModal] = useState(false)
-  const { toast } = useToast()
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -147,16 +132,6 @@ export default function DashboardPage() {
     fetchDashboardData()
     fetchBlindBoxSummary()
   }, [fetchDashboardData, fetchBlindBoxSummary])
-
-  useEffect(() => {
-    if (data?.user?.referralCode && typeof window !== "undefined") {
-      const url = new URL("/auth/register", window.location.origin)
-      url.searchParams.set("ref", data.user.referralCode)
-      setReferralLink(url.toString())
-    } else {
-      setReferralLink("")
-    }
-  }, [data?.user?.referralCode])
 
   useEffect(() => {
     const targetIso = blindBox?.round?.endTime ?? blindBox?.nextDrawAt ?? null
@@ -202,53 +177,18 @@ export default function DashboardPage() {
     }
   }, [blindBox?.userStatus?.isParticipant, isBlindBoxModalOpen])
 
-  const handleCopy = useCallback(async (value: string, successMessage: string) => {
-    if (!value) return
-
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopyMessage(successMessage)
-    } catch (error) {
-      console.error("Failed to copy value:", error)
-      setCopyMessage("Unable to copy. Please try again.")
-    }
-
-    setTimeout(() => setCopyMessage(null), 3000)
-  }, [])
-
-  const handleConfirmJoin = useCallback(async () => {
+  const handleJoinNow = useCallback(async () => {
     setJoinLoading(true)
     try {
-      const response = await fetch("/api/blindbox/join", { method: "POST" })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(data.error || "Unable to join the blind box")
-      }
-
-      toast({
-        title: "You're in the draw!",
-        description: "Good luck — we'll announce the winner soon.",
-      })
-
       setHasShownJoinModal(true)
-      await Promise.all([fetchBlindBoxSummary(), fetchDashboardData()])
       setIsBlindBoxModalOpen(false)
       router.push("/blind-box")
-    } catch (error: any) {
-      toast({
-        title: "Unable to join",
-        description: error?.message || "Please try again in a moment.",
-        variant: "destructive",
-      })
     } finally {
       setJoinLoading(false)
     }
-  }, [fetchBlindBoxSummary, fetchDashboardData, router, toast])
+  }, [router])
 
-  const referralCode = data?.user?.referralCode ?? ""
   const invitesCount = data?.kpis?.activeMembers ?? 0
-  const referralEarnings = data?.kpis?.teamReward ?? 0
-  const formattedReferralEarnings = useMemo(() => formatCurrency(referralEarnings), [referralEarnings])
   const fallbackParticipantCount = useMemo(() => Math.max(3566, invitesCount * 12 + 500), [invitesCount])
   const rawParticipantCount = blindBox?.round?.totalParticipants ?? blindBox?.participants ?? 0
   const participantCount = rawParticipantCount > 0 ? rawParticipantCount : fallbackParticipantCount
@@ -256,7 +196,6 @@ export default function DashboardPage() {
     () => new Intl.NumberFormat("en-US").format(participantCount),
     [participantCount],
   )
-  const referralStatsText = `${invitesCount} active invites | ${formattedReferralEarnings} earned from referrals`
   const prizePool = blindBox?.round?.rewardAmount ?? blindBox?.config?.rewardAmount ?? 30
   const entryFee = blindBox?.round?.depositAmount ?? blindBox?.config?.depositAmount ?? 10
   const nextDrawIso = blindBox?.round?.endTime ?? blindBox?.nextDrawAt ?? null
@@ -284,15 +223,15 @@ export default function DashboardPage() {
   const canAffordEntry = currentBalance >= entryFee
   const alreadyJoined = blindBox?.userStatus?.isParticipant ?? false
   const roundAcceptingEntries = blindBox?.round?.status === "open"
-  const joinDisabled = !blindBox?.round || alreadyJoined || !canAffordEntry || !roundAcceptingEntries || joinLoading
+  const joinDisabled = joinLoading || alreadyJoined
   const joinTooltip = !blindBox?.round
     ? "The blind box round is loading"
-    : !canAffordEntry
-      ? "Insufficient balance"
-      : alreadyJoined
-        ? "You're already in this round"
-        : !roundAcceptingEntries
-          ? "This round has closed"
+    : alreadyJoined
+      ? "You're already in this round"
+      : !roundAcceptingEntries
+        ? "This round has closed"
+        : !canAffordEntry
+          ? `Deposit at least ${formatCurrency(entryFee)} in your wallet to join`
           : ""
   const winnerSnapshot = blindBox?.previousRound?.winnerSnapshot ?? null
 
@@ -349,9 +288,9 @@ export default function DashboardPage() {
               <div className="p-8 space-y-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Blind Box Lucky Draw</p>
+                    <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/80">Blind Box</p>
                     <h2 className="text-3xl font-extrabold leading-snug tracking-tight flex items-center gap-2">
-                      <Gift className="h-7 w-7" /> BLIND BOX LUCKY DRAW
+                      <Gift className="h-7 w-7" /> BLIND BOX
                     </h2>
                     <p className="text-lg text-white/90">Win Exciting Prizes Every 3 Days</p>
                   </div>
@@ -372,7 +311,9 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     <p className="max-w-2xl text-base leading-relaxed text-white/90">
-                      Pay {formatCurrency(entryFee)} to join the Blind Box and get a chance to win {formatCurrency(prizePool)}.
+                      Deposit {formatCurrency(entryFee)} USDT (TRC20) to secure your spot and compete for
+                      {" "}
+                      {formatCurrency(prizePool)}.
                     </p>
                     <div className="flex flex-wrap items-center gap-3">
                       {joinTooltip ? (
@@ -386,7 +327,7 @@ export default function DashboardPage() {
                                 joinDisabled && "cursor-not-allowed opacity-75",
                               )}
                             >
-                              Play Now
+                              Join Blind Box
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>{joinTooltip}</TooltipContent>
@@ -397,39 +338,13 @@ export default function DashboardPage() {
                           disabled={joinDisabled}
                           className="bg-white text-orange-600 font-semibold shadow-xl transition duration-200 hover:scale-[1.02]"
                         >
-                          Play Now
-                        </Button>
-                      )}
-                      {joinTooltip ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="secondary"
-                              onClick={() => setIsBlindBoxModalOpen(true)}
-                              disabled={joinDisabled}
-                              className={cn(
-                                "bg-white/20 text-white border border-white/40 hover:bg-white/30",
-                                joinDisabled && "cursor-not-allowed opacity-70",
-                              )}
-                            >
-                              Buy for {formatCurrency(entryFee)}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>{joinTooltip}</TooltipContent>
-                        </Tooltip>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          onClick={() => setIsBlindBoxModalOpen(true)}
-                          disabled={joinDisabled}
-                          className="bg-white/20 text-white border border-white/40 hover:bg-white/30"
-                        >
-                          Buy for {formatCurrency(entryFee)}
+                          Join Blind Box
                         </Button>
                       )}
                     </div>
                     <div className="rounded-3xl bg-white/15 p-4 backdrop-blur-sm text-sm text-white/90">
-                      Get an item worth a fortune for just {formatCurrency(entryFee)}! Simply click to participate.
+                      Transfer your {formatCurrency(entryFee)} deposit and confirm entry from the Blind Box page to be included
+                      in the next draw.
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-white/85">
                       <Sparkles className="h-4 w-4" />
@@ -492,66 +407,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <Card className="relative overflow-hidden border-none rounded-[28px] bg-gradient-to-br from-emerald-300 via-emerald-200 to-teal-200 text-emerald-900 shadow-2xl">
-            <div className="pointer-events-none absolute -top-20 -right-28 h-64 w-64 rounded-full bg-white/40 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-16 -left-20 h-52 w-52 rounded-full bg-white/30 blur-3xl" />
-            <CardHeader className="space-y-3 pb-0">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-900/70">Mintmine Pro Rewards Center</p>
-                  <CardTitle className="text-2xl font-bold leading-tight flex items-center gap-2">
-                    <UsersIcon className="h-6 w-6" /> Invite &amp; Earn
-                  </CardTitle>
-                </div>
-                <Share2 className="h-7 w-7 text-emerald-900/70" />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-base leading-relaxed text-emerald-900/90">
-                Earn 10% of your friends' daily mining rewards when they join with your link.
-              </p>
-              <div className="rounded-2xl bg-white/70 p-4 shadow-sm">
-                <p className="text-sm font-semibold text-emerald-900/80">Your Referral Code</p>
-                <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <span className="rounded-xl bg-emerald-100 px-3 py-2 font-mono text-sm font-bold tracking-wide text-emerald-700">
-                    {referralCode || "Unavailable"}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleCopy(referralCode, "Referral code copied!")}
-                    disabled={!referralCode}
-                    className="border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                  >
-                    <Copy className="mr-2 h-4 w-4" /> Copy Code
-                  </Button>
-                </div>
-                <p className="mt-3 text-sm text-emerald-700/80">{referralStatsText}</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={() => setIsShareModalOpen(true)}
-                  className="bg-white text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 shadow-lg hover:shadow-xl transition duration-200"
-                >
-                  Share &amp; Invite
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleCopy(referralCode, "Referral code copied!")}
-                  disabled={!referralCode}
-                  className="bg-emerald-600/10 text-emerald-900 border border-emerald-500/30 hover:bg-emerald-600/20"
-                >
-                  Copy Referral Code
-                </Button>
-              </div>
-              {copyMessage && (
-                <div className="flex items-center gap-2 text-sm font-medium text-emerald-900">
-                  <Sparkles className="h-4 w-4" />
-                  <span>{copyMessage}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </main>
 
@@ -559,87 +414,35 @@ export default function DashboardPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
-              <Gift className="h-5 w-5 text-orange-500" /> Blind Box Lucky Draw
+              <Gift className="h-5 w-5 text-orange-500" /> Blind Box
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Join the current round for {formatCurrency(entryFee)}. This amount will be deducted from your balance instantly
-              and grants you a shot at winning {formatCurrency(prizePool)}!
+              Deposit {formatCurrency(entryFee)} USDT (TRC20) to take part in the next draw and compete for
+              {" "}
+              {formatCurrency(prizePool)}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900 space-y-2">
-              <p className="font-semibold">Entry Fee: {formatCurrency(entryFee)}</p>
+              <p className="font-semibold">Entry Fee: {formatCurrency(entryFee)} (USDT TRC20)</p>
               <p className="font-semibold">Prize Pool: {formatCurrency(prizePool)}</p>
               <p className="font-semibold">Next Draw: {nextDrawDisplay}</p>
               <p className="text-orange-800/80">Your balance currently shows {formatCurrency(currentBalance)}.</p>
             </div>
             <Button
               className="w-full bg-gradient-to-r from-orange-500 to-pink-500 text-white hover:from-orange-600 hover:to-pink-600"
-              onClick={handleConfirmJoin}
+              onClick={handleJoinNow}
               disabled={joinDisabled}
             >
-              {joinLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm & Join"}
+              {joinLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Go to Blind Box"}
             </Button>
             <p className="text-xs text-muted-foreground text-center">
-              Participation is logged under your rewards history immediately after confirmation.
+              Participation is confirmed once your deposit is processed and you submit from the Blind Box page.
             </p>
             {!canAffordEntry && (
-              <p className="text-xs text-center text-orange-700">You need at least {formatCurrency(entryFee)} in your balance to join.</p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg text-emerald-900">
-              <UsersIcon className="h-5 w-5" /> Share your Mintmine Pro link
-            </DialogTitle>
-            <DialogDescription>
-              Send this link to your friends and earn 10% of their daily mining rewards when they join.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-semibold text-muted-foreground">Referral Code</p>
-              <div className="mt-2 flex items-center gap-2">
-                <div className="flex-1 rounded-lg bg-muted px-3 py-2 font-mono text-sm">
-                  {referralCode || "Unavailable"}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCopy(referralCode, "Referral code copied!")}
-                  disabled={!referralCode}
-                >
-                  <Copy className="mr-2 h-4 w-4" /> Copy
-                </Button>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-muted-foreground">Referral Link</p>
-              <div className="mt-2 flex items-center gap-2">
-                <Input value={referralLink || "Link unavailable"} readOnly className="font-mono text-sm" />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleCopy(referralLink, "Referral link copied!")}
-                  disabled={!referralLink}
-                >
-                  <Copy className="mr-2 h-4 w-4" /> Copy Link
-                </Button>
-              </div>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-semibold">Your invite performance</p>
-              <p className="mt-1">{referralStatsText}</p>
-            </div>
-            {copyMessage && (
-              <div className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-                <Sparkles className="h-4 w-4" />
-                <span>{copyMessage}</span>
-              </div>
+              <p className="text-xs text-center text-orange-700">
+                Deposit at least {formatCurrency(entryFee)} to your wallet before confirming entry.
+              </p>
             )}
           </div>
         </DialogContent>
