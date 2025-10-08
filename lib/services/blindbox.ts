@@ -4,6 +4,7 @@ import { randomInt } from "crypto"
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
 import BlindBoxParticipant from "@/models/BlindBoxParticipant"
+import BlindBoxDeposit from "@/models/BlindBoxDeposit"
 import BlindBoxRound from "@/models/BlindBoxRound"
 import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
@@ -51,6 +52,12 @@ export interface BlindBoxSummaryResponse {
     joinedAt: string | null
     lastEntryTransactionId: string | null
   }
+}
+
+export interface BlindBoxDepositDetails {
+  txId: string
+  network?: string | null
+  address?: string | null
 }
 
 export class BlindBoxServiceError extends Error {
@@ -166,10 +173,14 @@ function hashUserId(userId: string) {
   return crypto.createHash("sha256").update(userId).digest("hex")
 }
 
-export async function joinBlindBoxRound(userId: string) {
+export async function joinBlindBoxRound(userId: string, deposit: BlindBoxDepositDetails) {
   const { round, config } = await ensureCurrentBlindBoxRound()
   if (!round) {
     throw new BlindBoxServiceError("No active blind box round is available", 400)
+  }
+
+  if (!deposit || typeof deposit.txId !== "string" || deposit.txId.trim().length === 0) {
+    throw new BlindBoxServiceError("A deposit transaction hash is required to join", 400)
   }
 
   await dbConnect()
@@ -183,31 +194,65 @@ export async function joinBlindBoxRound(userId: string) {
     throw new BlindBoxServiceError("You have already joined this round", 409)
   }
 
-  const balanceUpdate = await Balance.updateOne(
-    { userId, current: { $gte: config.depositAmount } },
-    { $inc: { current: -config.depositAmount, totalBalance: -config.depositAmount } },
-  )
-
-  if (balanceUpdate.modifiedCount === 0) {
-    throw new BlindBoxServiceError("Insufficient balance", 402)
+  const normalizedTxId = deposit.txId.trim()
+  if (normalizedTxId.length < 10) {
+    throw new BlindBoxServiceError("Enter a valid deposit transaction hash", 400)
   }
+
+  const duplicateDeposit = await BlindBoxDeposit.findOne({ txId: normalizedTxId })
+  if (duplicateDeposit) {
+    throw new BlindBoxServiceError("This deposit transaction has already been used", 409)
+  }
+
+  const network = (deposit.network ?? "TRC20").toString().trim() || "TRC20"
+  const address = (deposit.address ?? "").toString().trim() || "N/A"
+
+  const depositRecord = await BlindBoxDeposit.create({
+    userId,
+    amount: config.depositAmount,
+    network,
+    address,
+    txId: normalizedTxId,
+    status: "approved",
+    roundId: round._id,
+    reviewedAt: new Date(),
+    reviewedBy: null,
+  })
 
   const participant = await BlindBoxParticipant.create({
     userId,
     roundId: round._id,
-    depositId: null,
+    depositId: depositRecord._id,
     hashedUserId: hashUserId(userId),
     status: "active",
   })
 
   await BlindBoxRound.updateOne({ _id: round._id }, { $inc: { totalParticipants: 1 } })
 
-  const transaction = await Transaction.create({
+  const depositTransaction = await Transaction.create({
+    userId,
+    type: "blindBoxDeposit",
+    amount: config.depositAmount,
+    status: "approved",
+    meta: {
+      roundId: String(round._id),
+      depositId: depositRecord._id.toString(),
+      txId: normalizedTxId,
+      network,
+      address,
+    },
+  })
+
+  const entryTransaction = await Transaction.create({
     userId,
     type: "blindBoxEntry",
     amount: config.depositAmount,
     status: "approved",
-    meta: { roundId: String(round._id) },
+    meta: {
+      roundId: String(round._id),
+      depositId: depositRecord._id.toString(),
+      depositTransactionId: depositTransaction._id.toString(),
+    },
   })
 
   await Notification.create({
@@ -218,7 +263,7 @@ export async function joinBlindBoxRound(userId: string) {
     metadata: { roundId: String(round._id) },
   })
 
-  return { participant, transactionId: transaction._id.toString(), round }
+  return { participant, transactionId: entryTransaction._id.toString(), round }
 }
 
 export async function getBlindBoxParticipants(roundId: string) {

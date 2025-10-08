@@ -10,7 +10,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    await joinBlindBoxRound(user.userId)
+    const body = await request.json().catch(() => null)
+    const txId = typeof body?.txId === "string" ? body.txId : ""
+    const network = typeof body?.network === "string" ? body.network : undefined
+    const address = typeof body?.address === "string" ? body.address : undefined
+
+    await joinBlindBoxRound(user.userId, { txId, network, address })
     const summary = await getBlindBoxSummaryForUser(user.userId)
 
     return NextResponse.json({
