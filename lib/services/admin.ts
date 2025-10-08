@@ -145,18 +145,16 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     }
   })
 
-  const aggregateTotals = (totalsAggregate[0] as { totalDeposits: number; totalWithdrawals: number } | undefined) ?? {
-    totalDeposits: 0,
-    totalWithdrawals: 0,
-  }
+  const aggregateTotalsRaw =
+    (totalsAggregate[0] as { totalDeposits?: unknown; totalWithdrawals?: unknown } | undefined) ?? {}
 
   const stats: AdminStats = {
     totalUsers: totalUsersCount,
     activeUsers: activeUsersCount,
     pendingDeposits: pendingDepositCount,
     pendingWithdrawals: pendingWithdrawalCount,
-    totalDeposits: aggregateTotals.totalDeposits,
-    totalWithdrawals: aggregateTotals.totalWithdrawals,
+    totalDeposits: toNumber(aggregateTotalsRaw.totalDeposits),
+    totalWithdrawals: toNumber(aggregateTotalsRaw.totalWithdrawals),
   }
 
   const adminUser: AdminSessionUser = {
