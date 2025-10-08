@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable } from "@/components/admin/transaction-table"
 import { UserTable } from "@/components/admin/user-table"
 import { GiftBoxAdminPanel } from "@/components/admin/gift-box-panel"
+import { GiftBoxPanelBoundary } from "@/components/admin/gift-box-panel-boundary"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -338,7 +339,9 @@ export function AdminDashboard({
               />
             </TabsContent>
             <TabsContent value="gift-box">
-              <GiftBoxAdminPanel />
+              <GiftBoxPanelBoundary>
+                <GiftBoxAdminPanel />
+              </GiftBoxPanelBoundary>
             </TabsContent>
           </Tabs>
 
