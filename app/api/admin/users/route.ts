@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const limit = Math.min(200, Math.max(1, Number.parseInt(searchParams.get("limit") || "100")))
-    const cursor = searchParams.get("cursor")
+    const cursorParam = searchParams.get("cursor")?.trim()
     const status = searchParams.get("status") || undefined
     const from = searchParams.get("from")
     const to = searchParams.get("to")
@@ -31,8 +31,11 @@ export async function GET(request: NextRequest) {
 
     const filter: Record<string, unknown> = {}
 
-    if (cursor) {
-      filter._id = { $lt: new mongoose.Types.ObjectId(cursor) }
+    if (cursorParam) {
+      if (!mongoose.Types.ObjectId.isValid(cursorParam)) {
+        return NextResponse.json({ error: "Invalid cursor" }, { status: 400 })
+      }
+      filter._id = { $lt: new mongoose.Types.ObjectId(cursorParam) }
     }
     if (status && status !== "all") {
       filter.status = status
@@ -61,7 +64,16 @@ export async function GET(request: NextRequest) {
     const trimmedUsers = hasMore ? users.slice(0, -1) : users
     const nextCursor = hasMore ? String(trimmedUsers[trimmedUsers.length - 1]._id) : null
 
-    const userIds = trimmedUsers.map((user) => new mongoose.Types.ObjectId(user._id))
+    const userIds = trimmedUsers
+      .map((user) => {
+        try {
+          return new mongoose.Types.ObjectId(user._id)
+        } catch (error) {
+          console.warn("Skipping user with invalid id", user._id, error)
+          return null
+        }
+      })
+      .filter((id): id is mongoose.Types.ObjectId => id !== null)
 
     const [balances, levelHistoryDocs] = await Promise.all([
       userIds.length
@@ -77,11 +89,19 @@ export async function GET(request: NextRequest) {
         : [],
     ])
 
-    const balanceByUser = new Map(balances.map((balance) => [balance.userId.toString(), balance]))
+    const balanceByUser = new Map(
+      balances
+        .map((balance) => {
+          const userId = balance.userId ? balance.userId.toString() : null
+          return userId ? ([userId, balance] as const) : null
+        })
+        .filter((entry): entry is readonly [string, (typeof balances)[number]] => entry !== null),
+    )
     const historyByUser = new Map<string, { level: number; achievedAt: string }[]>()
 
     for (const history of levelHistoryDocs) {
-      const key = history.userId.toString()
+      const key = history.userId ? history.userId.toString() : null
+      if (!key) continue
       const existing = historyByUser.get(key) ?? []
       existing.push({ level: history.level, achievedAt: history.achievedAt.toISOString() })
       historyByUser.set(key, existing)
