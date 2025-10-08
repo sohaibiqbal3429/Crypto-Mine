@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable } from "@/components/admin/transaction-table"
 import { UserTable } from "@/components/admin/user-table"
-import { BlindBoxAdminPanel } from "@/components/admin/blind-box-panel"
+import { GiftBoxAdminPanel } from "@/components/admin/gift-box-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -212,7 +212,7 @@ export function AdminDashboard({
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
-              <TabsTrigger value="blind-box">Blind Box</TabsTrigger>
+              <TabsTrigger value="gift-box">Gift Box Giveaway</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -337,8 +337,8 @@ export function AdminDashboard({
                 onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
               />
             </TabsContent>
-            <TabsContent value="blind-box">
-              <BlindBoxAdminPanel />
+            <TabsContent value="gift-box">
+              <GiftBoxAdminPanel />
             </TabsContent>
           </Tabs>
 

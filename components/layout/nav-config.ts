@@ -23,7 +23,7 @@ export type AppNavItem = {
 
 export const PRIMARY_NAV_ITEMS: AppNavItem[] = [
   { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Blind Box", href: "/blind-box", icon: Gift },
+  { name: "Gift Box Giveaway", href: "/gift-box", icon: Gift },
   { name: "Mining", href: "/mining", icon: Pickaxe },
   { name: "Wallet", href: "/wallet", icon: Wallet },
   { name: "Task", href: "/tasks", icon: BarChart3 },
@@ -45,7 +45,7 @@ export const ADMIN_NAV_ITEM: AppNavItem = {
 const PAGE_TITLE_RULES: Array<{ pattern: RegExp; title: string }> = [
   { pattern: /^\/$/, title: "Welcome" },
   { pattern: /^\/dashboard(?:\/.+)?$/, title: "Dashboard" },
-  { pattern: /^\/blind-box(?:\/.+)?$/, title: "Blind Box" },
+  { pattern: /^\/gift-box(?:\/.+)?$/, title: "Gift Box Giveaway" },
   { pattern: /^\/mining(?:\/.+)?$/, title: "Mining" },
   { pattern: /^\/wallet(?:\/.+)?$/, title: "Wallet" },
   { pattern: /^\/e-wallet(?:\/.+)?$/, title: "E-Wallet" },

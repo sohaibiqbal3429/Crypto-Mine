@@ -25,10 +25,10 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
-  blindBoxRounds: { winnerUserId: { collection: "users" } },
-  blindBoxParticipants: {
+  giftBoxCycles: { winnerUserId: { collection: "users" } },
+  giftBoxParticipants: {
     userId: { collection: "users" },
-    roundId: { collection: "blindBoxRounds" },
+    cycleId: { collection: "giftBoxCycles" },
   },
 }
 
@@ -271,15 +271,15 @@ class InMemoryDatabase {
     this.collections.set("miningSessions", new InMemoryCollection("miningSessions", createMiningSessions(users)))
     this.collections.set("settings", new InMemoryCollection("settings", createSettings()))
     this.collections.set("commissionRules", new InMemoryCollection("commissionRules", createCommissionRules()))
-    const blindBoxSeed = createBlindBoxSeed(users)
-    this.collections.set("blindBoxRounds", new InMemoryCollection("blindBoxRounds", blindBoxSeed.rounds))
+    const giftBoxSeed = createGiftBoxSeed(users)
+    this.collections.set("giftBoxCycles", new InMemoryCollection("giftBoxCycles", giftBoxSeed.cycles))
     this.collections.set(
-      "blindBoxParticipants",
-      new InMemoryCollection("blindBoxParticipants", blindBoxSeed.participants),
+      "giftBoxParticipants",
+      new InMemoryCollection("giftBoxParticipants", giftBoxSeed.participants),
     )
     this.collections.set(
       "transactions",
-      new InMemoryCollection("transactions", createTransactions(users, blindBoxSeed)),
+      new InMemoryCollection("transactions", createTransactions(users, giftBoxSeed)),
     )
     this.collections.set("notifications", new InMemoryCollection("notifications", createNotifications(users)))
     this.collections.set("walletAddresses", new InMemoryCollection("walletAddresses", createWalletAddresses(users)))
@@ -319,8 +319,8 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "MiningSession", collection: db.getCollection("miningSessions") },
     { name: "Settings", collection: db.getCollection("settings") },
     { name: "CommissionRule", collection: db.getCollection("commissionRules") },
-    { name: "BlindBoxRound", collection: db.getCollection("blindBoxRounds") },
-    { name: "BlindBoxParticipant", collection: db.getCollection("blindBoxParticipants") },
+    { name: "GiftBoxCycle", collection: db.getCollection("giftBoxCycles") },
+    { name: "GiftBoxParticipant", collection: db.getCollection("giftBoxParticipants") },
     { name: "Transaction", collection: db.getCollection("transactions") },
     { name: "Notification", collection: db.getCollection("notifications") },
     { name: "WalletAddress", collection: db.getCollection("walletAddresses") },
@@ -949,8 +949,15 @@ function createSettings(): InMemoryDocument[] {
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80, capitalLockDays: 30 },
       joiningBonus: { threshold: 100, pct: 5 },
       commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
-      luckyDraw: { entryFee: 10, prize: 30, cycleHours: 72, autoDrawEnabled: true },
-      blindBox: { depositAmount: 10, rewardAmount: 30, cycleHours: 72, autoDrawEnabled: true },
+      giftBox: {
+        ticketPrice: 10,
+        payoutPercentage: 90,
+        cycleHours: 72,
+        winnersCount: 1,
+        autoDrawEnabled: true,
+        refundPercentage: 0,
+        depositAddress: "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw",
+      },
       createdAt: now,
       updatedAt: now,
     },
@@ -1197,26 +1204,26 @@ function createCommissionRules(): InMemoryDocument[] {
   ]
 }
 
-type BlindBoxSeed = {
-  rounds: InMemoryDocument[]
+type GiftBoxSeed = {
+  cycles: InMemoryDocument[]
   participants: InMemoryDocument[]
   entryTransactions: InMemoryDocument[]
-  rewardTransactions: InMemoryDocument[]
+  payoutTransactions: InMemoryDocument[]
 }
 
 function hashUserId(value: string): string {
   return createHash("sha256").update(value).digest("hex")
 }
 
-function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
+function createGiftBoxSeed(users: InMemoryDocument[]): GiftBoxSeed {
   const now = new Date()
   const cycleHours = 72
   const cycleMs = cycleHours * 60 * 60 * 1000
-  const depositAmount = 10
-  const rewardAmount = 30
+  const ticketPrice = 10
+  const payoutPercentage = 90
 
-  const currentRoundId = generateObjectId()
-  const previousRoundId = generateObjectId()
+  const currentCycleId = generateObjectId()
+  const previousCycleId = generateObjectId()
 
   const currentStartTime = new Date(now.getTime() - 12 * 60 * 60 * 1000)
   const currentEndTime = new Date(currentStartTime.getTime() + cycleMs)
@@ -1234,7 +1241,7 @@ function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
     participants.push({
       _id: generateObjectId(),
       userId: user._id,
-      roundId: previousRoundId,
+      cycleId: previousCycleId,
       hashedUserId: hashUserId(String(user._id)),
       status: "active",
       depositId: null,
@@ -1244,10 +1251,10 @@ function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
     entryTransactions.push({
       _id: generateObjectId(),
       userId: user._id,
-      type: "blindBoxEntry",
-      amount: depositAmount,
+      type: "giftBoxEntry",
+      amount: ticketPrice,
       status: "approved",
-      meta: { roundId: previousRoundId },
+      meta: { cycleId: previousCycleId },
       createdAt: joinedAt,
       updatedAt: joinedAt,
     })
@@ -1259,7 +1266,7 @@ function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
     participants.push({
       _id: generateObjectId(),
       userId: user._id,
-      roundId: currentRoundId,
+      cycleId: currentCycleId,
       hashedUserId: hashUserId(String(user._id)),
       status: "active",
       depositId: null,
@@ -1269,40 +1276,48 @@ function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
     entryTransactions.push({
       _id: generateObjectId(),
       userId: user._id,
-      type: "blindBoxEntry",
-      amount: depositAmount,
+      type: "giftBoxEntry",
+      amount: ticketPrice,
       status: "approved",
-      meta: { roundId: currentRoundId },
+      meta: { cycleId: currentCycleId },
       createdAt: joinedAt,
       updatedAt: joinedAt,
     })
   })
 
-  const rewardTransactions: InMemoryDocument[] = []
+  const payoutTransactions: InMemoryDocument[] = []
   let payoutTxId: string | null = null
 
   if (previousWinner) {
     payoutTxId = generateObjectId()
-    rewardTransactions.push({
+    payoutTransactions.push({
       _id: payoutTxId,
       userId: previousWinner._id,
-      type: "blindBoxReward",
-      amount: rewardAmount,
+      type: "giftBoxPayout",
+      amount: Math.round((ticketPrice * previousParticipants.length * payoutPercentage) / 100),
       status: "approved",
-      meta: { roundId: previousRoundId, note: "Blind box demo payout" },
+      meta: { cycleId: previousCycleId, note: "Gift box demo payout" },
       createdAt: previousEndTime,
       updatedAt: previousEndTime,
     })
   }
 
-  const rounds: InMemoryDocument[] = [
+  const fairnessProof = {
+    serverSeed: randomBytes(32).toString("hex"),
+    clientSeed: randomBytes(16).toString("hex"),
+    nonce: previousParticipants.length,
+    hash: randomBytes(32).toString("hex"),
+    winnerIndex: 0,
+  }
+
+  const cycles: InMemoryDocument[] = [
     {
-      _id: previousRoundId,
+      _id: previousCycleId,
       status: "completed",
       startTime: previousStartTime,
       endTime: previousEndTime,
-      depositAmount,
-      rewardAmount,
+      ticketPrice,
+      payoutPercentage,
       totalParticipants: previousParticipants.length,
       winnerUserId: previousWinner?._id ?? null,
       payoutTxId,
@@ -1315,29 +1330,31 @@ function createBlindBoxSeed(users: InMemoryDocument[]): BlindBoxSeed {
             creditedAt: previousEndTime,
           }
         : null,
+      fairnessProof,
       createdAt: previousStartTime,
       updatedAt: previousEndTime,
     },
     {
-      _id: currentRoundId,
+      _id: currentCycleId,
       status: "open",
       startTime: currentStartTime,
       endTime: currentEndTime,
-      depositAmount,
-      rewardAmount,
+      ticketPrice,
+      payoutPercentage,
       totalParticipants: currentParticipants.length,
       winnerUserId: null,
       payoutTxId: null,
       winnerSnapshot: null,
+      fairnessProof: null,
       createdAt: currentStartTime,
       updatedAt: now,
     },
   ]
 
-  return { rounds, participants, entryTransactions, rewardTransactions }
+  return { cycles, participants, entryTransactions, payoutTransactions }
 }
 
-function createTransactions(users: InMemoryDocument[], blindBoxSeed?: BlindBoxSeed): InMemoryDocument[] {
+function createTransactions(users: InMemoryDocument[], giftBoxSeed?: GiftBoxSeed): InMemoryDocument[] {
   const now = new Date()
   const transactions: InMemoryDocument[] = []
 
@@ -1388,12 +1405,12 @@ function createTransactions(users: InMemoryDocument[], blindBoxSeed?: BlindBoxSe
     )
   })
 
-  if (blindBoxSeed?.entryTransactions?.length) {
-    transactions.push(...blindBoxSeed.entryTransactions)
+  if (giftBoxSeed?.entryTransactions?.length) {
+    transactions.push(...giftBoxSeed.entryTransactions)
   }
 
-  if (blindBoxSeed?.rewardTransactions?.length) {
-    transactions.push(...blindBoxSeed.rewardTransactions)
+  if (giftBoxSeed?.payoutTransactions?.length) {
+    transactions.push(...giftBoxSeed.payoutTransactions)
   }
 
   return transactions
