@@ -12,6 +12,7 @@ export interface IBlindBoxDeposit extends Document {
   txId: string
   status: BlindBoxDepositStatus
   type: "blindbox"
+  roundId?: mongoose.Types.ObjectId | null
   createdAt: Date
   updatedAt: Date
   reviewedAt?: Date | null
@@ -28,6 +29,7 @@ const BlindBoxDepositSchema = new Schema<IBlindBoxDeposit>(
     txId: { type: String, required: true, unique: true },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     type: { type: String, enum: ["blindbox"], default: "blindbox" },
+    roundId: { type: Schema.Types.ObjectId, ref: "BlindBoxRound", default: null },
     reviewedAt: { type: Date, default: null },
     reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
     rejectionReason: { type: String, default: null },
@@ -37,5 +39,6 @@ const BlindBoxDepositSchema = new Schema<IBlindBoxDeposit>(
 
 BlindBoxDepositSchema.index({ status: 1, createdAt: -1 })
 BlindBoxDepositSchema.index({ userId: 1, createdAt: -1 })
+BlindBoxDepositSchema.index({ roundId: 1, status: 1 })
 
 export default createModelProxy<IBlindBoxDeposit>("BlindBoxDeposit", BlindBoxDepositSchema)

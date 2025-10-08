@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const BLIND_BOX_DEPOSIT_ADDRESS = "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw"
 
@@ -101,6 +104,9 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
   const [countdown, setCountdown] = useState(formatCountdown(initialSummary.nextDrawAt))
   const [joining, setJoining] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [depositTxId, setDepositTxId] = useState("")
+  const [depositNetwork, setDepositNetwork] = useState("TRC20")
+  const alreadyJoined = summary.userStatus.isParticipant
 
   const participantLabel = useMemo(
     () => new Intl.NumberFormat("en-US").format(summary.participants),
@@ -152,9 +158,32 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
   }, [toast])
 
   const handleJoin = useCallback(async () => {
+    if (alreadyJoined) {
+      toast({ title: "Already joined", description: "You're part of the current round." })
+      return
+    }
+
+    const trimmedTx = depositTxId.trim()
+    if (trimmedTx.length < 10) {
+      toast({
+        title: "Deposit required",
+        description: "Paste the blockchain transaction hash from your $10 deposit.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setJoining(true)
     try {
-      const response = await fetch("/api/blindbox/join", { method: "POST" })
+      const response = await fetch("/api/blindbox/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txId: trimmedTx,
+          network: depositNetwork,
+          address: BLIND_BOX_DEPOSIT_ADDRESS,
+        }),
+      })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(data.error || "Unable to join the blind box")
@@ -165,6 +194,7 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
         description: "You're now part of the current Blind Box round.",
       })
 
+      setDepositTxId("")
       await refreshSummary()
     } catch (error: any) {
       toast({
@@ -175,14 +205,14 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
     } finally {
       setJoining(false)
     }
-  }, [refreshSummary, toast])
+  }, [alreadyJoined, depositNetwork, depositTxId, refreshSummary, toast])
 
   const handleCopyAddress = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(BLIND_BOX_DEPOSIT_ADDRESS)
       toast({
         title: "Address copied",
-        description: "Send exactly $10 USDT (TRC20) to join the next draw.",
+        description: "Send exactly $10 USDT and keep the transaction hash ready for submission.",
       })
     } catch (error) {
       toast({
@@ -193,7 +223,6 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
     }
   }, [toast])
 
-  const alreadyJoined = summary.userStatus.isParticipant
   const entryFee = summary.config.depositAmount
   const prizePool = summary.config.rewardAmount
   const nextDraw = summary.round ? summary.round.endTime : summary.nextDrawAt
@@ -203,6 +232,7 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
   const previousWinnerTime = summary.previousRound?.winnerSnapshot?.creditedAt
     ? formatDate(summary.previousRound.winnerSnapshot.creditedAt)
     : null
+  const canSubmitDeposit = depositTxId.trim().length >= 10
 
   return (
     <div className="space-y-8">
@@ -217,9 +247,9 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
                 <Gift className="h-10 w-10" /> Join &amp; Win Every {summary.config.cycleHours} Hours
               </h1>
               <p className="max-w-2xl text-base text-white/85">
-                Deposit {formatCurrency(entryFee)} USDT (TRC20) to the address below and confirm your entry to compete for
-                {formatCurrency(prizePool)} credited directly to your balance. Draws happen on a fixed schedule so you always know
-                when the next winner will be announced.
+                Deposit {formatCurrency(entryFee)} USDT to the wallet below and paste the blockchain transaction hash to lock
+                in your spot for {formatCurrency(prizePool)}. Draws run on a fixed schedule so you always know when the next
+                winner will be announced.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <Badge className="bg-white/20 text-white">
@@ -241,10 +271,16 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
               ) : null}
               <Button
                 onClick={() => void handleJoin()}
-                disabled={alreadyJoined || joining}
-                className="bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 shadow-lg"
+                disabled={alreadyJoined || joining || !canSubmitDeposit}
+                className="bg-white text-rose-600 hover:bg-rose-50 hover:text-rose-700 shadow-lg disabled:opacity-70"
               >
-                {joining ? "Joining..." : alreadyJoined ? "Joined" : "Confirm Entry"}
+                {joining
+                  ? "Processing..."
+                  : alreadyJoined
+                    ? "Joined"
+                    : canSubmitDeposit
+                      ? "Confirm Entry"
+                      : "Paste Deposit Hash"}
               </Button>
               <Button
                 variant="secondary"
@@ -261,7 +297,7 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
             <div className="rounded-2xl bg-white/15 p-4">
               <p className="text-xs uppercase tracking-[0.3em] text-white/70">Entry Fee</p>
               <p className="mt-2 text-2xl font-bold">{formatCurrency(entryFee)}</p>
-              <p className="text-sm text-white/80">Collected once your wallet deposit is confirmed.</p>
+              <p className="text-sm text-white/80">Provide the blockchain hash of your $10 deposit to participate.</p>
             </div>
             <div className="rounded-2xl bg-white/15 p-4">
               <p className="text-xs uppercase tracking-[0.3em] text-white/70">Prize Pool</p>
@@ -287,9 +323,41 @@ export function BlindBoxDashboard({ initialSummary, initialHistory }: BlindBoxDa
                 </Button>
               </div>
               <p className="mt-2 text-xs text-white/75">
-                Send exactly {formatCurrency(entryFee)} in USDT (TRC20). Once your wallet reflects the deposit you can confirm
-                your entry instantly.
+                Send exactly {formatCurrency(entryFee)} in USDT. Paste the transaction hash below to confirm your blind box
+                entry.
               </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                    Network
+                  </Label>
+                  <Select value={depositNetwork} onValueChange={setDepositNetwork}>
+                    <SelectTrigger className="h-11 rounded-xl border-white/30 bg-white/10 text-white">
+                      <SelectValue placeholder="Select network" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="TRC20">TRC20 (Tron)</SelectItem>
+                      <SelectItem value="BEP20">BEP20 (BNB Smart Chain)</SelectItem>
+                      <SelectItem value="ERC20">ERC20 (Ethereum)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="blindbox-tx" className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">
+                    Deposit transaction hash
+                  </Label>
+                  <Input
+                    id="blindbox-tx"
+                    value={depositTxId}
+                    onChange={(event) => setDepositTxId(event.target.value)}
+                    placeholder="Paste your $10 USDT transaction hash"
+                    className="h-11 rounded-xl border-white/30 bg-white/10 text-white placeholder:text-white/50"
+                  />
+                  <p className="text-[11px] text-white/65">
+                    Each round requires a fresh $10 deposit. Admins verify hashes if anything looks suspicious.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
