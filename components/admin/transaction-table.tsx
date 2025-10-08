@@ -1,6 +1,6 @@
 "use client"
 
-import { type CSSProperties, useCallback, useEffect, useMemo } from "react"
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react"
 import debounce from "lodash.debounce"
 import { FixedSizeList as List, type ListOnItemsRenderedProps } from "react-window"
 import { Badge } from "@/components/ui/badge"
@@ -10,10 +10,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, RefreshCw, Download } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Loader2, RefreshCw, Download, Eye, Check, X } from "lucide-react"
 import type { AdminTransactionRecord } from "@/lib/types/admin"
 
-const ROW_HEIGHT = 96
+const ROW_HEIGHT = 112
 const VIRTUAL_LIST_HEIGHT = 540
 
 export interface TransactionFilters {
@@ -55,6 +64,14 @@ export function TransactionTable({
     [filters, onFiltersChange],
   )
 
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState<AdminTransactionRecord | null>(null)
+  const [txHash, setTxHash] = useState("")
+  const [rejectionReason, setRejectionReason] = useState("")
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null)
+
   useEffect(() => {
     return () => {
       debouncedSearch.cancel()
@@ -70,6 +87,167 @@ export function TransactionTable({
     [hasMore, loading, items.length, onLoadMore],
   )
 
+  const openDetails = useCallback((transaction: AdminTransactionRecord) => {
+    setSelectedTransaction(transaction)
+    setTxHash(typeof transaction.meta?.transactionHash === "string" ? transaction.meta.transactionHash : "")
+    setRejectionReason(typeof transaction.meta?.rejectionReason === "string" ? transaction.meta.rejectionReason : "")
+    setActionError(null)
+    setPendingAction(null)
+    setActionLoading(false)
+    setDetailOpen(true)
+  }, [])
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      setDetailOpen(open)
+      if (!open) {
+        setSelectedTransaction(null)
+        setTxHash("")
+        setRejectionReason("")
+        setActionError(null)
+        setPendingAction(null)
+        setActionLoading(false)
+      }
+    },
+    [],
+  )
+
+  const renderMetaValue = useCallback((value: unknown) => {
+    if (value === null || value === undefined) {
+      return <span className="text-muted-foreground">—</span>
+    }
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      return <span className="break-words">{String(value)}</span>
+    }
+    if (Array.isArray(value)) {
+      return (
+        <div className="space-y-2">
+          {value.map((item, index) => (
+            <pre key={index} className="overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">
+              {JSON.stringify(item, null, 2)}
+            </pre>
+          ))}
+        </div>
+      )
+    }
+    if (typeof value === "object") {
+      const record = value as Record<string, unknown>
+      return (
+        <div className="space-y-2">
+          {typeof record.url === "string" ? (
+            <a
+              href={record.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-primary underline"
+            >
+              View attachment
+            </a>
+          ) : null}
+          <pre className="overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">
+            {JSON.stringify(record, null, 2)}
+          </pre>
+        </div>
+      )
+    }
+    return <span className="break-words">{String(value)}</span>
+  }, [])
+
+  const handleApprove = useCallback(async () => {
+    if (!selectedTransaction) return
+    if (selectedTransaction.status !== "pending") {
+      setActionError("Only pending transactions can be approved.")
+      return
+    }
+    if (!["deposit", "withdraw"].includes(selectedTransaction.type)) {
+      setActionError("This transaction type cannot be approved manually.")
+      return
+    }
+
+    setPendingAction("approve")
+    setActionLoading(true)
+    setActionError(null)
+
+    try {
+      const endpoint =
+        selectedTransaction.type === "deposit"
+          ? "/api/admin/approve-deposit"
+          : "/api/admin/approve-withdraw"
+      const payload: Record<string, unknown> = { transactionId: selectedTransaction._id }
+      if (selectedTransaction.type === "withdraw" && txHash.trim()) {
+        payload.txHash = txHash.trim()
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to approve transaction")
+      }
+
+      await Promise.resolve(onRefresh())
+      handleDialogOpenChange(false)
+    } catch (exception) {
+      setActionError(exception instanceof Error ? exception.message : "Unable to approve transaction")
+    } finally {
+      setPendingAction(null)
+      setActionLoading(false)
+    }
+  }, [handleDialogOpenChange, onRefresh, selectedTransaction, txHash])
+
+  const handleReject = useCallback(async () => {
+    if (!selectedTransaction) return
+    if (selectedTransaction.status !== "pending") {
+      setActionError("Only pending transactions can be rejected.")
+      return
+    }
+
+    setPendingAction("reject")
+    setActionLoading(true)
+    setActionError(null)
+
+    try {
+      const response = await fetch("/api/admin/reject-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: selectedTransaction._id,
+          reason: rejectionReason.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to reject transaction")
+      }
+
+      await Promise.resolve(onRefresh())
+      handleDialogOpenChange(false)
+    } catch (exception) {
+      setActionError(exception instanceof Error ? exception.message : "Unable to reject transaction")
+    } finally {
+      setPendingAction(null)
+      setActionLoading(false)
+    }
+  }, [handleDialogOpenChange, onRefresh, rejectionReason, selectedTransaction])
+
+  const selectedIsActionable =
+    selectedTransaction?.status === "pending" &&
+    (selectedTransaction?.type === "deposit" || selectedTransaction?.type === "withdraw")
+
+  const requiresTxHash = selectedTransaction?.type === "withdraw"
+
+  const additionalMetaEntries = useMemo(() => {
+    if (!selectedTransaction?.meta || typeof selectedTransaction.meta !== "object") {
+      return [] as Array<[string, unknown]>
+    }
+    return Object.entries(selectedTransaction.meta).filter(([key]) => key !== "transactionHash")
+  }, [selectedTransaction])
+
   const renderRow = useCallback(
     ({ index, style }: { index: number; style: CSSProperties }) => {
       const transaction = items[index]
@@ -77,11 +255,15 @@ export function TransactionTable({
         return null
       }
 
+      const requiresAction =
+        transaction.status === "pending" &&
+        (transaction.type === "deposit" || transaction.type === "withdraw")
+
       return (
         <div
           key={transaction._id}
           style={style}
-          className="grid grid-cols-1 gap-2 border-b px-4 py-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr] md:items-center md:gap-4"
+          className="grid grid-cols-1 gap-2 border-b px-4 py-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-center md:gap-4"
         >
           <div className="space-y-1 md:col-span-2">
             <div className="font-medium">{transaction.userId?.name || "Unknown"}</div>
@@ -111,10 +293,20 @@ export function TransactionTable({
           <div className="text-xs text-muted-foreground">
             {new Date(transaction.createdAt).toLocaleString()}
           </div>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            {requiresAction ? (
+              <Badge variant="outline" className="uppercase">
+                Action needed
+              </Badge>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={() => openDetails(transaction)} className="gap-1">
+              <Eye className="h-4 w-4" /> Review
+            </Button>
+          </div>
         </div>
       )
     },
-    [items],
+    [items, openDetails],
   )
 
   return (
@@ -205,12 +397,13 @@ export function TransactionTable({
         </div>
 
         <div className="overflow-hidden rounded-md border">
-          <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
             <span className="col-span-2">User</span>
             <span>Type</span>
             <span>Amount</span>
             <span>Status</span>
             <span>Date</span>
+            <span className="text-right">Actions</span>
           </div>
           <div style={{ height: VIRTUAL_LIST_HEIGHT }}>
             <List
@@ -233,6 +426,162 @@ export function TransactionTable({
           </div>
         </div>
       </CardContent>
+      <Dialog open={detailOpen} onOpenChange={handleDialogOpenChange}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto space-y-6">
+          <DialogHeader>
+            <DialogTitle>Transaction details</DialogTitle>
+            <DialogDescription>Review the request and approve or reject it from this panel.</DialogDescription>
+          </DialogHeader>
+
+          {selectedTransaction ? (
+            <div className="space-y-6 text-sm">
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">User</h4>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Name</div>
+                    <div className="font-medium">{selectedTransaction.userId?.name || "Unknown"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Email</div>
+                    <div className="break-all text-muted-foreground">{selectedTransaction.userId?.email || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">User ID</div>
+                    <div className="font-mono text-xs">{selectedTransaction.userId?._id || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Referral code</div>
+                    <div className="text-muted-foreground">{selectedTransaction.userId?.referralCode || "—"}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Transaction</h4>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Type</div>
+                    <div className="capitalize">{selectedTransaction.type}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Status</div>
+                    <Badge
+                      variant={
+                        selectedTransaction.status === "approved"
+                          ? "default"
+                          : selectedTransaction.status === "pending"
+                            ? "secondary"
+                            : "destructive"
+                      }
+                      className="capitalize"
+                    >
+                      {selectedTransaction.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Amount</div>
+                    <div className="font-mono text-base font-semibold">${selectedTransaction.amount.toFixed(2)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase text-muted-foreground">Created at</div>
+                    <div>{new Date(selectedTransaction.createdAt).toLocaleString()}</div>
+                  </div>
+                  {selectedTransaction.meta?.transactionHash ? (
+                    <div className="md:col-span-2">
+                      <div className="text-xs uppercase text-muted-foreground">Transaction hash</div>
+                      <div className="break-all font-mono text-xs">
+                        {String(selectedTransaction.meta.transactionHash)}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase text-muted-foreground">Additional details</h4>
+                {additionalMetaEntries.length ? (
+                  <div className="space-y-3">
+                    {additionalMetaEntries.map(([key, value]) => (
+                      <div key={key} className="space-y-1 rounded border p-3">
+                        <div className="text-xs font-medium uppercase text-muted-foreground">{key}</div>
+                        <div className="text-sm leading-relaxed">{renderMetaValue(value)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No additional metadata available.</p>
+                )}
+              </div>
+
+              {selectedIsActionable ? (
+                <div className="space-y-4">
+                  {requiresTxHash ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="admin-transaction-hash">Transaction hash</Label>
+                      <Input
+                        id="admin-transaction-hash"
+                        value={txHash}
+                        onChange={(event) => setTxHash(event.target.value)}
+                        placeholder="Optional blockchain hash"
+                      />
+                    </div>
+                  ) : null}
+                  <div className="space-y-2">
+                    <Label htmlFor="admin-transaction-reason">Rejection reason</Label>
+                    <Textarea
+                      id="admin-transaction-reason"
+                      value={rejectionReason}
+                      onChange={(event) => setRejectionReason(event.target.value)}
+                      placeholder="Optional explanation shared with the user"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Select a transaction to view its details.</p>
+          )}
+
+          {actionError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{actionError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="ghost" onClick={() => handleDialogOpenChange(false)} disabled={actionLoading}>
+              Close
+            </Button>
+            {selectedIsActionable ? (
+              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleReject}
+                  disabled={actionLoading}
+                  className="gap-1"
+                >
+                  {pendingAction === "reject" && actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4" />
+                  )}
+                  Reject
+                </Button>
+                <Button type="button" onClick={handleApprove} disabled={actionLoading} className="gap-1">
+                  {pendingAction === "approve" && actionLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  Approve
+                </Button>
+              </div>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

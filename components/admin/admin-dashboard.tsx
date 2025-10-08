@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable, type TransactionFilters } from "@/components/admin/transaction-table"
 import { UserTable, type UserFilters } from "@/components/admin/user-table"
@@ -41,6 +41,11 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const [userLoading, setUserLoading] = useState(false)
   const [userError, setUserError] = useState<string | null>(initialError)
 
+  const transactionCursorRef = useRef<string | null>(null)
+  const transactionLoadingRef = useRef(false)
+  const userCursorRef = useRef<string | null>(null)
+  const userLoadingRef = useRef(false)
+
   const fetchStats = useCallback(async () => {
     const response = await fetch("/api/admin/stats")
     if (!response.ok) {
@@ -54,22 +59,29 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
 
   const fetchTransactions = useCallback(
     async (options: { reset?: boolean } = {}) => {
-      if (transactionLoading) return
+      if (transactionLoadingRef.current) return
       const isReset = options.reset ?? false
+      transactionLoadingRef.current = true
       setTransactionLoading(true)
       setTransactionError(null)
 
       const params = new URLSearchParams()
       params.set("limit", String(TRANSACTION_LIMIT))
-      const filterEntries = Object.entries(transactionFilters)
-      for (const [key, value] of filterEntries) {
+      for (const [key, value] of Object.entries(transactionFilters)) {
         if (value) params.set(key, value)
       }
-      if (!isReset && transactionCursor) {
-        params.set("cursor", transactionCursor)
+
+      const cursorToUse = isReset ? null : transactionCursorRef.current
+      if (cursorToUse) {
+        params.set("cursor", cursorToUse)
       }
 
       try {
+        if (isReset) {
+          transactionCursorRef.current = null
+          setTransactionCursor(null)
+          setTransactionHasMore(false)
+        }
         const response = await fetch(`/api/admin/transactions?${params.toString()}`)
         if (!response.ok) {
           const data = await response.json().catch(() => ({}))
@@ -77,6 +89,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         }
         const payload = await response.json()
         const nextCursor = payload.nextCursor ?? null
+        transactionCursorRef.current = nextCursor
         setTransactionCursor(nextCursor)
         setTransactionHasMore(Boolean(nextCursor))
         setTransactions((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
@@ -84,30 +97,38 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         console.error(error)
         setTransactionError(error instanceof Error ? error.message : "Unable to load transactions")
       } finally {
+        transactionLoadingRef.current = false
         setTransactionLoading(false)
       }
     },
-    [transactionCursor, transactionFilters, transactionLoading],
+    [transactionFilters],
   )
 
   const fetchUsers = useCallback(
     async (options: { reset?: boolean } = {}) => {
-      if (userLoading) return
+      if (userLoadingRef.current) return
       const isReset = options.reset ?? false
+      userLoadingRef.current = true
       setUserLoading(true)
       setUserError(null)
 
       const params = new URLSearchParams()
       params.set("limit", String(USER_LIMIT))
-      const filterEntries = Object.entries(userFilters)
-      for (const [key, value] of filterEntries) {
+      for (const [key, value] of Object.entries(userFilters)) {
         if (value) params.set(key, value)
       }
-      if (!isReset && userCursor) {
-        params.set("cursor", userCursor)
+
+      const cursorToUse = isReset ? null : userCursorRef.current
+      if (cursorToUse) {
+        params.set("cursor", cursorToUse)
       }
 
       try {
+        if (isReset) {
+          userCursorRef.current = null
+          setUserCursor(null)
+          setUserHasMore(false)
+        }
         const response = await fetch(`/api/admin/users?${params.toString()}`)
         if (!response.ok) {
           const data = await response.json().catch(() => ({}))
@@ -115,6 +136,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         }
         const payload = await response.json()
         const nextCursor = payload.nextCursor ?? null
+        userCursorRef.current = nextCursor
         setUserCursor(nextCursor)
         setUserHasMore(Boolean(nextCursor))
         setUsers((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
@@ -122,19 +144,20 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         console.error(error)
         setUserError(error instanceof Error ? error.message : "Unable to load users")
       } finally {
+        userLoadingRef.current = false
         setUserLoading(false)
       }
     },
-    [userCursor, userFilters, userLoading],
+    [userFilters],
   )
 
   useEffect(() => {
-    fetchTransactions({ reset: true })
-  }, [fetchTransactions, transactionFilters])
+    fetchTransactions({ reset: true }).catch(() => null)
+  }, [fetchTransactions])
 
   useEffect(() => {
-    fetchUsers({ reset: true })
-  }, [fetchUsers, userFilters])
+    fetchUsers({ reset: true }).catch(() => null)
+  }, [fetchUsers])
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -148,6 +171,8 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   }, [])
 
   const refreshAll = useCallback(async () => {
+    transactionCursorRef.current = null
+    userCursorRef.current = null
     setTransactionCursor(null)
     setUserCursor(null)
     await Promise.all([fetchTransactions({ reset: true }), fetchUsers({ reset: true }), fetchStats()])
@@ -158,11 +183,13 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   }, [fetchStats])
 
   const handleTransactionFiltersChange = useCallback((next: TransactionFilters) => {
+    transactionCursorRef.current = null
     setTransactionCursor(null)
     setTransactionFilters(next)
   }, [])
 
   const handleUserFiltersChange = useCallback((next: UserFilters) => {
+    userCursorRef.current = null
     setUserCursor(null)
     setUserFilters(next)
   }, [])
