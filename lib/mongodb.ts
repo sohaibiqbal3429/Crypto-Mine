@@ -1,5 +1,6 @@
 import mongoose from "mongoose"
 
+import { connectMongo } from "./db"
 import { initializeInMemoryDatabase } from "./in-memory"
 
 type MongooseCache = {
@@ -51,15 +52,9 @@ export default async function dbConnect() {
 
   if (cached.conn) return cached.conn
 
-  if (!cached.promise) {
-    cached.promise = mongoose
-      .connect(uri, {
-        bufferCommands: false,
-      })
-      .then((connection) => connection)
-  }
   try {
-    cached.conn = await cached.promise
+    await connectMongo()
+    cached.conn = mongoose.connection
     return cached.conn
   } catch (error) {
     cached.promise = null

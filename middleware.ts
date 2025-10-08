@@ -2,7 +2,21 @@ import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { getUserFromRequest } from "@/lib/auth"
 
+const WINDOW = 60_000
+const LIMIT = 200
+const hits = new Map<string, number[]>()
+
 export function middleware(request: NextRequest) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.ip || "local"
+  const now = Date.now()
+  const recentHits = (hits.get(ip) || []).filter((timestamp) => now - timestamp < WINDOW)
+  recentHits.push(now)
+  hits.set(ip, recentHits)
+
+  if (recentHits.length > LIMIT) {
+    return new NextResponse("Too many requests", { status: 429 })
+  }
+
   const { pathname } = request.nextUrl
 
   // Public routes that don't require authentication

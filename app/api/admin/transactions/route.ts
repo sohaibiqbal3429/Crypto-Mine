@@ -1,8 +1,10 @@
+import mongoose from "mongoose"
 import { type NextRequest, NextResponse } from "next/server"
-import dbConnect from "@/lib/mongodb"
-import User from "@/models/User"
-import Transaction from "@/models/Transaction"
+
 import { getUserFromRequest } from "@/lib/auth"
+import dbConnect from "@/lib/mongodb"
+import Transaction from "@/models/Transaction"
+import User from "@/models/User"
 
 function resolveAbsoluteUrl(url: string, origin: string): string {
   if (!url) return url
@@ -52,6 +54,15 @@ function serializeTransaction(transaction: any, origin: string) {
   }
 }
 
+const TRANSACTION_PROJECTION = {
+  meta: 1,
+  amount: 1,
+  status: 1,
+  type: 1,
+  createdAt: 1,
+  userId: 1,
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -68,37 +79,89 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const typeParam = searchParams.get("type")
-    const statusParam = searchParams.get("status")
-    const page = Math.max(1, Number.parseInt(searchParams.get("page") || "1"))
-    const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get("limit") || "20")))
+    const statusParam = searchParams.get("status") || undefined
+    const userIdParam = searchParams.get("userId")
+    const from = searchParams.get("from")
+    const to = searchParams.get("to")
+    const cursor = searchParams.get("cursor")
+    const limit = Math.min(200, Math.max(1, Number.parseInt(searchParams.get("limit") || "50")))
+    const queryParam = searchParams.get("q")?.trim()
 
-    // Build query
-    const query: any = {}
-    if (typeParam && typeParam !== "all") query.type = typeParam
-    if (statusParam && statusParam !== "all") query.status = statusParam
+    const filter: Record<string, unknown> = {}
+    if (cursor) {
+      filter._id = { $lt: new mongoose.Types.ObjectId(cursor) }
+    }
+    if (typeParam && typeParam !== "all") {
+      filter.type = typeParam
+    }
+    if (statusParam && statusParam !== "all") {
+      filter.status = statusParam
+    }
+    if (userIdParam) {
+      filter.userId = new mongoose.Types.ObjectId(userIdParam)
+    }
+    if (from || to) {
+      filter.createdAt = {
+        ...(from ? { $gte: new Date(from) } : {}),
+        ...(to ? { $lte: new Date(to) } : {}),
+      }
+    }
+    if (queryParam) {
+      const or: Record<string, unknown>[] = []
+      if (/^[a-f0-9]{24}$/i.test(queryParam)) {
+        or.push({ _id: new mongoose.Types.ObjectId(queryParam) })
+      }
 
-    // Get transactions with user data
-    const transactions = await Transaction.find(query)
-      .populate("userId", "name email referralCode")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
+      const matchedUsers = await User.find({ email: { $regex: `^${queryParam}`, $options: "i" } })
+        .select({ _id: 1 })
+        .limit(50)
+        .lean()
+
+      if (matchedUsers.length) {
+        or.push({ userId: { $in: matchedUsers.map((user) => user._id) } })
+      }
+
+      if (or.length) {
+        filter.$or = or
+      }
+    }
+
+    const transactions = await Transaction.find(filter, TRANSACTION_PROJECTION)
+      .sort({ _id: -1 })
+      .limit(limit + 1)
       .lean()
 
-    const total = await Transaction.countDocuments(query)
+    const hasMore = transactions.length > limit
+    const trimmed = hasMore ? transactions.slice(0, -1) : transactions
+    const nextCursor = hasMore ? String(trimmed[trimmed.length - 1]._id) : null
 
+    const userIds = trimmed
+      .map((transaction) =>
+        typeof transaction.userId === "string"
+          ? transaction.userId
+          : transaction.userId instanceof mongoose.Types.ObjectId
+            ? transaction.userId.toString()
+            : transaction.userId?._id?.toString?.() ?? "",
+      )
+      .filter((id): id is string => Boolean(id) && mongoose.Types.ObjectId.isValid(id))
+
+    const uniqueUserIds = [...new Set(userIds)].map((id) => new mongoose.Types.ObjectId(id))
+
+    const users = uniqueUserIds.length
+      ? await User.find({ _id: { $in: uniqueUserIds } })
+          .select({ name: 1, email: 1, referralCode: 1 })
+          .lean()
+      : []
+
+    const usersById = new Map(users.map((user) => [user._id?.toString?.() ?? "", user]))
     const origin = new URL(request.url).origin
-    const normalizedTransactions = transactions.map((transaction) => serializeTransaction(transaction, origin))
 
-    return NextResponse.json({
-      transactions: normalizedTransactions,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
+    const normalizedTransactions = trimmed.map((transaction) => {
+      const userObject = usersById.get(transaction.userId?.toString?.() ?? "")
+      return serializeTransaction({ ...transaction, userId: userObject || transaction.userId }, origin)
     })
+
+    return NextResponse.json({ data: normalizedTransactions, nextCursor })
   } catch (error) {
     console.error("Admin transactions error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

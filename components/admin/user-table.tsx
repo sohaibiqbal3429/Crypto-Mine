@@ -1,10 +1,15 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react"
+import debounce from "lodash.debounce"
+import { FixedSizeList as List, type ListOnItemsRenderedProps } from "react-window"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -13,337 +18,303 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Settings } from "lucide-react"
+import { Loader2, RefreshCw, Settings } from "lucide-react"
+import type { AdminUserRecord } from "@/lib/types/admin"
 import { getNextLevelRequirement } from "@/lib/utils/leveling"
 
-interface User {
-  _id: string
-  name: string
-  email: string
-  referralCode: string
-  role: string
-  level: number
-  directActiveCount: number
-  totalActiveDirects: number
-  lastLevelUpAt: string | null
-  depositTotal: number
-  withdrawTotal: number
-  roiEarnedTotal: number
-  isActive: boolean
-  createdAt: string
-  balance: {
-    current: number
-    totalBalance: number
-    totalEarning: number
-    lockedCapital: number
-    staked: number
-    pendingWithdraw: number
-  }
-  levelHistory?: { level: number; achievedAt: string }[]
-}
+const ROW_HEIGHT = 128
+const VIRTUAL_LIST_HEIGHT = 540
 
-interface PaginationMeta {
-  page: number
-  pages: number
-  limit: number
-  total: number
+export interface UserFilters {
+  status?: string
+  q?: string
+  from?: string
+  to?: string
 }
 
 interface UserTableProps {
-  users: User[]
-  pagination: PaginationMeta
-  onPageChange: (page: number) => void
+  items: AdminUserRecord[]
+  loading: boolean
+  error?: string | null
+  hasMore: boolean
+  onLoadMore: () => void
   onRefresh: () => void
+  filters: UserFilters
+  onFiltersChange: (filters: UserFilters) => void
 }
 
-export function UserTable({ users, pagination, onPageChange, onRefresh }: UserTableProps) {
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+export function UserTable({
+  items,
+  loading,
+  error,
+  hasMore,
+  onLoadMore,
+  onRefresh,
+  filters,
+  onFiltersChange,
+}: UserTableProps) {
+  const [selectedUser, setSelectedUser] = useState<AdminUserRecord | null>(null)
   const [showAdjustDialog, setShowAdjustDialog] = useState(false)
-  const [adjustForm, setAdjustForm] = useState({
-    amount: "",
-    reason: "",
-    type: "add",
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [adjustForm, setAdjustForm] = useState({ type: "add", amount: "", reason: "" })
+  const [adjustLoading, setAdjustLoading] = useState(false)
+  const [adjustError, setAdjustError] = useState<string | null>(null)
 
-  const paginationStart = useMemo(() => {
-    if (pagination.total === 0) return 0
-    return (pagination.page - 1) * pagination.limit + 1
-  }, [pagination.limit, pagination.page, pagination.total])
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((value: string) => {
+        onFiltersChange({ ...filters, q: value || undefined })
+      }, 300),
+    [filters, onFiltersChange],
+  )
 
-  const paginationEnd = useMemo(() => {
-    if (pagination.total === 0) return 0
-    return Math.min(pagination.page * pagination.limit, pagination.total)
-  }, [pagination.limit, pagination.page, pagination.total])
-  const hasNextPage = pagination.page < pagination.pages || users.length === pagination.limit
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch])
 
-  const goToPreviousPage = () => {
-    if (pagination.page > 1) {
-      onPageChange(pagination.page - 1)
-    }
-  }
+  const handleItemsRendered = useCallback(
+    ({ visibleStopIndex }: ListOnItemsRenderedProps) => {
+      if (hasMore && !loading && visibleStopIndex >= items.length - 5) {
+        onLoadMore()
+      }
+    },
+    [hasMore, loading, items.length, onLoadMore],
+  )
 
-  const goToNextPage = () => {
-    if (hasNextPage) {
-      onPageChange(pagination.page + 1)
-    }
-  }
+  const openAdjustDialog = useCallback((user: AdminUserRecord) => {
+    setSelectedUser(user)
+    setAdjustForm({ type: "add", amount: "", reason: "" })
+    setAdjustError(null)
+    setShowAdjustDialog(true)
+  }, [])
 
-  const handleAdjustBalance = async () => {
+  const submitAdjustBalance = useCallback(async () => {
     if (!selectedUser) return
+    const payload = {
+      userId: selectedUser._id,
+      amount: Number(adjustForm.amount || 0),
+      reason: adjustForm.reason.trim(),
+      type: adjustForm.type,
+    }
 
-    setLoading(true)
-    setError("")
+    if (!payload.amount || !payload.reason) {
+      setAdjustError("Amount and reason are required")
+      return
+    }
 
+    setAdjustLoading(true)
     try {
       const response = await fetch("/api/admin/adjust-balance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser._id,
-          amount: adjustForm.amount,
-          reason: adjustForm.reason,
-          type: adjustForm.type,
-        }),
+        body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        setShowAdjustDialog(false)
-        setAdjustForm({ amount: "", reason: "", type: "add" })
-        setSelectedUser(null)
-        onRefresh()
-      } else {
-        const data = await response.json()
-        setError(data.error || "Failed to adjust balance")
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to adjust balance")
       }
-    } catch (err) {
-      setError("Network error. Please try again.")
+
+      setShowAdjustDialog(false)
+      onRefresh()
+    } catch (exception) {
+      setAdjustError(exception instanceof Error ? exception.message : "Unable to adjust balance")
     } finally {
-      setLoading(false)
+      setAdjustLoading(false)
     }
-  }
+  }, [adjustForm.amount, adjustForm.reason, adjustForm.type, onRefresh, selectedUser])
+
+  const renderRow = useCallback(
+    ({ index, style }: { index: number; style: CSSProperties }) => {
+      const user = items[index]
+      if (!user) return null
+
+      const nextRequirement = getNextLevelRequirement(user.level)
+      const progressLabel =
+        nextRequirement !== null ? `${user.directActiveCount} / ${nextRequirement}` : `${user.directActiveCount} / —`
+
+      return (
+        <div
+          key={user._id}
+          style={style}
+          className="grid grid-cols-1 gap-3 border-b px-4 py-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr] md:items-center md:gap-4"
+        >
+          <div className="space-y-1 md:col-span-2">
+            <div className="font-medium">{user.name}</div>
+            <div className="text-xs text-muted-foreground">{user.email}</div>
+            <div className="text-xs font-mono text-muted-foreground">{user.referralCode}</div>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <div>Level {user.level}</div>
+            <div>Progress: {progressLabel}</div>
+          </div>
+          <div className="text-sm font-mono">
+            <div>${user.depositTotal.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Withdraw ${user.withdrawTotal.toFixed(2)}</div>
+          </div>
+          <div className="text-sm font-mono">
+            <div>Balance ${user.balance.current.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Earnings ${user.balance.totalEarning.toFixed(2)}</div>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Badge variant={user.status === "active" ? "default" : "secondary"} className="capitalize">
+              {user.status ?? "inactive"}
+            </Badge>
+            <Button size="sm" variant="ghost" onClick={() => openAdjustDialog(user)} className="gap-1">
+              <Settings className="h-4 w-4" /> Adjust
+            </Button>
+          </div>
+        </div>
+      )
+    },
+    [items, openAdjustDialog],
+  )
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>User Management</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+    <Card className="space-y-4">
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <CardTitle className="text-2xl font-semibold">Users</CardTitle>
+        <Button variant="secondary" onClick={onRefresh} disabled={loading} className="gap-2">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Level</TableHead>
-                  <TableHead>Deposits</TableHead>
-                  <TableHead>Current Balance</TableHead>
-                  <TableHead>Total Earnings</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
-                      No users found for the current search.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((user) => {
-                    const nextRequirement = getNextLevelRequirement(user.level)
-                    const remainingForNext =
-                      nextRequirement !== null
-                        ? Math.max(nextRequirement - user.directActiveCount, 0)
-                        : 0
-
-                    return (
-                      <TableRow key={user._id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-sm text-muted-foreground">{user.email}</div>
-                          <div className="text-xs font-mono">{user.referralCode}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.level > 0 ? "default" : "secondary"}>Level {user.level}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">${user.depositTotal.toFixed(2)}</TableCell>
-                      <TableCell className="font-mono">${user.balance.current.toFixed(2)}</TableCell>
-                      <TableCell className="font-mono text-green-600">${user.balance.totalEarning.toFixed(2)}</TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <div className="flex items-center justify-between">
-                            <span>Direct cycle</span>
-                            <span className="font-semibold text-foreground">
-                              {nextRequirement !== null
-                                ? `${user.directActiveCount} / ${nextRequirement}`
-                                : `${user.directActiveCount} / —`}
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {nextRequirement === null
-                              ? "Max level achieved"
-                              : remainingForNext === 0
-                              ? "Requirements met — pending sync"
-                              : `${remainingForNext} more active member${remainingForNext === 1 ? "" : "s"} needed for Level ${
-                                  user.level + 1
-                                }`}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Total qualified</span>
-                            <span className="font-semibold text-foreground">{user.totalActiveDirects}</span>
-                          </div>
-                          <div>
-                            <span className="block">Last level up:</span>
-                            <span className="font-semibold text-foreground">
-                              {user.lastLevelUpAt ? new Date(user.lastLevelUpAt).toLocaleString() : "—"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="block">Level history:</span>
-                            <span className="font-semibold text-foreground">
-                              {user.levelHistory && user.levelHistory.length > 0
-                                ? user.levelHistory
-                                    .map(
-                                      (entry) =>
-                                        `L${entry.level}: ${new Date(entry.achievedAt).toLocaleDateString()}`,
-                                    )
-                                    .join(" • ")
-                                : "No records"}
-                            </span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.isActive ? "default" : "secondary"}>
-                          {user.isActive ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUser(user)
-                            setShowAdjustDialog(true)
-                          }}
-                        >
-                          <Settings className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <Label htmlFor="user-search">Search users</Label>
+            <Input
+              id="user-search"
+              placeholder="Email, name or referral code"
+              defaultValue={filters.q}
+              onChange={(event) => debouncedSearch(event.target.value)}
+            />
           </div>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              {pagination.total > 0
-                ? `Showing ${paginationStart.toLocaleString()}-${paginationEnd.toLocaleString()} of ${pagination.total.toLocaleString()} users`
-                : "No users to display"}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={pagination.page <= 1}>
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                Page {Math.min(pagination.page, pagination.pages).toLocaleString()} of {Math.max(pagination.pages, 1).toLocaleString()}
-              </span>
-              <Button variant="outline" size="sm" onClick={goToNextPage} disabled={!hasNextPage}>
-                Next
-              </Button>
-            </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Select
+              value={filters.status ?? "all"}
+              onValueChange={(value) => onFiltersChange({ ...filters, status: value === "all" ? undefined : value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        </CardContent>
-      </Card>
+          <div className="space-y-2">
+            <Label htmlFor="user-from">From</Label>
+            <Input
+              id="user-from"
+              type="date"
+              value={filters.from ?? ""}
+              onChange={(event) => onFiltersChange({ ...filters, from: event.target.value || undefined })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="user-to">To</Label>
+            <Input
+              id="user-to"
+              type="date"
+              value={filters.to ?? ""}
+              onChange={(event) => onFiltersChange({ ...filters, to: event.target.value || undefined })}
+            />
+          </div>
+        </div>
 
-      {/* Adjust Balance Dialog */}
+        <div className="overflow-hidden rounded-md border">
+          <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr] items-center gap-4 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+            <span className="col-span-2">User</span>
+            <span>Level</span>
+            <span>Deposits</span>
+            <span>Balances</span>
+            <span>Status</span>
+          </div>
+          <div style={{ height: VIRTUAL_LIST_HEIGHT }}>
+            <List
+              height={VIRTUAL_LIST_HEIGHT}
+              itemCount={items.length}
+              itemSize={ROW_HEIGHT}
+              width="100%"
+              onItemsRendered={handleItemsRendered}
+            >
+              {renderRow}
+            </List>
+            {loading && (
+              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading
+              </div>
+            )}
+            {!loading && items.length === 0 && (
+              <div className="py-6 text-center text-sm text-muted-foreground">No users found.</div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+
       <Dialog open={showAdjustDialog} onOpenChange={setShowAdjustDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Adjust User Balance</DialogTitle>
+            <DialogTitle>Adjust balance</DialogTitle>
             <DialogDescription>
-              {selectedUser && `Adjusting balance for ${selectedUser.name} (${selectedUser.email})`}
+              Update the balance for {selectedUser?.name}. This action is recorded in the audit log.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {selectedUser && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm">
-                  <strong>Current Balance:</strong> ${selectedUser.balance.current.toFixed(2)}
-                </p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="type">Type</Label>
-                <Select
-                  value={adjustForm.type}
-                  onValueChange={(value) => setAdjustForm((prev) => ({ ...prev, type: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="add">Add to Balance</SelectItem>
-                    <SelectItem value="subtract">Subtract from Balance</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="amount">Amount</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Enter amount"
-                  value={adjustForm.amount}
-                  onChange={(e) => setAdjustForm((prev) => ({ ...prev, amount: e.target.value }))}
-                />
-              </div>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={adjustForm.type} onValueChange={(value) => setAdjustForm((prev) => ({ ...prev, type: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add funds</SelectItem>
+                  <SelectItem value="subtract">Remove funds</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-
-            <div>
-              <Label htmlFor="reason">Reason</Label>
-              <Textarea
-                id="reason"
-                placeholder="Enter reason for adjustment..."
-                value={adjustForm.reason}
-                onChange={(e) => setAdjustForm((prev) => ({ ...prev, reason: e.target.value }))}
+            <div className="space-y-2">
+              <Label htmlFor="adjust-amount">Amount</Label>
+              <Input
+                id="adjust-amount"
+                type="number"
+                value={adjustForm.amount}
+                onChange={(event) => setAdjustForm((prev) => ({ ...prev, amount: event.target.value }))}
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="adjust-reason">Reason</Label>
+              <Textarea
+                id="adjust-reason"
+                value={adjustForm.reason}
+                onChange={(event) => setAdjustForm((prev) => ({ ...prev, reason: event.target.value }))}
+              />
+            </div>
+            {adjustError && (
+              <Alert variant="destructive">
+                <AlertDescription>{adjustError}</AlertDescription>
+              </Alert>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAdjustDialog(false)}>
+            <Button variant="ghost" onClick={() => setShowAdjustDialog(false)} disabled={adjustLoading}>
               Cancel
             </Button>
-            <Button onClick={handleAdjustBalance} disabled={loading || !adjustForm.amount || !adjustForm.reason}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Adjust Balance
+            <Button onClick={submitAdjustBalance} disabled={adjustLoading} className="gap-2">
+              {adjustLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </Card>
   )
 }

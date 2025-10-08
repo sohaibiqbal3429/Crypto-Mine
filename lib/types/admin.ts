@@ -35,6 +35,7 @@ export interface AdminUserRecord {
   email: string
   referralCode: string
   role: string
+  status?: string
   level: number
   directActiveCount: number
   totalActiveDirects: number
