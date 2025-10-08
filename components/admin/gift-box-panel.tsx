@@ -35,7 +35,7 @@ interface AdminGiftBoxParticipant {
   } | null
   joinedAt: string
   status: "active" | "eliminated"
-  hashedUserId: string
+  hashedUserId: string | null
 }
 
 interface AdminGiftBoxCycleSummary {
@@ -366,7 +366,9 @@ export function GiftBoxAdminPanel() {
                           <TableCell>{participant.user?.name ?? "Unknown"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{participant.user?.email ?? "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{participant.user?.referralCode ?? "—"}</TableCell>
-                          <TableCell className="font-mono text-xs">{participant.hashedUserId.slice(0, 12)}…</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {participant.hashedUserId ? `${participant.hashedUserId.slice(0, 12)}…` : "Unknown"}
+                          </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {new Date(participant.joinedAt).toLocaleString()}
                           </TableCell>
