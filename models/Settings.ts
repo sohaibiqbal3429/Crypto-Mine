@@ -25,17 +25,14 @@ export interface ISettings extends Document {
     highTierPct: number
     highTierStartAt: number
   }
-  luckyDraw: {
-    entryFee: number
-    prize: number
+  giftBox: {
+    ticketPrice: number
+    payoutPercentage: number
     cycleHours: number
+    winnersCount: number
     autoDrawEnabled: boolean
-  }
-  blindBox: {
-    depositAmount: number
-    rewardAmount: number
-    cycleHours: number
-    autoDrawEnabled: boolean
+    refundPercentage: number
+    depositAddress: string
   }
 }
 
@@ -63,17 +60,14 @@ const SettingsSchema = new Schema<ISettings>(
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },
     },
-    luckyDraw: {
-      entryFee: { type: Number, default: 10 },
-      prize: { type: Number, default: 30 },
+    giftBox: {
+      ticketPrice: { type: Number, default: 10 },
+      payoutPercentage: { type: Number, default: 90 },
       cycleHours: { type: Number, default: 72 },
+      winnersCount: { type: Number, default: 1 },
       autoDrawEnabled: { type: Boolean, default: true },
-    },
-    blindBox: {
-      depositAmount: { type: Number, default: 10 },
-      rewardAmount: { type: Number, default: 30 },
-      cycleHours: { type: Number, default: 72 },
-      autoDrawEnabled: { type: Boolean, default: true },
+      refundPercentage: { type: Number, default: 0 },
+      depositAddress: { type: String, default: "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw" },
     },
   },
   {

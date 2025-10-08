@@ -104,13 +104,11 @@ export function NotificationBell() {
         return "⚠️"
       case "mining-reward":
         return "⛏️"
-      case "blindbox-submitted":
+      case "giftbox-cycle-started":
         return "🧾"
-      case "blindbox-approved":
-        return "✅"
-      case "blindbox-rejected":
-        return "⚠️"
-      case "blindbox-won":
+      case "giftbox-joined":
+        return "🎫"
+      case "giftbox-won":
         return "🎁"
       default:
         return "📢"

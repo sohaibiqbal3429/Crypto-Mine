@@ -14,10 +14,9 @@ export interface INotification extends Document {
     | "cap-reached"
     | "team-reward-claimed"
     | "mining-reward"
-    | "blindbox-submitted"
-    | "blindbox-approved"
-    | "blindbox-rejected"
-    | "blindbox-won"
+    | "giftbox-cycle-started"
+    | "giftbox-joined"
+    | "giftbox-won"
   title: string
   body: string
   metadata?: Record<string, any>
@@ -40,10 +39,9 @@ const NotificationSchema = new Schema<INotification>(
         "cap-reached",
         "team-reward-claimed",
         "mining-reward",
-        "blindbox-submitted",
-        "blindbox-approved",
-        "blindbox-rejected",
-        "blindbox-won",
+        "giftbox-cycle-started",
+        "giftbox-joined",
+        "giftbox-won",
       ],
       required: true,
     },
