@@ -38,15 +38,8 @@ export default async function AdminPage() {
   }
 
   try {
-    const { adminUser, transactions, users, stats } = await getAdminInitialData(session.userId)
-    return (
-      <AdminDashboard
-        initialUser={adminUser}
-        initialTransactions={transactions}
-        initialUsers={users}
-        initialStats={stats}
-      />
-    )
+    const { adminUser, stats } = await getAdminInitialData(session.userId)
+    return <AdminDashboard initialUser={adminUser} initialStats={stats} />
   } catch (error) {
     console.error("Failed to load admin panel:", error)
 
@@ -57,13 +50,5 @@ export default async function AdminPage() {
     initialError = "Unable to load admin data automatically. Use the refresh button to try again."
   }
 
-  return (
-    <AdminDashboard
-      initialUser={fallbackUser}
-      initialTransactions={[]}
-      initialUsers={[]}
-      initialStats={fallbackStats}
-      initialError={initialError}
-    />
-  )
+  return <AdminDashboard initialUser={fallbackUser} initialStats={fallbackStats} initialError={initialError} />
 }

@@ -19,6 +19,7 @@ export interface ITransaction extends Document {
     | "giftBoxPayout"
   amount: number
   meta: any
+  userEmail?: string
   status?: "pending" | "approved" | "rejected"
   createdAt: Date
 }
@@ -45,6 +46,7 @@ const TransactionSchema = new Schema<ITransaction>(
       required: true,
     },
     amount: { type: Number, required: true },
+    userEmail: { type: String, index: true },
     meta: { type: Schema.Types.Mixed },
     status: {
       type: String,
@@ -60,6 +62,9 @@ const TransactionSchema = new Schema<ITransaction>(
 )
 
 TransactionSchema.index({ userId: 1, createdAt: -1 })
+TransactionSchema.index({ status: 1, createdAt: -1 })
+TransactionSchema.index({ userEmail: 1 })
+TransactionSchema.index({ createdAt: -1, _id: 1 })
 TransactionSchema.index({ type: 1, status: 1 })
 
 export default createModelProxy<ITransaction>("Transaction", TransactionSchema)

@@ -10,6 +10,7 @@ export interface IUser extends Document {
   role: "user" | "admin"
   referralCode: string
   referredBy?: mongoose.Types.ObjectId
+  status: "active" | "inactive" | "suspended"
   isActive: boolean
   emailVerified: boolean // Added email verification status
   phoneVerified: boolean // Added phone verification status
@@ -41,6 +42,12 @@ const UserSchema = new Schema<IUser>(
     role: { type: String, enum: ["user", "admin"], default: "user" },
     referralCode: { type: String, required: true, unique: true },
     referredBy: { type: Schema.Types.ObjectId, ref: "User" },
+    status: {
+      type: String,
+      enum: ["active", "inactive", "suspended"],
+      default: "inactive",
+      index: true,
+    },
     isActive: { type: Boolean, default: false },
     emailVerified: { type: Boolean, default: false }, // Added email verification tracking
     phoneVerified: { type: Boolean, default: false }, // Added phone verification tracking
@@ -65,6 +72,25 @@ const UserSchema = new Schema<IUser>(
   },
 )
 
+UserSchema.index({ createdAt: -1 })
+UserSchema.index({ email: 1 }, { unique: true })
+UserSchema.index({ status: 1, createdAt: -1 })
 UserSchema.index({ referredBy: 1 })
+
+UserSchema.pre("save", function (next) {
+  if (this.isModified("isActive") && !this.isModified("status")) {
+    this.status = this.isActive ? "active" : "inactive"
+  }
+
+  if (this.isModified("status")) {
+    if (this.status === "active") {
+      this.isActive = true
+    } else if (this.status === "inactive") {
+      this.isActive = false
+    }
+  }
+
+  next()
+})
 
 export default createModelProxy<IUser>("User", UserSchema)

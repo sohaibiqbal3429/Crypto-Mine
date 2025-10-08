@@ -1,176 +1,191 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
-import { TransactionTable } from "@/components/admin/transaction-table"
-import { UserTable } from "@/components/admin/user-table"
-import { GiftBoxAdminPanel } from "@/components/admin/gift-box-panel"
-import { GiftBoxPanelBoundary } from "@/components/admin/gift-box-panel-boundary"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TransactionTable, type TransactionFilters } from "@/components/admin/transaction-table"
+import { UserTable, type UserFilters } from "@/components/admin/user-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Clock, DollarSign, Loader2, RefreshCw, Users } from "lucide-react"
+import { Loader2, RefreshCw } from "lucide-react"
 import type {
-  AdminStats,
   AdminSessionUser,
+  AdminStats,
   AdminTransactionRecord,
   AdminUserRecord,
 } from "@/lib/types/admin"
 
 interface AdminDashboardProps {
   initialUser: AdminSessionUser
-  initialTransactions: AdminTransactionRecord[]
-  initialUsers: AdminUserRecord[]
   initialStats: AdminStats
   initialError?: string | null
 }
 
-const computeStats = (users: AdminUserRecord[], transactions: AdminTransactionRecord[]): AdminStats => ({
-  totalUsers: users.length,
-  activeUsers: users.filter((user) => user.isActive).length,
-  pendingDeposits: transactions.filter((tx) => tx.type === "deposit" && tx.status === "pending").length,
-  pendingWithdrawals: transactions.filter((tx) => tx.type === "withdraw" && tx.status === "pending").length,
-  totalDeposits: users.reduce((sum, user) => sum + user.depositTotal, 0),
-  totalWithdrawals: users.reduce((sum, user) => sum + user.withdrawTotal, 0),
-})
+const TRANSACTION_LIMIT = 50
+const USER_LIMIT = 100
 
-export function AdminDashboard({
-  initialUser,
-  initialTransactions,
-  initialUsers,
-  initialStats,
-  initialError = null,
-}: AdminDashboardProps) {
-  const TRANSACTION_PAGE_SIZE = 20
-  const USER_PAGE_SIZE = 100
+export function AdminDashboard({ initialUser, initialStats, initialError = null }: AdminDashboardProps) {
   const [user, setUser] = useState(initialUser)
-  const [transactions, setTransactions] = useState(initialTransactions)
-  const [users, setUsers] = useState(initialUsers)
-  const [stats, setStats] = useState<AdminStats>(initialStats)
-  const [loading, setLoading] = useState(false)
-  const [pageError, setPageError] = useState<string | null>(initialError)
-  const [activeTab, setActiveTab] = useState("overview")
+  const [stats, setStats] = useState(initialStats)
 
-  const [transactionFilters, setTransactionFilters] = useState({
-    type: "all",
-    status: "all",
-  })
-  const [userSearch, setUserSearch] = useState("")
-  const [transactionPagination, setTransactionPagination] = useState({
-    page: 1,
-    pages: Math.max(1, Math.ceil(initialTransactions.length / TRANSACTION_PAGE_SIZE) || 1),
-    limit: TRANSACTION_PAGE_SIZE,
-    total: initialTransactions.length,
-  })
-  const [userPagination, setUserPagination] = useState({
-    page: 1,
-    pages: Math.max(1, Math.ceil(initialUsers.length / USER_PAGE_SIZE) || 1),
-    limit: USER_PAGE_SIZE,
-    total: initialUsers.length,
-  })
+  const [transactions, setTransactions] = useState<AdminTransactionRecord[]>([])
+  const [transactionCursor, setTransactionCursor] = useState<string | null>(null)
+  const [transactionHasMore, setTransactionHasMore] = useState(false)
+  const [transactionFilters, setTransactionFilters] = useState<TransactionFilters>({})
+  const [transactionLoading, setTransactionLoading] = useState(false)
+  const [transactionError, setTransactionError] = useState<string | null>(initialError)
+
+  const [users, setUsers] = useState<AdminUserRecord[]>([])
+  const [userCursor, setUserCursor] = useState<string | null>(null)
+  const [userHasMore, setUserHasMore] = useState(false)
+  const [userFilters, setUserFilters] = useState<UserFilters>({})
+  const [userLoading, setUserLoading] = useState(false)
+  const [userError, setUserError] = useState<string | null>(initialError)
+
+  const fetchStats = useCallback(async () => {
+    const response = await fetch("/api/admin/stats")
+    if (!response.ok) {
+      return
+    }
+    const payload = await response.json()
+    if (payload.stats) {
+      setStats(payload.stats)
+    }
+  }, [])
+
+  const fetchTransactions = useCallback(
+    async (options: { reset?: boolean } = {}) => {
+      if (transactionLoading) return
+      const isReset = options.reset ?? false
+      setTransactionLoading(true)
+      setTransactionError(null)
+
+      const params = new URLSearchParams()
+      params.set("limit", String(TRANSACTION_LIMIT))
+      const filterEntries = Object.entries(transactionFilters)
+      for (const [key, value] of filterEntries) {
+        if (value) params.set(key, value)
+      }
+      if (!isReset && transactionCursor) {
+        params.set("cursor", transactionCursor)
+      }
+
+      try {
+        const response = await fetch(`/api/admin/transactions?${params.toString()}`)
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || "Unable to load transactions")
+        }
+        const payload = await response.json()
+        const nextCursor = payload.nextCursor ?? null
+        setTransactionCursor(nextCursor)
+        setTransactionHasMore(Boolean(nextCursor))
+        setTransactions((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+      } catch (error) {
+        console.error(error)
+        setTransactionError(error instanceof Error ? error.message : "Unable to load transactions")
+      } finally {
+        setTransactionLoading(false)
+      }
+    },
+    [transactionCursor, transactionFilters, transactionLoading],
+  )
+
+  const fetchUsers = useCallback(
+    async (options: { reset?: boolean } = {}) => {
+      if (userLoading) return
+      const isReset = options.reset ?? false
+      setUserLoading(true)
+      setUserError(null)
+
+      const params = new URLSearchParams()
+      params.set("limit", String(USER_LIMIT))
+      const filterEntries = Object.entries(userFilters)
+      for (const [key, value] of filterEntries) {
+        if (value) params.set(key, value)
+      }
+      if (!isReset && userCursor) {
+        params.set("cursor", userCursor)
+      }
+
+      try {
+        const response = await fetch(`/api/admin/users?${params.toString()}`)
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || "Unable to load users")
+        }
+        const payload = await response.json()
+        const nextCursor = payload.nextCursor ?? null
+        setUserCursor(nextCursor)
+        setUserHasMore(Boolean(nextCursor))
+        setUsers((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+      } catch (error) {
+        console.error(error)
+        setUserError(error instanceof Error ? error.message : "Unable to load users")
+      } finally {
+        setUserLoading(false)
+      }
+    },
+    [userCursor, userFilters, userLoading],
+  )
 
   useEffect(() => {
-    if (initialError) {
-      fetchData({ transactionPage: 1, userPage: 1 })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchTransactions({ reset: true })
+  }, [fetchTransactions, transactionFilters])
+
+  useEffect(() => {
+    fetchUsers({ reset: true })
+  }, [fetchUsers, userFilters])
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (payload?.user) {
+          setUser((prev) => ({ ...prev, ...payload.user }))
+        }
+      })
+      .catch(() => null)
   }, [])
-  const fetchData = async ({
-    transactionPage,
-    userPage,
-  }: {
-    transactionPage?: number
-    userPage?: number
-  } = {}) => {
+
+  const refreshAll = useCallback(async () => {
+    setTransactionCursor(null)
+    setUserCursor(null)
+    await Promise.all([fetchTransactions({ reset: true }), fetchUsers({ reset: true }), fetchStats()])
+  }, [fetchStats, fetchTransactions, fetchUsers])
+
+  useEffect(() => {
+    fetchStats().catch(() => null)
+  }, [fetchStats])
+
+  const handleTransactionFiltersChange = useCallback((next: TransactionFilters) => {
+    setTransactionCursor(null)
+    setTransactionFilters(next)
+  }, [])
+
+  const handleUserFiltersChange = useCallback((next: UserFilters) => {
+    setUserCursor(null)
+    setUserFilters(next)
+  }, [])
+
+  const handleExportTransactions = useCallback(async () => {
     try {
-      setLoading(true)
-      setPageError(null)
-
-      const transactionParams = new URLSearchParams()
-      const nextTransactionPage = transactionPage ?? transactionPagination.page
-      const nextUserPage = userPage ?? userPagination.page
-
-      transactionParams.set("page", nextTransactionPage.toString())
-      transactionParams.set("limit", TRANSACTION_PAGE_SIZE.toString())
-      if (transactionFilters.type !== "all") {
-        transactionParams.set("type", transactionFilters.type)
+      const response = await fetch("/api/admin/transactions/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(transactionFilters),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to queue export")
       }
-      if (transactionFilters.status !== "all") {
-        transactionParams.set("status", transactionFilters.status)
-      }
-
-      const userParams = new URLSearchParams()
-      userParams.set("page", nextUserPage.toString())
-      userParams.set("limit", USER_PAGE_SIZE.toString())
-      const sanitizedSearch = userSearch.trim()
-      if (sanitizedSearch.length > 0) {
-        userParams.set("search", sanitizedSearch)
-      }
-
-      const [userRes, transactionsRes, usersRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch(`/api/admin/transactions${transactionParams.toString() ? `?${transactionParams.toString()}` : ""}`),
-        fetch(`/api/admin/users${userParams.toString() ? `?${userParams.toString()}` : ""}`),
-      ])
-
-      if (!userRes.ok) {
-        throw new Error("Unable to load admin user context")
-      }
-      if (!transactionsRes.ok) {
-        const data = await transactionsRes.json().catch(() => ({}))
-        throw new Error(data.error || "Unable to load transactions")
-      }
-      if (!usersRes.ok) {
-        const data = await usersRes.json().catch(() => ({}))
-        throw new Error(data.error || "Unable to load users")
-      }
-
-      const userData = await userRes.json()
-      const transactionsData = await transactionsRes.json()
-      const usersData = await usersRes.json()
-
-      setUser(userData.user)
-      setTransactions(transactionsData.transactions || [])
-      setUsers(usersData.users || [])
-      setStats(computeStats(usersData.users || [], transactionsData.transactions || []))
-      if (transactionsData.pagination) {
-        const { page, pages, limit, total } = transactionsData.pagination
-        setTransactionPagination({
-          page: Math.max(1, page || nextTransactionPage),
-          pages: Math.max(1, pages || 1),
-          limit: limit || TRANSACTION_PAGE_SIZE,
-          total: total || 0,
-        })
-      }
-      if (usersData.pagination) {
-        const { page, pages, limit, total } = usersData.pagination
-        setUserPagination({
-          page: Math.max(1, page || nextUserPage),
-          pages: Math.max(1, pages || 1),
-          limit: limit || USER_PAGE_SIZE,
-          total: total || 0,
-        })
-      }
-    } catch (error: any) {
-      console.error("Failed to fetch admin data:", error)
-      setPageError(error?.message || "Failed to refresh admin data")
-    } finally {
-      setLoading(false)
+      alert("Export queued. You will receive an email when it is ready.")
+    } catch (error) {
+      console.error(error)
+      setTransactionError(error instanceof Error ? error.message : "Unable to queue export")
     }
-  }
+  }, [transactionFilters])
 
-  const handleApplyTransactionFilters = () => {
-    fetchData({ transactionPage: 1 })
-  }
-
-  const handleApplyUserSearch = () => {
-    fetchData({ userPage: 1 })
-  }
-
-  if (loading && !transactions.length && !users.length) {
+  if (!user) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -181,173 +196,62 @@ export function AdminDashboard({
   return (
     <div className="flex h-screen bg-background">
       <Sidebar user={user} />
-
-      <main className="flex-1 md:ml-64 overflow-auto">
-        <div className="p-6">
-          <div className="mb-8 grid gap-4 lg:grid-cols-[auto,1fr] lg:items-start">
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => fetchData({ transactionPage: 1, userPage: 1 })}
-                variant="secondary"
-                className="flex items-center gap-2 rounded-2xl border border-border bg-card px-6 py-5 text-base font-semibold shadow-sm hover:bg-muted"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
-                Refresh
-              </Button>
-            </div>
+      <main className="flex-1 overflow-auto md:ml-64">
+        <div className="space-y-6 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-balance">Admin Panel</h1>
-              <p className="text-muted-foreground">Manage users, transactions, and platform settings</p>
+              <h1 className="text-3xl font-bold">Admin Panel</h1>
+              <p className="text-sm text-muted-foreground">Monitor platform performance and review user activity.</p>
             </div>
+            <Button onClick={refreshAll} variant="secondary" className="gap-2" disabled={transactionLoading || userLoading}>
+              {transactionLoading || userLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
+            </Button>
           </div>
 
-          {pageError && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertDescription>{pageError}</AlertDescription>
-            </Alert>
-          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total users" value={stats.totalUsers.toLocaleString()} />
+            <StatCard label="Active users" value={stats.activeUsers.toLocaleString()} />
+            <StatCard label="Pending deposits" value={stats.pendingDeposits.toLocaleString()} />
+            <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals.toLocaleString()} />
+          </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="transactions">Transactions</TabsTrigger>
-              <TabsTrigger value="users">Users</TabsTrigger>
-              <TabsTrigger value="gift-box">Gift Box Giveaway</TabsTrigger>
-            </TabsList>
+          <TransactionTable
+            items={transactions}
+            loading={transactionLoading}
+            error={transactionError}
+            hasMore={transactionHasMore}
+            onLoadMore={() => fetchTransactions()}
+            onRefresh={() => fetchTransactions({ reset: true })}
+            onExport={handleExportTransactions}
+            filters={transactionFilters}
+            onFiltersChange={handleTransactionFiltersChange}
+          />
 
-            <TabsContent value="overview" className="space-y-6">
-              {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{stats.totalUsers}</div>
-                      <p className="text-xs text-muted-foreground">{stats.activeUsers} active users</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Pending Deposits</CardTitle>
-                      <Clock className="h-4 w-4 text-orange-600" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-orange-600">{stats.pendingDeposits}</div>
-                      <p className="text-xs text-muted-foreground">Awaiting approval</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Pending Withdrawals</CardTitle>
-                      <Clock className="h-4 w-4 text-red-600" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-red-600">{stats.pendingWithdrawals}</div>
-                      <p className="text-xs text-muted-foreground">Awaiting approval</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
-                      <DollarSign className="h-4 w-4 text-green-600" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-green-600">
-                        ${(stats.totalDeposits + stats.totalWithdrawals).toFixed(0)}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        ${stats.totalDeposits.toFixed(0)} in / ${stats.totalWithdrawals.toFixed(0)} out
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="transactions" className="space-y-6">
-              <div className="flex gap-4 flex-wrap">
-                <Select
-                  value={transactionFilters.type}
-                  onValueChange={(value) => setTransactionFilters((prev) => ({ ...prev, type: value }))}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Filter by type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="deposit">Deposits</SelectItem>
-                    <SelectItem value="withdraw">Withdrawals</SelectItem>
-                    <SelectItem value="earn">Earnings</SelectItem>
-                    <SelectItem value="commission">Commissions</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={transactionFilters.status}
-                  onValueChange={(value) => setTransactionFilters((prev) => ({ ...prev, status: value }))}
-                >
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button onClick={handleApplyTransactionFilters} disabled={loading}>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Apply Filters
-                </Button>
-              </div>
-
-              <TransactionTable
-                transactions={transactions}
-                pagination={transactionPagination}
-                onPageChange={(page) => fetchData({ transactionPage: page })}
-                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
-              />
-            </TabsContent>
-
-            <TabsContent value="users" className="space-y-6">
-              <div className="flex gap-4 flex-wrap">
-                <Input
-                  placeholder="Search users..."
-                  value={userSearch}
-                  onChange={(event) => setUserSearch(event.target.value)}
-                  className="max-w-sm"
-                />
-                <Button onClick={handleApplyUserSearch} disabled={loading}>
-                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Search
-                </Button>
-              </div>
-
-              <UserTable
-                users={users}
-                pagination={userPagination}
-                onPageChange={(page) => fetchData({ userPage: page })}
-                onRefresh={() => fetchData({ transactionPage: transactionPagination.page, userPage: userPagination.page })}
-              />
-            </TabsContent>
-            <TabsContent value="gift-box">
-              <GiftBoxPanelBoundary>
-                <GiftBoxAdminPanel />
-              </GiftBoxPanelBoundary>
-            </TabsContent>
-          </Tabs>
-
+          <UserTable
+            items={users}
+            loading={userLoading}
+            error={userError}
+            hasMore={userHasMore}
+            onLoadMore={() => fetchUsers()}
+            onRefresh={() => fetchUsers({ reset: true })}
+            filters={userFilters}
+            onFiltersChange={handleUserFiltersChange}
+          />
         </div>
       </main>
     </div>
   )
 }
 
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-2xl font-semibold">{value}</p>
+      </CardContent>
+    </Card>
+  )
+}
