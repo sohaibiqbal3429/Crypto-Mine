@@ -45,7 +45,7 @@ export const ADMIN_NAV_ITEM: AppNavItem = {
 const PAGE_TITLE_RULES: Array<{ pattern: RegExp; title: string }> = [
   { pattern: /^\/$/, title: "Welcome" },
   { pattern: /^\/dashboard(?:\/.+)?$/, title: "Dashboard" },
-  { pattern: /^\/blind-box(?:\/.+)?$/, title: "Blind Box Lucky Draw" },
+  { pattern: /^\/blind-box(?:\/.+)?$/, title: "Blind Box" },
   { pattern: /^\/mining(?:\/.+)?$/, title: "Mining" },
   { pattern: /^\/wallet(?:\/.+)?$/, title: "Wallet" },
   { pattern: /^\/e-wallet(?:\/.+)?$/, title: "E-Wallet" },
