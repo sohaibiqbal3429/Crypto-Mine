@@ -56,6 +56,16 @@ interface GiftBoxSummary {
     isParticipant: boolean
     joinedAt: string | null
     lastEntryTransactionId: string | null
+    pendingDeposit: {
+      id: string
+      status: "pending" | "approved" | "rejected"
+      submittedAt: string
+      reviewedAt: string | null
+      rejectionReason: string | null
+      txId: string
+      network: string
+      address: string
+    } | null
   }
 }
 
@@ -109,7 +119,12 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
   const [joining, setJoining] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  const pendingDeposit = summary.userStatus.pendingDeposit
+  const awaitingReview = pendingDeposit?.status === "pending"
+  const rejectedDeposit = pendingDeposit?.status === "rejected"
   const alreadyJoined = summary.userStatus.isParticipant
+  const disableJoin = alreadyJoined || awaitingReview
+  const pendingTxLabel = pendingDeposit?.txId ? `${pendingDeposit.txId.slice(0, 10)}…` : "your transaction"
   const participantLabel = useMemo(
     () => new Intl.NumberFormat("en-US").format(summary.participants),
     [summary.participants],
@@ -164,6 +179,13 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
   }, [toast])
 
   const handleJoin = useCallback(async () => {
+    if (awaitingReview) {
+      toast({
+        title: "Deposit under review",
+        description: "We've received your transaction hash. Please wait for admin approval.",
+      })
+      return
+    }
     if (alreadyJoined) {
       toast({ title: "Already joined", description: "You're locked in for this Gift Box cycle." })
       return
@@ -205,8 +227,8 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
       }
 
       toast({
-        title: "Entry confirmed",
-        description: "You're now part of the Gift Box Giveaway.",
+        title: "Submission received",
+        description: "Your deposit is pending admin review. We'll notify you once it's approved.",
       })
 
       setDepositTxId("")
@@ -220,7 +242,7 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
     } finally {
       setJoining(false)
     }
-  }, [agreeToTerms, alreadyJoined, depositNetwork, depositTxId, refreshSummary, summary.config.depositAddress, toast])
+  }, [agreeToTerms, alreadyJoined, awaitingReview, depositNetwork, depositTxId, refreshSummary, summary.config.depositAddress, toast])
 
   const handleCopyAddress = useCallback(async () => {
     try {
@@ -245,7 +267,7 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
     ? formatDate(summary.previousCycle.winnerSnapshot.creditedAt)
     : null
   const fairness = summary.cycle?.fairnessProof ?? summary.previousCycle?.fairnessProof ?? null
-  const canSubmitDeposit = depositTxId.trim().length >= 10
+  const canSubmitDeposit = !awaitingReview && depositTxId.trim().length >= 10
 
   return (
     <div className="space-y-8">
@@ -283,16 +305,18 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
               ) : null}
               <Button
                 onClick={() => void handleJoin()}
-                disabled={alreadyJoined || joining || !canSubmitDeposit || !agreeToTerms}
+                disabled={disableJoin || joining || !canSubmitDeposit || !agreeToTerms}
                 className="bg-white text-indigo-700 shadow-lg transition hover:bg-indigo-50 disabled:opacity-70"
               >
                 {joining
-                  ? "Processing..."
-                  : alreadyJoined
-                    ? "Joined"
-                    : canSubmitDeposit
-                      ? "Confirm entry"
-                      : "Paste deposit hash"}
+                  ? "Submitting..."
+                  : awaitingReview
+                    ? "Under review"
+                    : alreadyJoined
+                      ? "Joined"
+                      : canSubmitDeposit
+                        ? "Submit for review"
+                        : "Paste deposit hash"}
               </Button>
               <Button
                 variant="secondary"
@@ -382,6 +406,23 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
                   </label>
                 </div>
               </div>
+              {awaitingReview ? (
+                <div className="mt-4 rounded-xl border border-white/30 bg-white/10 p-4 text-sm text-white/85">
+                  <p className="font-semibold text-white">Deposit under review</p>
+                  <p className="mt-1">
+                    We're verifying transaction {pendingTxLabel} on the {pendingDeposit?.network ?? "selected"} network. You'll
+                    be notified once it's approved.
+                  </p>
+                </div>
+              ) : null}
+              {rejectedDeposit ? (
+                <div className="mt-4 rounded-xl border border-rose-300/60 bg-rose-500/20 p-4 text-sm text-rose-100">
+                  <p className="font-semibold text-rose-50">Deposit rejected</p>
+                  <p className="mt-1">
+                    {rejectedDeposit.rejectionReason || "Please submit a new transaction hash to try again."}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
 
