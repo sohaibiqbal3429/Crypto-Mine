@@ -7,7 +7,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -15,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 
 const DEFAULT_GIFT_BOX_CONFIG: AdminGiftBoxConfig = {
@@ -32,6 +40,8 @@ function createDefaultGiftBoxConfig(): AdminGiftBoxConfig {
 }
 
 const currencyFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
+
+const DEFAULT_REJECTION_REASON = "Unable to verify the transaction hash."
 
 function sanitizeConfig(raw: any): AdminGiftBoxConfig {
   const safeNumber = (value: unknown, fallback: number, options: { min?: number; max?: number } = {}) => {
@@ -334,6 +344,7 @@ export function GiftBoxAdminPanel() {
   const [reviewingDepositId, setReviewingDepositId] = useState<string | null>(null)
   const [selectedDeposit, setSelectedDeposit] = useState<AdminGiftBoxDeposit | null>(null)
   const [depositDetailsOpen, setDepositDetailsOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState<string>(DEFAULT_REJECTION_REASON)
 
   const activeCycle = overview?.cycle
   const participants = overview?.participants ?? []
@@ -351,6 +362,12 @@ export function GiftBoxAdminPanel() {
       setSettingsDraft({ ...overview.config })
     }
   }, [overview?.config])
+
+  useEffect(() => {
+    if (selectedDeposit) {
+      setRejectReason(DEFAULT_REJECTION_REASON)
+    }
+  }, [selectedDeposit])
 
   const refreshAll = useCallback(async () => {
     setLoading(true)
@@ -424,15 +441,26 @@ export function GiftBoxAdminPanel() {
   )
 
   const handleRejectDeposit = useCallback(
-    async (depositId: string) => {
-      const reasonInput = window.prompt(
-        "Provide a reason for rejecting this deposit.",
-        "Unable to verify the transaction hash.",
-      )
-      if (reasonInput === null) {
+    async (depositId: string, providedReason?: string) => {
+      let reason = providedReason?.trim()
+      if (!reason) {
+        const reasonInput = window.prompt(
+          "Provide a reason for rejecting this deposit.",
+          DEFAULT_REJECTION_REASON,
+        )
+        if (reasonInput === null) {
+          return
+        }
+        reason = reasonInput.trim()
+      }
+      if (!reason) {
+        toast({
+          title: "Reason required",
+          description: "Please provide a rejection reason before proceeding.",
+          variant: "destructive",
+        })
         return
       }
-      const reason = reasonInput.trim()
       setReviewingDepositId(depositId)
       try {
         const response = await fetch(`/api/admin/giftbox/deposits/${depositId}/reject`, {
@@ -700,6 +728,7 @@ export function GiftBoxAdminPanel() {
               setDepositDetailsOpen(open)
               if (!open) {
                 setSelectedDeposit(null)
+                setRejectReason(DEFAULT_REJECTION_REASON)
               }
             }}
           >
@@ -711,74 +740,113 @@ export function GiftBoxAdminPanel() {
                 </DialogDescription>
               </DialogHeader>
               {selectedDeposit ? (
-                <div className="space-y-4 text-sm">
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase text-muted-foreground">Player</p>
-                    <p className="font-medium">
-                      {selectedDeposit.user?.name || "Unnamed"}
-                      {selectedDeposit.user?.email ? ` • ${selectedDeposit.user.email}` : ""}
-                    </p>
-                    {selectedDeposit.user?.referralCode ? (
-                      <p className="text-xs text-muted-foreground">
-                        Referral: {selectedDeposit.user.referralCode}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase text-muted-foreground">Transaction hash</p>
-                    <p className="font-mono text-xs break-all">{selectedDeposit.txId}</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">Network</p>
-                      <p>{selectedDeposit.network}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">Amount</p>
-                      <p>{currencyFormatter.format(selectedDeposit.amount || 0)}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs uppercase text-muted-foreground">Deposit address</p>
-                    <p className="font-mono text-xs break-all">{selectedDeposit.address}</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">Submitted</p>
-                      <p>
-                        {selectedDeposit.submittedAt
-                          ? new Date(selectedDeposit.submittedAt).toLocaleString()
-                          : "Unknown"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase text-muted-foreground">Linked transaction</p>
-                      <p className="font-mono text-xs break-all">
-                        {selectedDeposit.transactionId || "Not linked"}
-                      </p>
-                    </div>
-                  </div>
-                  {selectedDeposit.receipt?.url ? (
+                <>
+                  <div className="space-y-4 text-sm">
                     <div className="space-y-1">
-                      <p className="text-xs uppercase text-muted-foreground">Receipt</p>
-                      <a
-                        className="text-primary underline underline-offset-2"
-                        href={selectedDeposit.receipt.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View receipt
-                      </a>
-                      {selectedDeposit.receipt.uploadedAt ? (
+                      <p className="text-xs uppercase text-muted-foreground">Player</p>
+                      <p className="font-medium">
+                        {selectedDeposit.user?.name || "Unnamed"}
+                        {selectedDeposit.user?.email ? ` • ${selectedDeposit.user.email}` : ""}
+                      </p>
+                      {selectedDeposit.user?.referralCode ? (
                         <p className="text-xs text-muted-foreground">
-                          Uploaded {new Date(selectedDeposit.receipt.uploadedAt).toLocaleString()}
+                          Referral: {selectedDeposit.user.referralCode}
                         </p>
                       ) : null}
                     </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No receipt attached to this deposit.</p>
-                  )}
-                </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase text-muted-foreground">Transaction hash</p>
+                      <p className="font-mono text-xs break-all">{selectedDeposit.txId}</p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs uppercase text-muted-foreground">Network</p>
+                        <p>{selectedDeposit.network}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-muted-foreground">Amount</p>
+                        <p>{currencyFormatter.format(selectedDeposit.amount || 0)}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase text-muted-foreground">Deposit address</p>
+                      <p className="font-mono text-xs break-all">{selectedDeposit.address}</p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs uppercase text-muted-foreground">Submitted</p>
+                        <p>
+                          {selectedDeposit.submittedAt
+                            ? new Date(selectedDeposit.submittedAt).toLocaleString()
+                            : "Unknown"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase text-muted-foreground">Linked transaction</p>
+                        <p className="font-mono text-xs break-all">
+                          {selectedDeposit.transactionId || "Not linked"}
+                        </p>
+                      </div>
+                    </div>
+                    {selectedDeposit.receipt?.url ? (
+                      <div className="space-y-1">
+                        <p className="text-xs uppercase text-muted-foreground">Receipt</p>
+                        <a
+                          className="text-primary underline underline-offset-2"
+                          href={selectedDeposit.receipt.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View receipt
+                        </a>
+                        {selectedDeposit.receipt.uploadedAt ? (
+                          <p className="text-xs text-muted-foreground">
+                            Uploaded {new Date(selectedDeposit.receipt.uploadedAt).toLocaleString()}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No receipt attached to this deposit.</p>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="giftbox-reject-reason" className="text-xs uppercase text-muted-foreground">
+                        Rejection reason
+                      </Label>
+                      <Textarea
+                        id="giftbox-reject-reason"
+                        value={rejectReason}
+                        onChange={(event) => setRejectReason(event.target.value)}
+                        rows={3}
+                        placeholder="Explain why this deposit is being rejected."
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        This message will be sent to the player if the deposit is rejected.
+                      </p>
+                    </div>
+                  </div>
+                  <DialogFooter className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      variant="outline"
+                      disabled={reviewingDepositId === selectedDeposit.id || rejectReason.trim().length === 0}
+                      onClick={() => void handleRejectDeposit(selectedDeposit.id, rejectReason)}
+                    >
+                      {reviewingDepositId === selectedDeposit.id ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Reject deposit
+                    </Button>
+                    <Button
+                      disabled={reviewingDepositId === selectedDeposit.id}
+                      onClick={() => void handleApproveDeposit(selectedDeposit.id)}
+                    >
+                      {reviewingDepositId === selectedDeposit.id ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Approve deposit
+                    </Button>
+                  </DialogFooter>
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">Select a deposit to view its full details.</p>
               )}
