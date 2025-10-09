@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -111,6 +112,21 @@ function sanitizeDeposit(raw: any): AdminGiftBoxDeposit | null {
 
   const amount = typeof raw.amount === "number" && Number.isFinite(raw.amount) ? raw.amount : 0
   const submittedAt = typeof raw.submittedAt === "string" ? raw.submittedAt : null
+  const transactionId = typeof raw.transactionId === "string" ? raw.transactionId : null
+
+  let receipt: AdminGiftBoxDeposit["receipt"] = null
+  if (raw.receipt && typeof raw.receipt === "object") {
+    const receiptRecord = raw.receipt as Record<string, unknown>
+    const url = typeof receiptRecord.url === "string" ? receiptRecord.url : null
+    let uploadedAt: string | null = null
+    if (typeof receiptRecord.uploadedAt === "string") {
+      uploadedAt = receiptRecord.uploadedAt
+    } else if (receiptRecord.uploadedAt instanceof Date) {
+      uploadedAt = receiptRecord.uploadedAt.toISOString()
+    }
+
+    receipt = { url, uploadedAt }
+  }
 
   let user: AdminGiftBoxParticipant["user"] = null
   if (raw.user && typeof raw.user === "object") {
@@ -137,6 +153,8 @@ function sanitizeDeposit(raw: any): AdminGiftBoxDeposit | null {
     network: typeof raw.network === "string" ? raw.network : "",
     address: typeof raw.address === "string" ? raw.address : "",
     submittedAt,
+    transactionId,
+    receipt,
   }
 }
 
@@ -263,6 +281,11 @@ interface AdminGiftBoxDeposit {
   network: string
   address: string
   submittedAt: string | null
+  transactionId: string | null
+  receipt: {
+    url: string | null
+    uploadedAt: string | null
+  } | null
 }
 
 interface AdminGiftBoxCycleSummary {
@@ -309,6 +332,8 @@ export function GiftBoxAdminPanel() {
   const [activeTab, setActiveTab] = useState("overview")
   const [dataError, setDataError] = useState<string | null>(null)
   const [reviewingDepositId, setReviewingDepositId] = useState<string | null>(null)
+  const [selectedDeposit, setSelectedDeposit] = useState<AdminGiftBoxDeposit | null>(null)
+  const [depositDetailsOpen, setDepositDetailsOpen] = useState(false)
 
   const activeCycle = overview?.cycle
   const participants = overview?.participants ?? []
@@ -382,6 +407,8 @@ export function GiftBoxAdminPanel() {
         }
         toast({ title: "Deposit approved", description: "Participant added to the Gift Box cycle." })
         await refreshAll()
+        setDepositDetailsOpen(false)
+        setSelectedDeposit(null)
       } catch (error: any) {
         console.error("Approve gift box deposit error", error)
         toast({
@@ -419,6 +446,8 @@ export function GiftBoxAdminPanel() {
         }
         toast({ title: "Deposit rejected", description: "The entrant has been notified." })
         await refreshAll()
+        setDepositDetailsOpen(false)
+        setSelectedDeposit(null)
       } catch (error: any) {
         console.error("Reject gift box deposit error", error)
         toast({
@@ -629,6 +658,17 @@ export function GiftBoxAdminPanel() {
                               <div className="flex justify-end gap-2">
                                 <Button
                                   size="sm"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSelectedDeposit(deposit)
+                                    setDepositDetailsOpen(true)
+                                  }}
+                                  disabled={isProcessing}
+                                >
+                                  Details
+                                </Button>
+                                <Button
+                                  size="sm"
                                   onClick={() => void handleApproveDeposit(deposit.id)}
                                   disabled={isProcessing}
                                 >
@@ -653,6 +693,97 @@ export function GiftBoxAdminPanel() {
               )}
             </CardContent>
           </Card>
+
+          <Dialog
+            open={depositDetailsOpen}
+            onOpenChange={(open) => {
+              setDepositDetailsOpen(open)
+              if (!open) {
+                setSelectedDeposit(null)
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Deposit review details</DialogTitle>
+                <DialogDescription>
+                  Inspect the player's submission before approving their Gift Box entry.
+                </DialogDescription>
+              </DialogHeader>
+              {selectedDeposit ? (
+                <div className="space-y-4 text-sm">
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-muted-foreground">Player</p>
+                    <p className="font-medium">
+                      {selectedDeposit.user?.name || "Unnamed"}
+                      {selectedDeposit.user?.email ? ` • ${selectedDeposit.user.email}` : ""}
+                    </p>
+                    {selectedDeposit.user?.referralCode ? (
+                      <p className="text-xs text-muted-foreground">
+                        Referral: {selectedDeposit.user.referralCode}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-muted-foreground">Transaction hash</p>
+                    <p className="font-mono text-xs break-all">{selectedDeposit.txId}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Network</p>
+                      <p>{selectedDeposit.network}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Amount</p>
+                      <p>{currencyFormatter.format(selectedDeposit.amount || 0)}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-muted-foreground">Deposit address</p>
+                    <p className="font-mono text-xs break-all">{selectedDeposit.address}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Submitted</p>
+                      <p>
+                        {selectedDeposit.submittedAt
+                          ? new Date(selectedDeposit.submittedAt).toLocaleString()
+                          : "Unknown"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Linked transaction</p>
+                      <p className="font-mono text-xs break-all">
+                        {selectedDeposit.transactionId || "Not linked"}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedDeposit.receipt?.url ? (
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase text-muted-foreground">Receipt</p>
+                      <a
+                        className="text-primary underline underline-offset-2"
+                        href={selectedDeposit.receipt.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View receipt
+                      </a>
+                      {selectedDeposit.receipt.uploadedAt ? (
+                        <p className="text-xs text-muted-foreground">
+                          Uploaded {new Date(selectedDeposit.receipt.uploadedAt).toLocaleString()}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No receipt attached to this deposit.</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Select a deposit to view its full details.</p>
+              )}
+            </DialogContent>
+          </Dialog>
 
           <Card>
             <CardHeader>

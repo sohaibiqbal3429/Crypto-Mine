@@ -1209,6 +1209,7 @@ type GiftBoxSeed = {
   participants: InMemoryDocument[]
   entryTransactions: InMemoryDocument[]
   payoutTransactions: InMemoryDocument[]
+  rewardTransactions: InMemoryDocument[]
 }
 
 function hashUserId(value: string): string {
@@ -1232,6 +1233,7 @@ function createGiftBoxSeed(users: InMemoryDocument[]): GiftBoxSeed {
 
   const participants: InMemoryDocument[] = []
   const entryTransactions: InMemoryDocument[] = []
+  const rewardTransactions: InMemoryDocument[] = []
 
   const previousParticipants = users.slice(0, Math.min(users.length, 5))
   const previousWinner = previousParticipants[0] ?? null
@@ -1351,7 +1353,23 @@ function createGiftBoxSeed(users: InMemoryDocument[]): GiftBoxSeed {
     },
   ]
 
-  return { cycles, participants, entryTransactions, payoutTransactions }
+  if (currentParticipants[0]) {
+    rewardTransactions.push({
+      _id: generateObjectId(),
+      userId: currentParticipants[0]._id,
+      type: "giftBoxReward",
+      amount: 30,
+      status: "approved",
+      meta: {
+        cycleId: currentCycleId,
+        note: "Demo reward for approved deposit",
+      },
+      createdAt: currentStartTime,
+      updatedAt: currentStartTime,
+    })
+  }
+
+  return { cycles, participants, entryTransactions, payoutTransactions, rewardTransactions }
 }
 
 function createTransactions(users: InMemoryDocument[], giftBoxSeed?: GiftBoxSeed): InMemoryDocument[] {
@@ -1411,6 +1429,10 @@ function createTransactions(users: InMemoryDocument[], giftBoxSeed?: GiftBoxSeed
 
   if (giftBoxSeed?.payoutTransactions?.length) {
     transactions.push(...giftBoxSeed.payoutTransactions)
+  }
+
+  if (giftBoxSeed?.rewardTransactions?.length) {
+    transactions.push(...giftBoxSeed.rewardTransactions)
   }
 
   return transactions

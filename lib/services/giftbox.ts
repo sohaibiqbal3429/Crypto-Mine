@@ -3,7 +3,7 @@ import crypto from "crypto"
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
 import GiftBoxCycle, { type GiftBoxCycleStatus, type IGiftBoxCycle } from "@/models/GiftBoxCycle"
-import GiftBoxDeposit, { type GiftBoxDepositStatus } from "@/models/GiftBoxDeposit"
+import GiftBoxDeposit, { type GiftBoxDepositStatus, type IGiftBoxDeposit } from "@/models/GiftBoxDeposit"
 import GiftBoxParticipant from "@/models/GiftBoxParticipant"
 import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
@@ -16,6 +16,7 @@ const DEFAULT_CYCLE_HOURS = 72
 const DEFAULT_WINNERS = 1
 const DEFAULT_REFUND_PERCENTAGE = 0
 const DEFAULT_DEPOSIT_ADDRESS = "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw"
+const GIFT_BOX_REWARD_AMOUNT = 30
 
 export type GiftBoxDrawTrigger = "auto" | "manual"
 
@@ -67,6 +68,12 @@ export interface GiftBoxSummaryResponse {
       txId: string
       network: string
       address: string
+      amount: number
+      transactionId: string | null
+      receipt: {
+        url: string | null
+        uploadedAt: string | null
+      } | null
     } | null
   }
 }
@@ -267,6 +274,50 @@ export async function joinGiftBoxCycle(userId: string, deposit: GiftBoxDepositDe
     throw new GiftBoxServiceError("This deposit transaction has already been used", 409)
   }
 
+  const confirmedDepositTx = await Transaction.findOne({
+    userId,
+    type: "deposit",
+    status: "approved",
+    $or: [
+      { "meta.transactionHash": normalizedTxId },
+      { "meta.transactionNumber": normalizedTxId },
+    ],
+  })
+    .sort({ createdAt: -1 })
+    .exec()
+
+  if (!confirmedDepositTx) {
+    throw new GiftBoxServiceError(
+      "We couldn't confirm this deposit on-chain yet. Wait for final confirmation and try again.",
+      400,
+    )
+  }
+
+  const duplicateByTransaction = await GiftBoxDeposit.findOne({ transactionId: confirmedDepositTx._id })
+  if (duplicateByTransaction) {
+    throw new GiftBoxServiceError("This confirmed deposit has already been submitted for the giveaway", 409)
+  }
+
+  const confirmedAmount = Number(confirmedDepositTx.amount)
+  if (!Number.isFinite(confirmedAmount) || confirmedAmount < config.ticketPrice) {
+    throw new GiftBoxServiceError(
+      `Confirmed deposits must be at least $${config.ticketPrice} to enter the giveaway`,
+      400,
+    )
+  }
+
+  const receiptMeta =
+    confirmedDepositTx.meta && typeof confirmedDepositTx.meta === "object"
+      ? (confirmedDepositTx.meta as any).receipt ?? null
+      : null
+
+  if (!receiptMeta || typeof receiptMeta.url !== "string") {
+    throw new GiftBoxServiceError(
+      "Upload your exchange receipt to the original deposit before submitting it for the Gift Box.",
+      400,
+    )
+  }
+
   const network = (deposit.network ?? "TRC20").toString().trim() || "TRC20"
   const address = (deposit.address ?? config.depositAddress).toString().trim() || config.depositAddress
 
@@ -280,6 +331,8 @@ export async function joinGiftBoxCycle(userId: string, deposit: GiftBoxDepositDe
     cycleId: cycle._id,
     reviewedAt: null,
     reviewedBy: null,
+    transactionId: confirmedDepositTx._id,
+    receipt: receiptMeta,
   })
 
   await Transaction.create({
@@ -293,18 +346,85 @@ export async function joinGiftBoxCycle(userId: string, deposit: GiftBoxDepositDe
       txId: normalizedTxId,
       network,
       address,
+      sourceTransactionId: confirmedDepositTx._id.toString(),
     },
+  })
+
+  await Transaction.updateOne(
+    { _id: confirmedDepositTx._id },
+    {
+      $set: {
+        "meta.giftBoxDepositId": depositRecord._id.toString(),
+        "meta.giftBoxCycleId": cycle._id.toString(),
+      },
+    },
+  ).catch((error) => {
+    console.error("Failed to tag confirmed deposit with gift box metadata", error)
   })
 
   await Notification.create({
     userId,
-    title: "Deposit submitted for review",
-    body: `Your $${config.ticketPrice} Gift Box deposit is pending admin approval. We'll notify you once it's processed.`,
+    title: "Your deposit is under review.",
+    body: `We received your $${config.ticketPrice} Gift Box deposit submission. You'll be notified after the review is complete.`,
     kind: "giftbox-deposit-submitted",
     metadata: { cycleId: String(cycle._id), depositId: depositRecord._id.toString() },
   })
 
   return { deposit: depositRecord, cycle }
+}
+
+async function grantGiftBoxReward(deposit: IGiftBoxDeposit, cycleId?: string | null) {
+  if (deposit.rewardTransactionId) {
+    return deposit.rewardTransactionId.toString()
+  }
+
+  await Balance.updateOne(
+    { userId: deposit.userId },
+    {
+      $inc: {
+        current: GIFT_BOX_REWARD_AMOUNT,
+        totalBalance: GIFT_BOX_REWARD_AMOUNT,
+        totalEarning: GIFT_BOX_REWARD_AMOUNT,
+      },
+      $setOnInsert: {
+        current: 0,
+        totalBalance: 0,
+        totalEarning: 0,
+        lockedCapital: 0,
+        lockedCapitalLots: [],
+        staked: 0,
+        pendingWithdraw: 0,
+        teamRewardsAvailable: 0,
+        teamRewardsClaimed: 0,
+      },
+    },
+    { upsert: true },
+  )
+
+  const rewardTx = await Transaction.create({
+    userId: deposit.userId,
+    type: "giftBoxReward",
+    amount: GIFT_BOX_REWARD_AMOUNT,
+    status: "approved",
+    meta: {
+      cycleId: cycleId ?? (deposit.cycleId ? deposit.cycleId.toString() : null),
+      depositId: deposit._id.toString(),
+      sourceTransactionId: deposit.transactionId ? deposit.transactionId.toString() : null,
+    },
+  })
+
+  await GiftBoxDeposit.updateOne(
+    { _id: deposit._id },
+    {
+      $set: {
+        rewardTransactionId: rewardTx._id,
+        rewardAmount: GIFT_BOX_REWARD_AMOUNT,
+        rewardedAt: new Date(),
+      },
+    },
+  )
+
+  return rewardTx._id.toString()
 }
 
 export async function approveGiftBoxDeposit(depositId: string, adminUserId: string) {
@@ -336,6 +456,12 @@ export async function approveGiftBoxDeposit(depositId: string, adminUserId: stri
         },
       },
     )
+
+    const refreshedDeposit = await GiftBoxDeposit.findById(deposit._id)
+    const rewardTransactionId = refreshedDeposit
+      ? await grantGiftBoxReward(refreshedDeposit, cycle._id ? cycle._id.toString() : null)
+      : null
+
     await Transaction.updateMany(
       { type: "giftBoxDeposit", "meta.depositId": deposit._id.toString() },
       { $set: { status: "approved" } },
@@ -343,9 +469,14 @@ export async function approveGiftBoxDeposit(depositId: string, adminUserId: stri
     await Notification.create({
       userId: deposit.userId,
       title: "Gift Box entry approved",
-      body: "Your deposit has been verified. You're officially entered into the Gift Box Giveaway!",
+      body: `Your deposit has been verified. We've credited a $${GIFT_BOX_REWARD_AMOUNT} Gift Box reward to your wallet.`,
       kind: "giftbox-deposit-approved",
-      metadata: { cycleId: String(cycle._id), depositId: deposit._id.toString(), entryTransactionId: null },
+      metadata: {
+        cycleId: String(cycle._id),
+        depositId: deposit._id.toString(),
+        entryTransactionId: null,
+        rewardTransactionId,
+      },
     })
     return GiftBoxParticipant.findById(existingParticipant._id)
   }
@@ -390,12 +521,22 @@ export async function approveGiftBoxDeposit(depositId: string, adminUserId: stri
     },
   )
 
+  const refreshedDeposit = await GiftBoxDeposit.findById(deposit._id)
+  const rewardTransactionId = refreshedDeposit
+    ? await grantGiftBoxReward(refreshedDeposit, cycle._id ? cycle._id.toString() : null)
+    : null
+
   await Notification.create({
     userId: deposit.userId,
     title: "Gift Box entry approved",
-    body: "Your deposit has been verified. You're officially entered into the Gift Box Giveaway!",
+    body: `Your deposit has been verified. We've credited a $${GIFT_BOX_REWARD_AMOUNT} Gift Box reward to your wallet.`,
     kind: "giftbox-deposit-approved",
-    metadata: { cycleId: String(cycle._id), depositId: deposit._id.toString(), entryTransactionId: entryTransaction._id.toString() },
+    metadata: {
+      cycleId: String(cycle._id),
+      depositId: deposit._id.toString(),
+      entryTransactionId: entryTransaction._id.toString(),
+      rewardTransactionId,
+    },
   })
 
   return participant
@@ -434,7 +575,7 @@ export async function rejectGiftBoxDeposit(depositId: string, adminUserId: strin
   await Notification.create({
     userId: deposit.userId,
     title: "Gift Box deposit rejected",
-    body: `Your Gift Box deposit was rejected. Reason: ${rejectionReason}`,
+    body: `Your Gift Box deposit was rejected. Reason: ${rejectionReason}. Please submit a new, confirmed transaction hash to try again.`,
     kind: "giftbox-deposit-rejected",
     metadata: {
       cycleId: deposit.cycleId ? deposit.cycleId.toString() : null,
@@ -647,21 +788,35 @@ export async function getGiftBoxSummaryForUser(userId: string): Promise<GiftBoxS
       isParticipant: Boolean(participant),
       joinedAt: participant ? participant.createdAt.toISOString() : null,
       lastEntryTransactionId: latestEntryTransaction ? latestEntryTransaction._id.toString() : null,
-      pendingDeposit: latestDeposit
-        ? {
-            id: latestDeposit._id.toString(),
-            status: latestDeposit.status,
-            submittedAt: latestDeposit.createdAt.toISOString(),
-            reviewedAt: latestDeposit.reviewedAt ? latestDeposit.reviewedAt.toISOString() : null,
-            rejectionReason: latestDeposit.rejectionReason ?? null,
-            txId: latestDeposit.txId,
-            network: latestDeposit.network,
-            address: latestDeposit.address,
-          }
-        : null,
-    },
+        pendingDeposit: latestDeposit
+          ? {
+              id: latestDeposit._id.toString(),
+              status: latestDeposit.status,
+              submittedAt: latestDeposit.createdAt.toISOString(),
+              reviewedAt: latestDeposit.reviewedAt ? latestDeposit.reviewedAt.toISOString() : null,
+              rejectionReason: latestDeposit.rejectionReason ?? null,
+              txId: latestDeposit.txId,
+              network: latestDeposit.network,
+              address: latestDeposit.address,
+              amount: latestDeposit.amount,
+              transactionId: latestDeposit.transactionId ? latestDeposit.transactionId.toString() : null,
+              receipt:
+                latestDeposit.receipt && typeof latestDeposit.receipt === "object"
+                  ? {
+                      url: typeof (latestDeposit.receipt as any).url === "string"
+                        ? ((latestDeposit.receipt as any).url as string)
+                        : null,
+                      uploadedAt:
+                        (latestDeposit.receipt as any).uploadedAt
+                          ? new Date((latestDeposit.receipt as any).uploadedAt).toISOString()
+                          : null,
+                    }
+                  : null,
+            }
+          : null,
+      },
+    }
   }
-}
 
 export async function updateGiftBoxSettings(update: Partial<GiftBoxConfig>) {
   const { settingsId, config: current } = await ensureSettings()
@@ -786,23 +941,37 @@ export async function getGiftBoxAdminSummary() {
         }
       : null,
     participants,
-    pendingDeposits: pendingDeposits.map((deposit) => ({
-      id: deposit._id.toString(),
-      user:
-        deposit.userId && typeof deposit.userId === "object" && "_id" in deposit.userId
-          ? {
-              id: (deposit.userId as any)._id.toString(),
-              name: (deposit.userId as any).name ?? "",
-              email: (deposit.userId as any).email ?? "",
-              referralCode: (deposit.userId as any).referralCode ?? "",
-            }
-          : null,
-      txId: deposit.txId,
-      network: deposit.network,
-      address: deposit.address,
-      amount: deposit.amount,
-      submittedAt: deposit.createdAt.toISOString(),
-    })),
+      pendingDeposits: pendingDeposits.map((deposit) => ({
+        id: deposit._id.toString(),
+        user:
+          deposit.userId && typeof deposit.userId === "object" && "_id" in deposit.userId
+            ? {
+                id: (deposit.userId as any)._id.toString(),
+                name: (deposit.userId as any).name ?? "",
+                email: (deposit.userId as any).email ?? "",
+                referralCode: (deposit.userId as any).referralCode ?? "",
+              }
+            : null,
+        txId: deposit.txId,
+        network: deposit.network,
+        address: deposit.address,
+        amount: deposit.amount,
+        submittedAt: deposit.createdAt.toISOString(),
+        transactionId: deposit.transactionId ? deposit.transactionId.toString() : null,
+        receipt:
+          deposit.receipt && typeof deposit.receipt === "object"
+            ? {
+                url:
+                  typeof (deposit.receipt as any).url === "string"
+                    ? ((deposit.receipt as any).url as string)
+                    : null,
+                uploadedAt:
+                  (deposit.receipt as any).uploadedAt
+                    ? new Date((deposit.receipt as any).uploadedAt).toISOString()
+                    : null,
+              }
+            : null,
+      })),
     config,
   }
 }

@@ -65,6 +65,12 @@ interface GiftBoxSummary {
       txId: string
       network: string
       address: string
+      amount: number
+      transactionId: string | null
+      receipt: {
+        url: string | null
+        uploadedAt: string | null
+      } | null
     } | null
   }
 }
@@ -133,6 +139,13 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
   const potSize = summary.participants * summary.config.ticketPrice
   const odds = calculateOdds(summary.participants)
   const payoutEstimate = (summary.participants * summary.config.ticketPrice * summary.config.payoutPercentage) / 100
+  const rewardAmountLabel = formatCurrency(30)
+  const pendingSubmittedLabel = pendingDeposit?.submittedAt ? formatDate(pendingDeposit.submittedAt) : null
+  const pendingReceiptUrl = pendingDeposit?.receipt?.url ?? null
+  const pendingReceiptUploadedLabel = pendingDeposit?.receipt?.uploadedAt
+    ? formatDate(pendingDeposit.receipt.uploadedAt)
+    : null
+  const pendingDepositAmountLabel = formatCurrency(pendingDeposit?.amount ?? summary.config.ticketPrice)
 
   useEffect(() => {
     setCountdown(formatCountdown(summary.nextDrawAt))
@@ -227,8 +240,8 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
       }
 
       toast({
-        title: "Submission received",
-        description: "Your deposit is pending admin review. We'll notify you once it's approved.",
+        title: "Your deposit is under review.",
+        description: "We confirmed your blockchain deposit. You'll be notified when an admin approves it.",
       })
 
       setDepositTxId("")
@@ -283,7 +296,8 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
               </h1>
               <p className="max-w-2xl text-base text-white/85">
                 Deposit {formatCurrency(summary.config.ticketPrice)} USDT to the wallet below and paste the blockchain
-                transaction hash to lock in your seat. Funds remain escrowed until the draw closes and a winner is announced.
+                transaction hash to lock in your seat. Once the transaction is confirmed and approved, a {rewardAmountLabel}
+                bonus is credited to your wallet while funds remain escrowed until the draw closes.
               </p>
               <div className="flex flex-wrap items-center gap-4">
                 <Badge className="bg-white/20 text-white">
@@ -294,6 +308,9 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
                 </Badge>
                 <Badge className="bg-white/20 text-white">
                   <Clock className="mr-2 h-4 w-4" /> Countdown: {countdown}
+                </Badge>
+                <Badge className="bg-white/20 text-white">
+                  <CheckCircle2 className="mr-2 h-4 w-4" /> {rewardAmountLabel} reward
                 </Badge>
               </div>
             </div>
@@ -367,6 +384,10 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
                 Send exactly {formatCurrency(summary.config.ticketPrice)} in USDT. Paste the transaction hash below to confirm
                 your entry. Deposits are non-refundable ({summary.config.refundPercentage}% refund rate).
               </p>
+              <p className="mt-2 text-xs text-white/75">
+                Only confirmed blockchain deposits with an attached exchange receipt are eligible. Approved reviews instantly
+                credit a {rewardAmountLabel} reward to your wallet.
+              </p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">Network</Label>
@@ -410,9 +431,26 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
                 <div className="mt-4 rounded-xl border border-white/30 bg-white/10 p-4 text-sm text-white/85">
                   <p className="font-semibold text-white">Deposit under review</p>
                   <p className="mt-1">
-                    We're verifying transaction {pendingTxLabel} on the {pendingDeposit?.network ?? "selected"} network. You'll
-                    be notified once it's approved.
+                    We're verifying transaction {pendingTxLabel} on the {pendingDeposit?.network ?? "selected"} network.
+                    {" "}
+                    {pendingSubmittedLabel ? `Submitted ${pendingSubmittedLabel}.` : ""} The review locks your
+                    {" "}
+                    {pendingDepositAmountLabel} entry, and approval unlocks an instant {rewardAmountLabel} reward.
                   </p>
+                  {pendingReceiptUrl ? (
+                    <p className="mt-2 text-xs text-white/70">
+                      Receipt:{" "}
+                      <a
+                        href={pendingReceiptUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline underline-offset-2 hover:text-white"
+                      >
+                        View upload
+                      </a>
+                      {pendingReceiptUploadedLabel ? ` (uploaded ${pendingReceiptUploadedLabel})` : ""}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               {rejectedDeposit ? (
@@ -569,6 +607,7 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground">
           <p>• Each entry requires a fresh {formatCurrency(summary.config.ticketPrice)} USDT deposit.</p>
+          <p>• The Gift Box resets every 72 hours—submit a new confirmed deposit each cycle to stay eligible.</p>
           <p>
             • Funds remain in escrow until the scheduled draw time. Once the cycle ends, the system selects a winner using the
             published fairness proof.
@@ -577,6 +616,7 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
             • The winner receives {summary.config.payoutPercentage}% of the pot directly into their in-app wallet. Remaining
             funds are retained by the platform as operational fees.
           </p>
+          <p>• Approved deposits include an immediate {rewardAmountLabel} reward credited after admin review.</p>
           <p>• Non-winners maintain their account balance; deposits are non-refundable ({summary.config.refundPercentage}%).</p>
           <p>• Entries are limited to one per account per cycle. Duplicate submissions are automatically rejected.</p>
         </CardContent>
