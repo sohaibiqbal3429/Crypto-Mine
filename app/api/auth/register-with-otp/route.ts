@@ -3,7 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import OTP from "@/models/OTP"
-import { hashPassword, signToken } from "@/lib/auth"
+import { TOKEN_MAX_AGE_SECONDS, hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
 import { isOTPExpired } from "@/lib/utils/otp"
 import { z } from "zod"
@@ -140,7 +140,8 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: TOKEN_MAX_AGE_SECONDS,
+      path: "/",
     })
 
     return response
