@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server"
 
 const JWT_SECRET = process.env.NEXTAUTH_SECRET || "your-secret-key"
 
+export const TOKEN_MAX_AGE_SECONDS = 30 * 24 * 60 * 60 // 30 days
+
 export interface JWTPayload {
   userId: string
   email: string
@@ -11,7 +13,7 @@ export interface JWTPayload {
 }
 
 export function signToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" })
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_MAX_AGE_SECONDS })
 }
 
 export function verifyToken(token: string): JWTPayload | null {

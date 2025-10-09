@@ -3,7 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import { registerSchema } from "@/lib/validations/auth"
-import { hashPassword, signToken } from "@/lib/auth"
+import { TOKEN_MAX_AGE_SECONDS, hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
 
 export async function POST(request: NextRequest) {
@@ -96,7 +96,8 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: TOKEN_MAX_AGE_SECONDS,
+      path: "/",
     })
 
     console.log("[v0] Registration completed successfully")

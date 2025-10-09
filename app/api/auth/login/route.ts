@@ -4,9 +4,7 @@ import { ZodError } from "zod"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
-import { comparePassword, signToken } from "@/lib/auth"
-
-const MAX_TOKEN_AGE = 7 * 24 * 60 * 60 // 7 days
+import { TOKEN_MAX_AGE_SECONDS, comparePassword, signToken } from "@/lib/auth"
 
 function resolveExternalLoginUrl() {
   const rawUrl =
@@ -109,7 +107,7 @@ async function proxyLoginRequest(payload: LoginInput) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: MAX_TOKEN_AGE,
+      maxAge: TOKEN_MAX_AGE_SECONDS,
       path: "/",
     })
   }
@@ -167,7 +165,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: MAX_TOKEN_AGE,
+      maxAge: TOKEN_MAX_AGE_SECONDS,
       path: "/",
     })
 

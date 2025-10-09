@@ -1,10 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
-import { usePathname } from "next/navigation"
+import { useMemo, useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { Loader2, LogOut } from "lucide-react"
 
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 export const AUTH_HIDDEN_ROUTES = [
@@ -42,6 +44,8 @@ export default function QuickActions({ mobileClassName, variant = "both" }: Quic
       <NotificationBell />
       <span className="hidden h-5 w-px bg-border/60 md:block" aria-hidden />
       <ThemeToggle />
+      <span className="hidden h-5 w-px bg-border/60 md:block" aria-hidden />
+      <LogoutAction />
     </div>
   )
 
@@ -66,5 +70,49 @@ export default function QuickActions({ mobileClassName, variant = "both" }: Quic
         </div>
       ) : null}
     </>
+  )
+}
+
+function LogoutAction() {
+  const router = useRouter()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to sign out")
+      }
+
+      router.push("/auth/login")
+      router.refresh()
+    } catch (error) {
+      console.error("Logout error", error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="rounded-full"
+      onClick={() => {
+        void handleLogout()
+      }}
+      disabled={isLoggingOut}
+      aria-label="Sign out"
+    >
+      {isLoggingOut ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <LogOut className="h-5 w-5" aria-hidden />}
+    </Button>
   )
 }
