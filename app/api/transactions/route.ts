@@ -9,6 +9,85 @@ const PROJECTION = {
   bigBlob: 0,
 }
 
+interface TransactionSummaryEntry {
+  total: number
+  count: number
+  statuses?: Record<string, { total: number; count: number }>
+}
+
+interface SanitizedTransaction {
+  _id: string
+  type: string
+  amount: number
+  status: string
+  meta: any
+  createdAt: string
+}
+
+function sanitizeTransactions(transactions: any[]): SanitizedTransaction[] {
+  return transactions.map((transaction) => ({
+    _id: String(transaction._id),
+    type: transaction.type,
+    amount: typeof transaction.amount === "number" ? transaction.amount : 0,
+    status: transaction.status ?? "pending",
+    meta: transaction.meta ?? null,
+    createdAt:
+      transaction.createdAt instanceof Date
+        ? transaction.createdAt.toISOString()
+        : new Date(transaction.createdAt ?? Date.now()).toISOString(),
+  }))
+}
+
+function buildSummaryMap(raw: Array<{ type?: string | null; status?: string | null; total?: number; count?: number }>) {
+  return raw.reduce<Record<string, TransactionSummaryEntry>>((acc, item) => {
+    const typeKey = item.type ?? "unknown"
+    const statusKey = item.status ?? "unknown"
+    if (!acc[typeKey]) {
+      acc[typeKey] = { total: 0, count: 0, statuses: {} }
+    }
+
+    acc[typeKey].total += item.total ?? 0
+    acc[typeKey].count += item.count ?? 0
+
+    if (!acc[typeKey].statuses) {
+      acc[typeKey].statuses = {}
+    }
+
+    acc[typeKey].statuses![statusKey] = {
+      total: item.total ?? 0,
+      count: item.count ?? 0,
+    }
+
+    return acc
+  }, {})
+}
+
+function normalizeLimit(value: string | null) {
+  const parsed = Number.parseInt(value ?? "20", 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 20
+  return Math.min(parsed, 200)
+}
+
+function buildDateRange(from?: string | null, to?: string | null) {
+  if (!from && !to) return undefined
+
+  const range: Record<string, Date> = {}
+  if (from) {
+    const parsedFrom = new Date(from)
+    if (!Number.isNaN(parsedFrom.getTime())) {
+      range.$gte = parsedFrom
+    }
+  }
+  if (to) {
+    const parsedTo = new Date(to)
+    if (!Number.isNaN(parsedTo.getTime())) {
+      range.$lte = parsedTo
+    }
+  }
+
+  return Object.keys(range).length > 0 ? range : undefined
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -20,16 +99,18 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type")
-    const status = searchParams.get("status") || undefined
+    const status = searchParams.get("status")
     const from = searchParams.get("from")
     const to = searchParams.get("to")
     const cursor = searchParams.get("cursor")
-    const limit = Math.min(Number(searchParams.get("limit") || "20"), 200)
+    const limit = normalizeLimit(searchParams.get("limit"))
     const queryParam = searchParams.get("q")?.trim()
 
-    const filter: Record<string, unknown> = { userId: new mongoose.Types.ObjectId(userPayload.userId) }
+    const userObjectId = new mongoose.Types.ObjectId(userPayload.userId)
 
-    if (cursor) {
+    const filter: Record<string, unknown> = { userId: userObjectId }
+
+    if (cursor && /^[a-f0-9]{24}$/i.test(cursor)) {
       filter._id = { $lt: new mongoose.Types.ObjectId(cursor) }
     }
     if (type && type !== "all") {
@@ -38,12 +119,12 @@ export async function GET(request: NextRequest) {
     if (status && status !== "all") {
       filter.status = status
     }
-    if (from || to) {
-      filter.createdAt = {
-        ...(from ? { $gte: new Date(from) } : {}),
-        ...(to ? { $lte: new Date(to) } : {}),
-      }
+
+    const dateRange = buildDateRange(from, to)
+    if (dateRange) {
+      filter.createdAt = dateRange
     }
+
     if (queryParam) {
       const or: Record<string, unknown>[] = []
       if (/^[a-f0-9]{24}$/i.test(queryParam)) {
@@ -53,33 +134,32 @@ export async function GET(request: NextRequest) {
       filter.$or = or
     }
 
-    const docs = await Transaction.find(filter, PROJECTION)
+    const transactionsPromise = Transaction.find(filter, PROJECTION)
       .sort({ _id: -1 })
       .limit(limit + 1)
       .lean()
 
-    const hasMore = docs.length > limit
-    const data = hasMore ? docs.slice(0, -1) : docs
-    const nextCursor = hasMore ? String(data[data.length - 1]._id) : null
-
-    const baseMatch: Record<string, unknown> = {
-      userId: new mongoose.Types.ObjectId(userPayload.userId),
+    const summaryMatch: Record<string, unknown> = { userId: userObjectId }
+    if (type && type !== "all") {
+      summaryMatch.type = type
     }
     if (status && status !== "all") {
-      baseMatch.status = status
+      summaryMatch.status = status
     }
-    if (type && type !== "all") {
-      baseMatch.type = type
+    if (dateRange) {
+      summaryMatch.createdAt = dateRange
     }
-    if (from || to) {
-      baseMatch.createdAt = {
-        ...(from ? { $gte: new Date(from) } : {}),
-        ...(to ? { $lte: new Date(to) } : {}),
+    if (queryParam) {
+      const summaryOr: Record<string, unknown>[] = []
+      if (/^[a-f0-9]{24}$/i.test(queryParam)) {
+        summaryOr.push({ _id: new mongoose.Types.ObjectId(queryParam) })
       }
+      summaryOr.push({ userEmail: { $regex: `^${queryParam}`, $options: "i" } })
+      summaryMatch.$or = summaryOr
     }
 
-    const summary = await Transaction.aggregate([
-      { $match: baseMatch },
+    const summaryPromise = Transaction.aggregate([
+      { $match: summaryMatch },
       {
         $group: {
           _id: { type: "$type", status: "$status" },
@@ -90,18 +170,16 @@ export async function GET(request: NextRequest) {
       { $project: { _id: 0, type: "$_id.type", status: "$_id.status", total: 1, count: 1 } },
     ]).exec()
 
-    const summaryMap = summary.reduce<Record<string, Record<string, { total: number; count: number }>>>(
-      (acc, item) => {
-        const typeKey = item.type ?? "unknown"
-        if (!acc[typeKey]) acc[typeKey] = {}
-        acc[typeKey][item.status ?? "unknown"] = { total: item.total ?? 0, count: item.count ?? 0 }
-        return acc
-      },
-      {},
-    )
+    const balanceMatch: Record<string, unknown> = { userId: userObjectId, status: "approved" }
+    if (type && type !== "all") {
+      balanceMatch.type = type
+    }
+    if (dateRange) {
+      balanceMatch.createdAt = dateRange
+    }
 
-    const balanceChanges = await Transaction.aggregate([
-      { $match: { ...baseMatch, status: "approved" } },
+    const balancePromise = Transaction.aggregate([
+      { $match: balanceMatch },
       {
         $group: {
           _id: null,
@@ -122,17 +200,37 @@ export async function GET(request: NextRequest) {
       { $project: { _id: 0 } },
     ]).exec()
 
+    const [transactions, summary, balanceChanges] = await Promise.all([
+      transactionsPromise,
+      summaryPromise,
+      balancePromise,
+    ])
+
+    const hasMore = transactions.length > limit
+    const slicedTransactions = hasMore ? transactions.slice(0, -1) : transactions
+    const nextCursor = hasMore ? String(slicedTransactions[slicedTransactions.length - 1]._id) : null
+
+    const sanitizedTransactions = sanitizeTransactions(slicedTransactions)
+    const summaryMap = buildSummaryMap(summary)
+
+    const normalizedBalance = {
+      totalDeposits: Number(balanceChanges[0]?.totalDeposits ?? 0),
+      totalWithdrawals: Number(balanceChanges[0]?.totalWithdrawals ?? 0),
+      totalEarnings: Number(balanceChanges[0]?.totalEarnings ?? 0),
+      totalCommissions: Number(balanceChanges[0]?.totalCommissions ?? 0),
+    }
+
     return NextResponse.json({
       success: true,
-      data,
+      transactions: sanitizedTransactions,
+      data: sanitizedTransactions,
       nextCursor,
-      summary: summaryMap,
-      balanceChanges: balanceChanges[0] || {
-        totalDeposits: 0,
-        totalWithdrawals: 0,
-        totalEarnings: 0,
-        totalCommissions: 0,
-      },
+      hasMore,
+      summary: Object.fromEntries(
+        Object.entries(summaryMap).map(([typeKey, value]) => [typeKey, { total: value.total, count: value.count }]),
+      ),
+      summaryBreakdown: summaryMap,
+      balanceChanges: normalizedBalance,
     })
   } catch (error) {
     console.error("Transactions error:", error)

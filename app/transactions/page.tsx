@@ -1,15 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
+
 import { Sidebar } from "@/components/layout/sidebar"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Download, Filter, TrendingUp, TrendingDown, DollarSign, Zap } from "lucide-react"
+import { Download, Filter, Loader2, TrendingDown, TrendingUp, DollarSign, Zap } from "lucide-react"
 
 interface Transaction {
   _id: string
@@ -32,50 +33,105 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [summary, setSummary] = useState<TransactionSummary>({})
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   const [filters, setFilters] = useState({
     type: "all",
     from: "",
     to: "",
   })
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  const fetchTransactions = async (options?: { append?: boolean; cursor?: string }) => {
+    const append = options?.append ?? false
+    const cursor = options?.cursor
 
-  const fetchData = async () => {
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
+
     try {
-      const [userRes, transactionsRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch(`/api/transactions?type=${filters.type}&from=${filters.from}&to=${filters.to}&limit=50`),
-      ])
+      const params = new URLSearchParams()
+      params.set("limit", "50")
+      if (filters.type && filters.type !== "all") params.set("type", filters.type)
+      if (filters.from) params.set("from", filters.from)
+      if (filters.to) params.set("to", filters.to)
+      if (cursor) params.set("cursor", cursor)
 
-      if (userRes.ok && transactionsRes.ok) {
-        const userData = await userRes.json()
-        const transactionsData = await transactionsRes.json()
-
-        setUser(userData.user)
-        setTransactions(transactionsData.transactions)
-        setSummary(transactionsData.summary)
+      const response = await fetch(`/api/transactions?${params.toString()}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch transactions (${response.status})`)
       }
+
+      const data = await response.json()
+      const incoming: Transaction[] = Array.isArray(data.transactions)
+        ? data.transactions
+        : Array.isArray(data.data)
+          ? data.data
+          : []
+
+      setTransactions((prev) => (append ? [...prev, ...incoming] : incoming))
+      setSummary(data.summary ?? {})
+      setNextCursor(data.nextCursor ?? null)
+      setHasMore(Boolean(data.hasMore) && Boolean(data.nextCursor))
     } catch (error) {
       console.error("Failed to fetch transactions:", error)
+      if (!append) {
+        setTransactions([])
+        setSummary({})
+        setNextCursor(null)
+        setHasMore(false)
+      }
     } finally {
-      setLoading(false)
+      if (append) {
+        setLoadingMore(false)
+      } else {
+        setLoading(false)
+      }
     }
   }
 
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const userRes = await fetch("/api/auth/me")
+        if (userRes.ok) {
+          const userData = await userRes.json()
+          setUser(userData.user)
+        }
+      } catch (error) {
+        console.error("Failed to fetch user:", error)
+      } finally {
+        await fetchTransactions()
+      }
+    }
+
+    void loadInitialData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const handleFilterChange = () => {
-    setLoading(true)
-    fetchData()
+    void fetchTransactions()
+  }
+
+  const handleLoadMore = () => {
+    if (!nextCursor) return
+    void fetchTransactions({ append: true, cursor: nextCursor })
   }
 
   const exportTransactions = () => {
     const csvContent = [
       ["Date", "Type", "Amount", "Status", "Description"].join(","),
-      ...transactions.map((t) =>
-        [new Date(t.createdAt).toLocaleDateString(), t.type, t.amount.toFixed(2), t.status, t.meta?.source || ""].join(
-          ",",
-        ),
+      ...transactions.map((transaction) =>
+        [
+          new Date(transaction.createdAt).toLocaleDateString(),
+          transaction.type,
+          transaction.amount.toFixed(2),
+          transaction.status,
+          transaction.meta?.source || "",
+        ].join(","),
       ),
     ].join("\n")
 
@@ -132,7 +188,7 @@ export default function TransactionsPage() {
     )
   }
 
-  if (loading) {
+  if (loading && !loadingMore) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -144,7 +200,7 @@ export default function TransactionsPage() {
     <div className="flex h-screen bg-background">
       <Sidebar user={user} />
 
-      <main className="flex-1 md:ml-64 overflow-auto">
+      <main className="flex-1 overflow-auto md:ml-64">
         <div className="p-6">
           <div className="mb-8 flex items-center justify-between">
             <div>
@@ -164,16 +220,14 @@ export default function TransactionsPage() {
             </TabsList>
 
             <TabsContent value="transactions" className="space-y-6">
-              {/* Filters */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Filter className="h-5 w-5" />
-                    Filters
+                    <Filter className="h-5 w-5" /> Filters
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <div>
                       <Select
                         value={filters.type}
@@ -198,7 +252,7 @@ export default function TransactionsPage() {
                         type="date"
                         placeholder="From date"
                         value={filters.from}
-                        onChange={(e) => setFilters((prev) => ({ ...prev, from: e.target.value }))}
+                        onChange={(event) => setFilters((prev) => ({ ...prev, from: event.target.value }))}
                       />
                     </div>
                     <div>
@@ -206,7 +260,7 @@ export default function TransactionsPage() {
                         type="date"
                         placeholder="To date"
                         value={filters.to}
-                        onChange={(e) => setFilters((prev) => ({ ...prev, to: e.target.value }))}
+                        onChange={(event) => setFilters((prev) => ({ ...prev, to: event.target.value }))}
                       />
                     </div>
                     <div>
@@ -218,12 +272,11 @@ export default function TransactionsPage() {
                 </CardContent>
               </Card>
 
-              {/* Transactions Table */}
               <Card>
                 <CardHeader>
                   <CardTitle>Recent Transactions</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -232,14 +285,14 @@ export default function TransactionsPage() {
                           <TableHead>Type</TableHead>
                           <TableHead>Amount</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead>Description</TableHead>
+                          <TableHead>Details</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {transactions.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                              No transactions found
+                            <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                              No transactions found for the selected filters.
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -268,7 +321,7 @@ export default function TransactionsPage() {
                                   {transaction.meta?.reason && (
                                     <div className="text-muted-foreground">Reason: {transaction.meta.reason}</div>
                                   )}
-                                  {transaction.meta?.profitPct && (
+                                  {typeof transaction.meta?.profitPct === "number" && (
                                     <div className="text-green-600">
                                       Profit: {transaction.meta.profitPct.toFixed(2)}%
                                     </div>
@@ -281,24 +334,46 @@ export default function TransactionsPage() {
                       </TableBody>
                     </Table>
                   </div>
+
+                  {hasMore ? (
+                    <div className="flex justify-center border-t border-muted pt-4">
+                      <Button onClick={handleLoadMore} disabled={loadingMore} variant="outline">
+                        {loadingMore ? (
+                          <span className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Loading more
+                          </span>
+                        ) : (
+                          "Load more"
+                        )}
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="summary" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(summary).map(([type, data]) => (
-                  <Card key={type}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium capitalize">{type}s</CardTitle>
-                      {getTypeBadge(type)}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">${data.total.toFixed(2)}</div>
-                      <p className="text-xs text-muted-foreground">{data.count} transactions</p>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {Object.keys(summary).length === 0 ? (
+                  <Card>
+                    <CardContent className="py-10 text-center text-muted-foreground">
+                      No summary available for the selected filters.
                     </CardContent>
                   </Card>
-                ))}
+                ) : (
+                  Object.entries(summary).map(([type, data]) => (
+                    <Card key={type}>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium capitalize">{type}s</CardTitle>
+                        {getTypeBadge(type)}
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">${data.total.toFixed(2)}</div>
+                        <p className="text-xs text-muted-foreground">{data.count} transactions</p>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             </TabsContent>
           </Tabs>
@@ -307,3 +382,4 @@ export default function TransactionsPage() {
     </div>
   )
 }
+
