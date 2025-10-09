@@ -24,11 +24,51 @@ interface SanitizedTransaction {
   createdAt: string
 }
 
+function toNumeric(value: unknown): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  if (typeof value === "bigint") {
+    return Number(value)
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  if (value && typeof value === "object") {
+    const candidate = (value as { valueOf?: () => unknown }).valueOf?.()
+
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate
+    }
+
+    if (typeof candidate === "string") {
+      const parsed = Number(candidate)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+
+    const stringified = (value as { toString?: () => string }).toString?.()
+    if (typeof stringified === "string") {
+      const parsed = Number(stringified)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+  }
+
+  return 0
+}
+
 function sanitizeTransactions(transactions: any[]): SanitizedTransaction[] {
   return transactions.map((transaction) => ({
     _id: String(transaction._id),
     type: transaction.type,
-    amount: typeof transaction.amount === "number" ? transaction.amount : 0,
+    amount: toNumeric(transaction.amount),
     status: transaction.status ?? "pending",
     meta: transaction.meta ?? null,
     createdAt:
@@ -42,20 +82,23 @@ function buildSummaryMap(raw: Array<{ type?: string | null; status?: string | nu
   return raw.reduce<Record<string, TransactionSummaryEntry>>((acc, item) => {
     const typeKey = item.type ?? "unknown"
     const statusKey = item.status ?? "unknown"
+    const total = toNumeric(item.total)
+    const count = toNumeric(item.count)
+
     if (!acc[typeKey]) {
       acc[typeKey] = { total: 0, count: 0, statuses: {} }
     }
 
-    acc[typeKey].total += item.total ?? 0
-    acc[typeKey].count += item.count ?? 0
+    acc[typeKey].total += total
+    acc[typeKey].count += count
 
     if (!acc[typeKey].statuses) {
       acc[typeKey].statuses = {}
     }
 
     acc[typeKey].statuses![statusKey] = {
-      total: item.total ?? 0,
-      count: item.count ?? 0,
+      total,
+      count,
     }
 
     return acc
