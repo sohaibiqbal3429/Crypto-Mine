@@ -24,7 +24,7 @@ export function ImportantUpdateModal() {
         showCloseButton={false}
         className="sm:max-w-md overflow-hidden rounded-xl border-0 p-0 shadow-2xl"
       >
-        <div className="bg-[#1b75bc] px-6 py-4 text-white">
+        <div className="bg-[#773004] px-6 py-4 text-white">
           <DialogTitle className="text-center text-lg font-semibold uppercase tracking-wide">
             Important Update
           </DialogTitle>
@@ -33,13 +33,11 @@ export function ImportantUpdateModal() {
           <DialogDescription asChild>
             <div className="space-y-3 text-left">
               <p className="text-foreground">
-                Dear Customer, Please accept our sincere apologies for the delay and any inconvenience this has caused.
+                Dear Investor, Please accept our sincere apologies for the delay and any inconvenience this has caused.
               </p>
               <p>
-                We are actively working to resolve this with
-                <span className="font-semibold text-[#1b75bc]"> [Specimrs/Sparic]</span>
-                {" "}and
-                <span className="font-semibold text-[#1b75bc]"> [Specim/Prgtem]</span>.
+                We are actively working to resolve this presented issues
+               
               </p>
               <p>We appreciate your patience. Thank you for your understanding.</p>
             </div>
