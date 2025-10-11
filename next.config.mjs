@@ -12,7 +12,7 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    reactCompiler: true,
+    reactCompiler: process.env.NEXT_USE_REACT_COMPILER === "true",
   },
 }
 
