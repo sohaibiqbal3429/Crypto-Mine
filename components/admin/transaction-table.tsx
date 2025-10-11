@@ -124,7 +124,7 @@ export function TransactionTable({
       setActionError("Only pending transactions can be approved.")
       return
     }
-    if (!["deposit", "withdraw"].includes(selectedTransaction.type)) {
+    if (!["deposit", "withdraw", "giftBoxDeposit"].includes(selectedTransaction.type)) {
       setActionError("This transaction type cannot be approved manually.")
       return
     }
@@ -132,10 +132,19 @@ export function TransactionTable({
     setActionLoading(true)
     setActionError(null)
     try {
-      const endpoint =
-        selectedTransaction.type === "deposit" ? "/api/admin/approve-deposit" : "/api/admin/approve-withdraw"
-      const payload: Record<string, unknown> = { transactionId: selectedTransaction._id }
-      if (selectedTransaction.type === "withdraw" && txHash.trim()) payload.txHash = txHash.trim()
+      let endpoint = ""
+      let payload: Record<string, unknown> = { transactionId: selectedTransaction._id }
+
+      if (selectedTransaction.type === "deposit") {
+        endpoint = "/api/admin/approve-deposit"
+      } else if (selectedTransaction.type === "withdraw") {
+        endpoint = "/api/admin/approve-withdraw"
+        if (txHash.trim()) payload.txHash = txHash.trim()
+      } else if (selectedTransaction.type === "giftBoxDeposit") {
+        endpoint = `/api/admin/giftbox/deposits/${selectedTransaction._id}/approve`
+        payload = {}
+      }
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,10 +174,17 @@ export function TransactionTable({
     setActionLoading(true)
     setActionError(null)
     try {
-      const response = await fetch("/api/admin/reject-transaction", {
+      const isGift = selectedTransaction.type === "giftBoxDeposit"
+      const endpoint = isGift
+        ? `/api/admin/giftbox/deposits/${selectedTransaction._id}/reject`
+        : "/api/admin/reject-transaction"
+      const body = isGift
+        ? { reason: rejectionReason.trim() }
+        : { transactionId: selectedTransaction._id, reason: rejectionReason.trim() }
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transactionId: selectedTransaction._id, reason: rejectionReason.trim() }),
+        body: JSON.stringify(body),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
@@ -188,7 +204,9 @@ export function TransactionTable({
 
   const selectedIsActionable =
     selectedTransaction?.status === "pending" &&
-    (selectedTransaction?.type === "deposit" || selectedTransaction?.type === "withdraw")
+    (selectedTransaction?.type === "deposit" ||
+      selectedTransaction?.type === "withdraw" ||
+      selectedTransaction?.type === "giftBoxDeposit")
   const requiresTxHash = selectedTransaction?.type === "withdraw"
 
   // ---- Row (desktop + mobile) ----
@@ -196,7 +214,9 @@ export function TransactionTable({
     (transaction: AdminTransactionRecord) => {
       const requiresAction =
         transaction.status === "pending" &&
-        (transaction.type === "deposit" || transaction.type === "withdraw")
+        (transaction.type === "deposit" ||
+          transaction.type === "withdraw" ||
+          transaction.type === "giftBoxDeposit")
 
       return (
         <>
@@ -358,6 +378,7 @@ export function TransactionTable({
                 <SelectItem value="withdraw">Withdraw</SelectItem>
                 <SelectItem value="earn">Earnings</SelectItem>
                 <SelectItem value="commission">Commission</SelectItem>
+                <SelectItem value="giftBoxDeposit">Blind Box Deposit</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -508,16 +529,60 @@ export function TransactionTable({
               {/* ADDITIONAL (meta) */}
               <div className="rounded-md border p-3">
                 <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Additional</h4>
-                <div className="space-y-2">
-                  {selectedTransaction.meta
-                    ? Object.entries(selectedTransaction.meta).map(([k, v]) => (
-                        <div key={k} className="rounded bg-muted/40 p-2 text-xs">
-                          <div className="mb-1 font-medium uppercase text-muted-foreground">{k}</div>
-                          <div className="break-words">{typeof v === "object" ? JSON.stringify(v) : String(v)}</div>
-                        </div>
-                      ))
-                    : <div className="text-muted-foreground">—</div>}
-                </div>
+                {selectedTransaction.type === "giftBoxDeposit" ? (
+                  <div className="grid gap-2 text-xs">
+                    <div className="grid gap-1">
+                      <span className="font-semibold uppercase text-muted-foreground">Network</span>
+                      <span>{selectedTransaction.meta?.network ?? "BEP20"}</span>
+                    </div>
+                    <div className="grid gap-1">
+                      <span className="font-semibold uppercase text-muted-foreground">Deposit address</span>
+                      <span className="break-all font-mono text-xs">
+                        {selectedTransaction.meta?.address ?? "Bep20"}
+                      </span>
+                    </div>
+                    <div className="grid gap-1">
+                      <span className="font-semibold uppercase text-muted-foreground">TX Hash</span>
+                      <span className="break-all font-mono text-xs">
+                        {selectedTransaction.meta?.transactionHash || selectedTransaction.meta?.txHash || "—"}
+                      </span>
+                    </div>
+                    <div className="grid gap-1">
+                      <span className="font-semibold uppercase text-muted-foreground">Entries</span>
+                      <span>{selectedTransaction.meta?.entries ?? 1}</span>
+                    </div>
+                    {selectedTransaction.meta?.receiptUrl ? (
+                      <div className="grid gap-1">
+                        <span className="font-semibold uppercase text-muted-foreground">Receipt</span>
+                        <a
+                          href={selectedTransaction.meta.receiptUrl as string}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          View uploaded receipt
+                        </a>
+                      </div>
+                    ) : null}
+                    {selectedTransaction.meta?.rejectionReason ? (
+                      <div className="grid gap-1">
+                        <span className="font-semibold uppercase text-muted-foreground">Rejection reason</span>
+                        <span className="text-destructive">{selectedTransaction.meta.rejectionReason as string}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-xs">
+                    {selectedTransaction.meta
+                      ? Object.entries(selectedTransaction.meta).map(([k, v]) => (
+                          <div key={k} className="rounded bg-muted/40 p-2">
+                            <div className="mb-1 font-medium uppercase text-muted-foreground">{k}</div>
+                            <div className="break-words">{typeof v === "object" ? JSON.stringify(v) : String(v)}</div>
+                          </div>
+                        ))
+                      : <div className="text-muted-foreground">—</div>}
+                  </div>
+                )}
               </div>
 
               {/* ACTION INPUTS */}

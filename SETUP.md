@@ -45,6 +45,10 @@ NEXTAUTH_SECRET=your-super-secret-random-string-here-32-chars-min
 **DEPOSIT_WALLET_NETWORK** (optional): Network label shown alongside the deposit address
 - Example: `TRON (TRC20)` or `Ethereum`
 
+**GIFTBOX_BEP20_ADDRESS** (optional): Override the Blind Box Lucky Draw deposit address shown on the home page and used for validations.
+- Default fallback: `Bep20`
+- Example: `0xde7b66da140bdbe9d113966c690eeb9cff83d756`
+
 ### 3. Install Dependencies
 \`\`\`bash
 npm install
@@ -77,6 +81,12 @@ Visit `http://localhost:3000` to see your application!
 - ✅ MongoDB integration with Mongoose
 - ✅ JWT-based authentication
 - ✅ Role-based access control
+- ✅ Blind Box Lucky Draw with BEP20 deposit review and admin control panel
+
+## Blind Box Lucky Draw Overview
+- Users access the Lucky Draw from the home page, submit $10 (BEP20) deposits with TX hash + receipt, and track their status while awaiting admin review.
+- Admins can approve or reject deposits directly from the Transactions table, then manage rounds, participants, winner selection, and payouts from the Blind Box Control Panel.
+- The control panel includes CSV export, action logging, manual bans, and configurable round settings (duration, prize pool %, deposit address, multiples toggle).
 
 ## Default Admin Account
 After seeding, you can login with:

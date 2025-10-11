@@ -30,6 +30,9 @@ function serializeTransaction(transaction: any, origin: string) {
     }
     meta.receipt = receipt
   }
+  if (typeof meta.receiptUrl === "string") {
+    meta.receiptUrl = resolveAbsoluteUrl(meta.receiptUrl, origin)
+  }
 
   const populatedUser = transaction.userId && typeof transaction.userId === "object" ? transaction.userId : null
 
@@ -47,6 +50,15 @@ function serializeTransaction(transaction: any, origin: string) {
     amount: Number(transaction.amount ?? 0),
     status: transaction.status ?? "pending",
     meta,
+    network: transaction.network ?? meta.network ?? null,
+    address: transaction.address ?? meta.address ?? null,
+    txHash: transaction.txHash ?? meta.transactionHash ?? null,
+    receiptUrl: transaction.receiptUrl
+      ? resolveAbsoluteUrl(transaction.receiptUrl, origin)
+      : typeof meta.receiptUrl === "string"
+        ? meta.receiptUrl
+        : null,
+    reason: transaction.reason ?? meta.rejectionReason ?? null,
     createdAt:
       transaction.createdAt instanceof Date
         ? transaction.createdAt.toISOString()
@@ -61,6 +73,11 @@ const TRANSACTION_PROJECTION = {
   type: 1,
   createdAt: 1,
   userId: 1,
+  network: 1,
+  address: 1,
+  txHash: 1,
+  receiptUrl: 1,
+  reason: 1,
 }
 
 export async function GET(request: NextRequest) {

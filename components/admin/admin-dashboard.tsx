@@ -13,6 +13,7 @@ import type {
   AdminTransactionRecord,
   AdminUserRecord,
 } from "@/lib/types/admin"
+import { GiftboxControlPanel } from "@/components/admin/giftbox-control-panel"
 
 interface AdminDashboardProps {
   initialUser: AdminSessionUser
@@ -253,6 +254,8 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
             filters={transactionFilters}
             onFiltersChange={handleTransactionFiltersChange}
           />
+
+          <GiftboxControlPanel />
 
           <UserTable
             items={users}

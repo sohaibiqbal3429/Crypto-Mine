@@ -25,6 +25,15 @@ export interface ISettings extends Document {
     highTierPct: number
     highTierStartAt: number
   }
+  blindBox?: {
+    roundDurationHours: number
+    minDeposit: number
+    entryValue: number
+    allowMultiples: boolean
+    network: string
+    address: string
+    prizePoolPercent: number
+  }
 }
 
 const SettingsSchema = new Schema<ISettings>(
@@ -50,6 +59,15 @@ const SettingsSchema = new Schema<ISettings>(
       startAtDeposit: { type: Number, default: 50 },
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },
+    },
+    blindBox: {
+      roundDurationHours: { type: Number, default: 72 },
+      minDeposit: { type: Number, default: 10 },
+      entryValue: { type: Number, default: 10 },
+      allowMultiples: { type: Boolean, default: true },
+      network: { type: String, default: "BEP20" },
+      address: { type: String, default: "Bep20" },
+      prizePoolPercent: { type: Number, default: 100 },
     },
   },
   {
