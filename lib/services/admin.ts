@@ -2,6 +2,7 @@
 import dbConnect from "@/lib/mongodb"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import Settings from "@/models/Settings"
 import type { AdminInitialData, AdminStats } from "@/lib/types/admin"
 
 const toNumber = (value: unknown): number => {
@@ -18,6 +19,9 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     throw new Error("Admin access required")
   }
 
+  const settingsDoc = await Settings.findOne().select({ "gating.activeMinDeposit": 1 }).lean()
+  const activeDepositThreshold = settingsDoc?.gating?.activeMinDeposit ?? 80
+
   const [
     totalUsersCount,
     activeUsersCount,
@@ -26,7 +30,7 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     pendingWithdrawalCount,
   ] = await Promise.all([
     User.estimatedDocumentCount().exec(),
-    User.countDocuments({ status: "active" }).exec(),
+    User.countDocuments({ depositTotal: { $gte: activeDepositThreshold } }).exec(),
     User.aggregate([
       {
         $group: {
