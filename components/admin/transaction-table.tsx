@@ -71,6 +71,11 @@ export function TransactionTable({
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null)
+  const [giftBoxActionState, setGiftBoxActionState] = useState<{
+    id: string
+    action: "approve" | "reject"
+  } | null>(null)
+  const [giftBoxActionError, setGiftBoxActionError] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -235,6 +240,52 @@ export function TransactionTable({
     }
   }, [handleDialogOpenChange, onRefresh, rejectionReason, selectedTransaction])
 
+  const handleGiftBoxDecision = useCallback(
+    async (transaction: AdminTransactionRecord, depositId: string, action: "approve" | "reject") => {
+      if (transaction.type !== "giftBoxDeposit") {
+        return
+      }
+
+      if (transaction.status !== "pending") {
+        setGiftBoxActionError("Only pending Gift Box deposits can be reviewed.")
+        return
+      }
+
+      if (!depositId) {
+        setGiftBoxActionError("Missing Gift Box deposit identifier for this transaction.")
+        return
+      }
+
+      setGiftBoxActionError(null)
+      setGiftBoxActionState({ id: transaction._id, action })
+
+      try {
+        const endpoint =
+          action === "approve"
+            ? `/api/admin/giftbox/deposits/${depositId}/approve`
+            : `/api/admin/giftbox/deposits/${depositId}/reject`
+
+        const response = await fetch(endpoint, { method: "POST" })
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(
+            data.error || `Failed to ${action === "approve" ? "accept" : "reject"} the Gift Box deposit`,
+          )
+        }
+
+        await Promise.resolve(onRefresh())
+      } catch (error) {
+        setGiftBoxActionError(
+          error instanceof Error ? error.message : "Unable to process the Gift Box deposit action.",
+        )
+      } finally {
+        setGiftBoxActionState(null)
+      }
+    },
+    [onRefresh],
+  )
+
   const selectedIsActionable =
     selectedTransaction?.status === "pending" &&
     (selectedTransaction?.type === "deposit" || selectedTransaction?.type === "withdraw")
@@ -255,9 +306,17 @@ export function TransactionTable({
         return null
       }
 
+      const isGiftBoxDeposit = transaction.type === "giftBoxDeposit"
       const requiresAction =
         transaction.status === "pending" &&
-        (transaction.type === "deposit" || transaction.type === "withdraw")
+        (transaction.type === "deposit" || transaction.type === "withdraw" || isGiftBoxDeposit)
+      const giftBoxDepositId =
+        isGiftBoxDeposit && typeof transaction.meta?.depositId === "string"
+          ? (transaction.meta.depositId as string)
+          : null
+      const isGiftBoxActionLoading = giftBoxActionState?.id === transaction._id
+      const isGiftBoxApproving = isGiftBoxActionLoading && giftBoxActionState?.action === "approve"
+      const isGiftBoxRejecting = isGiftBoxActionLoading && giftBoxActionState?.action === "reject"
 
       return (
         <div
@@ -293,7 +352,7 @@ export function TransactionTable({
           <div className="text-xs text-muted-foreground">
             {new Date(transaction.createdAt).toLocaleString()}
           </div>
-          <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto md:justify-end">
+          <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto md:justify-end md:pl-2">
             {requiresAction ? (
               <Badge variant="outline" className="uppercase">
                 Action needed
@@ -303,15 +362,40 @@ export function TransactionTable({
               size="sm"
               variant="ghost"
               onClick={() => openDetails(transaction)}
-              className="gap-1 w-full justify-center md:w-auto"
+              className="w-full justify-center gap-1 md:w-auto"
             >
               <Eye className="h-4 w-4" /> Review
             </Button>
+            {isGiftBoxDeposit && transaction.status === "pending" ? (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "approve") : null
+                  }
+                  disabled={isGiftBoxActionLoading || !giftBoxDepositId}
+                  className="w-full justify-center gap-1 md:w-auto"
+                >
+                  {isGiftBoxApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "reject") : null
+                  }
+                  disabled={isGiftBoxActionLoading || !giftBoxDepositId}
+                  className="w-full justify-center gap-1 md:w-auto"
+                >
+                  {isGiftBoxRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Reject
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       )
     },
-    [items, openDetails],
+    [giftBoxActionState, handleGiftBoxDecision, items, openDetails],
   )
 
   return (
@@ -333,6 +417,11 @@ export function TransactionTable({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {giftBoxActionError ? (
+          <Alert variant="destructive">
+            <AlertDescription>{giftBoxActionError}</AlertDescription>
+          </Alert>
+        ) : null}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
