@@ -152,7 +152,7 @@ export async function seedDatabase(): Promise<SeedResult> {
   const existingSettings = await settingsModel.findOne()
   if (!existingSettings) {
     await settingsModel.create({
-      mining: { minPct: 1.5, maxPct: 5.0, roiCap: 3 },
+      mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80 },
       joiningBonus: { threshold: 100, pct: 5 },
       commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },

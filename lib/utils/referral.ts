@@ -7,12 +7,23 @@ export function generateReferralCode(): string {
   return result
 }
 
+function resolveDailyMiningPct(minPct?: number, maxPct?: number): number {
+  if (typeof minPct === "number" && !Number.isNaN(minPct) && minPct > 0) {
+    return minPct
+  }
+
+  if (typeof maxPct === "number" && !Number.isNaN(maxPct) && maxPct > 0) {
+    return maxPct
+  }
+
+  return 1.5
+}
+
 export function calculateMiningProfit(baseAmount: number, minPct?: number, maxPct?: number): number {
   if (baseAmount <= 0) return 0
 
-  const pct = typeof minPct === "number" && typeof maxPct === "number" ? (minPct + maxPct) / 2 : 1.5
-  const appliedPct = pct || 1.5
-  const profit = (baseAmount * appliedPct) / 100
+  const pct = resolveDailyMiningPct(minPct, maxPct)
+  const profit = (baseAmount * pct) / 100
 
   return Math.round(profit * 100) / 100
 }
@@ -23,8 +34,8 @@ export function hasReachedROICap(earnedTotal: number, depositTotal: number, roiC
 
 export function calculateEstimatedDailyEarnings(baseAmount: number, minPct?: number, maxPct?: number): number {
   if (baseAmount <= 0) return 0
-  const pct = typeof minPct === "number" && typeof maxPct === "number" ? (minPct + maxPct) / 2 : 1.5
-  return Math.round(((baseAmount * (pct || 1.5)) / 100) * 100) / 100
+  const pct = resolveDailyMiningPct(minPct, maxPct)
+  return Math.round(((baseAmount * pct) / 100) * 100) / 100
 }
 
 export function calculateROIProgress(earnedTotal: number, depositTotal: number, roiCap: number): number {
