@@ -24,9 +24,19 @@ import type { AdminUserRecord } from "@/lib/types/admin"
 import { getNextLevelRequirement } from "@/lib/utils/leveling"
 
 const DESKTOP_ROW_HEIGHT = 128
-const MOBILE_ROW_HEIGHT = 200
-const MOBILE_BREAKPOINT = 768
 const VIRTUAL_LIST_HEIGHT = 540
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)")
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
+  return isMobile
+}
 
 export interface UserFilters {
   status?: string
@@ -56,30 +66,13 @@ export function UserTable({
   filters,
   onFiltersChange,
 }: UserTableProps) {
+  const isMobile = useIsMobile()
+
   const [selectedUser, setSelectedUser] = useState<AdminUserRecord | null>(null)
   const [showAdjustDialog, setShowAdjustDialog] = useState(false)
   const [adjustForm, setAdjustForm] = useState({ type: "add", amount: "", reason: "" })
   const [adjustLoading, setAdjustLoading] = useState(false)
   const [adjustError, setAdjustError] = useState<string | null>(null)
-
-  const [rowHeight, setRowHeight] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
-      ? MOBILE_ROW_HEIGHT
-      : DESKTOP_ROW_HEIGHT,
-  )
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const updateRowHeight = () => {
-      setRowHeight(window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_ROW_HEIGHT : DESKTOP_ROW_HEIGHT)
-    }
-
-    updateRowHeight()
-    window.addEventListener("resize", updateRowHeight)
-
-    return () => window.removeEventListener("resize", updateRowHeight)
-  }, [])
 
   const debouncedSearch = useMemo(
     () =>
@@ -88,14 +81,11 @@ export function UserTable({
       }, 300),
     [filters, onFiltersChange],
   )
-
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch])
 
   const handleItemsRendered = useCallback(
     ({ visibleStopIndex }: ListOnItemsRenderedProps) => {
-      if (hasMore && !loading && visibleStopIndex >= items.length - 5) {
-        onLoadMore()
-      }
+      if (hasMore && !loading && visibleStopIndex >= items.length - 5) onLoadMore()
     },
     [hasMore, loading, items.length, onLoadMore],
   )
@@ -115,12 +105,10 @@ export function UserTable({
       reason: adjustForm.reason.trim(),
       type: adjustForm.type,
     }
-
     if (!payload.amount || !payload.reason) {
       setAdjustError("Amount and reason are required")
       return
     }
-
     setAdjustLoading(true)
     try {
       const response = await fetch("/api/admin/adjust-balance", {
@@ -128,12 +116,10 @@ export function UserTable({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
         throw new Error(data.error || "Failed to adjust balance")
       }
-
       setShowAdjustDialog(false)
       onRefresh()
     } catch (exception) {
@@ -143,50 +129,88 @@ export function UserTable({
     }
   }, [adjustForm.amount, adjustForm.reason, adjustForm.type, onRefresh, selectedUser])
 
-  const renderRow = useCallback(
-    ({ index, style }: { index: number; style: CSSProperties }) => {
-      const user = items[index]
-      if (!user) return null
-
+  // ---- Row (desktop + mobile) ----
+  const RowInner = useCallback(
+    (user: AdminUserRecord) => {
       const nextRequirement = getNextLevelRequirement(user.level)
       const progressLabel =
         nextRequirement !== null ? `${user.directActiveCount} / ${nextRequirement}` : `${user.directActiveCount} / —`
 
       return (
-        <div
-          key={user._id}
-          style={style}
-          className="grid grid-cols-1 gap-3 border-b px-4 py-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr] md:items-center md:gap-4"
-        >
+        <>
+          {/* Left: user */}
           <div className="space-y-1 md:col-span-2">
-            <div className="font-medium">{user.name}</div>
+            <div className="font-medium leading-tight">{user.name || "Unknown"}</div>
             <div className="text-xs text-muted-foreground">{user.email}</div>
             <div className="text-xs font-mono text-muted-foreground">{user.referralCode}</div>
+
+            {/* Mobile summary */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground md:hidden">
+              <span className="flex items-center gap-2">
+                <Badge variant="secondary" className="capitalize">Lvl {user.level}</Badge>
+                <span>Prog: {progressLabel}</span>
+              </span>
+              <span className="font-mono">${user.depositTotal.toFixed(2)}</span>
+              <span>Bal ${user.balance.current.toFixed(2)}</span>
+              <span className="opacity-80">Earn ${user.balance.totalEarning.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="text-xs text-muted-foreground">
+
+          {/* Right: actions top-right on mobile */}
+          <div className="col-start-2 row-start-1 flex items-center justify-end gap-2 md:col-start-5">
+            <Badge
+              variant={user.status === "active" ? "default" : "secondary"}
+              className="capitalize"
+              title={`Status: ${user.status ?? "inactive"}`}
+            >
+              {user.status ?? "inactive"}
+            </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => openAdjustDialog(user)}
+              className="gap-1 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Adjust balance"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden xs:inline">Adjust</span>
+            </Button>
+          </div>
+
+          {/* Desktop columns */}
+          <div className="hidden text-xs text-muted-foreground md:block">
             <div>Level {user.level}</div>
             <div>Progress: {progressLabel}</div>
           </div>
-          <div className="text-sm font-mono">
+          <div className="hidden text-sm font-mono md:block">
             <div>${user.depositTotal.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">Withdraw ${user.withdrawTotal.toFixed(2)}</div>
           </div>
-          <div className="text-sm font-mono">
+          <div className="hidden text-sm font-mono md:block">
             <div>Balance ${user.balance.current.toFixed(2)}</div>
             <div className="text-xs text-muted-foreground">Earnings ${user.balance.totalEarning.toFixed(2)}</div>
           </div>
-          <div className="flex items-center justify-between gap-2">
-            <Badge variant={user.status === "active" ? "default" : "secondary"} className="capitalize">
-              {user.status ?? "inactive"}
-            </Badge>
-            <Button size="sm" variant="ghost" onClick={() => openAdjustDialog(user)} className="gap-1">
-              <Settings className="h-4 w-4" /> Adjust
-            </Button>
-          </div>
+        </>
+      )
+    },
+    [openAdjustDialog],
+  )
+
+  const renderRow = useCallback(
+    ({ index, style }: { index: number; style: CSSProperties }) => {
+      const user = items[index]
+      if (!user) return null
+      return (
+        <div
+          key={user._id}
+          style={style}
+          className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b px-4 py-3 text-sm sm:px-6 md:grid-cols-[2fr_1fr_1fr_1fr_1fr] md:items-center md:gap-4"
+        >
+          {RowInner(user)}
         </div>
       )
     },
-    [items, openAdjustDialog],
+    [RowInner, items],
   )
 
   return (
@@ -204,6 +228,7 @@ export function UserTable({
           </Alert>
         )}
 
+        {/* Filters */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="user-search">Search users</Label>
@@ -263,7 +288,7 @@ export function UserTable({
             <List
               height={VIRTUAL_LIST_HEIGHT}
               itemCount={items.length}
-              itemSize={rowHeight}
+              itemSize={DESKTOP_ROW_HEIGHT}
               width="100%"
               onItemsRendered={handleItemsRendered}
             >
@@ -281,51 +306,96 @@ export function UserTable({
         </div>
       </CardContent>
 
+      {/* WIDE, NO-SCROLL MODAL */}
       <Dialog open={showAdjustDialog} onOpenChange={setShowAdjustDialog}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="w-[min(1200px,95vw)] max-w-none overflow-visible p-6">
+          <DialogHeader className="pb-2">
             <DialogTitle>Adjust balance</DialogTitle>
             <DialogDescription>
               Update the balance for {selectedUser?.name}. This action is recorded in the audit log.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={adjustForm.type} onValueChange={(value) => setAdjustForm((prev) => ({ ...prev, type: value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="add">Add funds</SelectItem>
-                  <SelectItem value="subtract">Remove funds</SelectItem>
-                </SelectContent>
-              </Select>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* USER SNAPSHOT */}
+            <div className="rounded-md border p-3">
+              <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">User</h4>
+              <div className="space-y-1 text-sm">
+                <div><span className="text-xs uppercase text-muted-foreground">Name</span><div className="font-medium">{selectedUser?.name || "Unknown"}</div></div>
+                <div><span className="text-xs uppercase text-muted-foreground">Email</span><div className="break-all text-muted-foreground">{selectedUser?.email || "—"}</div></div>
+                <div><span className="text-xs uppercase text-muted-foreground">User ID</span><div className="font-mono text-xs">{selectedUser?._id || "—"}</div></div>
+                <div><span className="text-xs uppercase text-muted-foreground">Referral</span><div className="text-muted-foreground">{selectedUser?.referralCode || "—"}</div></div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="adjust-amount">Amount</Label>
-              <Input
-                id="adjust-amount"
-                type="number"
-                value={adjustForm.amount}
-                onChange={(event) => setAdjustForm((prev) => ({ ...prev, amount: event.target.value }))}
-              />
+
+            {/* BALANCES */}
+            <div className="rounded-md border p-3">
+              <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Balances</h4>
+              <div className="space-y-1 text-sm font-mono">
+                <div>Deposit ${selectedUser?.depositTotal.toFixed(2) ?? "0.00"}</div>
+                <div>Withdraw ${selectedUser?.withdrawTotal.toFixed(2) ?? "0.00"}</div>
+                <div>Balance ${selectedUser?.balance.current.toFixed(2) ?? "0.00"}</div>
+                <div>Earnings ${selectedUser?.balance.totalEarning.toFixed(2) ?? "0.00"}</div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="adjust-reason">Reason</Label>
-              <Textarea
-                id="adjust-reason"
-                value={adjustForm.reason}
-                onChange={(event) => setAdjustForm((prev) => ({ ...prev, reason: event.target.value }))}
-              />
+
+            {/* LEVEL */}
+            <div className="rounded-md border p-3">
+              <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Level</h4>
+              <div className="space-y-1 text-sm">
+                <div>Level {selectedUser?.level}</div>
+                <div>Direct Active: {selectedUser?.directActiveCount}</div>
+                <Badge variant={selectedUser?.status === "active" ? "default" : "secondary"} className="capitalize">
+                  {selectedUser?.status ?? "inactive"}
+                </Badge>
+              </div>
             </div>
-            {adjustError && (
-              <Alert variant="destructive">
-                <AlertDescription>{adjustError}</AlertDescription>
-              </Alert>
-            )}
+
+            {/* FORM (spans all on desktop) */}
+            <div className="md:col-span-3 grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={adjustForm.type}
+                  onValueChange={(value) => setAdjustForm((prev) => ({ ...prev, type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="add">Add funds</SelectItem>
+                    <SelectItem value="subtract">Remove funds</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="adjust-amount">Amount</Label>
+                <Input
+                  id="adjust-amount"
+                  type="number"
+                  value={adjustForm.amount}
+                  onChange={(e) => setAdjustForm((prev) => ({ ...prev, amount: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-1"></div>
+              <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="adjust-reason">Reason</Label>
+                <Textarea
+                  id="adjust-reason"
+                  value={adjustForm.reason}
+                  onChange={(e) => setAdjustForm((prev) => ({ ...prev, reason: e.target.value }))}
+                />
+              </div>
+            </div>
           </div>
-          <DialogFooter>
+
+          {adjustError && (
+            <Alert variant="destructive" className="mt-2">
+              <AlertDescription>{adjustError}</AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter className="mt-2">
             <Button variant="ghost" onClick={() => setShowAdjustDialog(false)} disabled={adjustLoading}>
               Cancel
             </Button>
