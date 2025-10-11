@@ -23,7 +23,9 @@ import { Loader2, RefreshCw, Settings } from "lucide-react"
 import type { AdminUserRecord } from "@/lib/types/admin"
 import { getNextLevelRequirement } from "@/lib/utils/leveling"
 
-const ROW_HEIGHT = 128
+const DESKTOP_ROW_HEIGHT = 128
+const MOBILE_ROW_HEIGHT = 200
+const MOBILE_BREAKPOINT = 768
 const VIRTUAL_LIST_HEIGHT = 540
 
 export interface UserFilters {
@@ -59,6 +61,25 @@ export function UserTable({
   const [adjustForm, setAdjustForm] = useState({ type: "add", amount: "", reason: "" })
   const [adjustLoading, setAdjustLoading] = useState(false)
   const [adjustError, setAdjustError] = useState<string | null>(null)
+
+  const [rowHeight, setRowHeight] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT
+      ? MOBILE_ROW_HEIGHT
+      : DESKTOP_ROW_HEIGHT,
+  )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const updateRowHeight = () => {
+      setRowHeight(window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_ROW_HEIGHT : DESKTOP_ROW_HEIGHT)
+    }
+
+    updateRowHeight()
+    window.addEventListener("resize", updateRowHeight)
+
+    return () => window.removeEventListener("resize", updateRowHeight)
+  }, [])
 
   const debouncedSearch = useMemo(
     () =>
@@ -242,7 +263,7 @@ export function UserTable({
             <List
               height={VIRTUAL_LIST_HEIGHT}
               itemCount={items.length}
-              itemSize={ROW_HEIGHT}
+              itemSize={rowHeight}
               width="100%"
               onItemsRendered={handleItemsRendered}
             >
