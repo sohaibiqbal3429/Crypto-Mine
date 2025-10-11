@@ -422,7 +422,7 @@ export function GiftBoxAdminPanel() {
         if (!response.ok) {
           throw new Error(data.error || "Unable to approve deposit")
         }
-        toast({ title: "Deposit approved", description: "Participant added to the Gift Box cycle." })
+        toast({ title: "Deposit accepted", description: "Participant added to the Gift Box cycle." })
         await refreshAll()
         setDepositDetailsOpen(false)
         setSelectedDeposit(null)
@@ -700,7 +700,7 @@ export function GiftBoxAdminPanel() {
                                   onClick={() => void handleApproveDeposit(deposit.id)}
                                   disabled={isProcessing}
                                 >
-                                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Approve"}
+                                  {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Accept"}
                                 </Button>
                                 <Button
                                   size="sm"
@@ -843,7 +843,7 @@ export function GiftBoxAdminPanel() {
                       {reviewingDepositId === selectedDeposit.id ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : null}
-                      Approve deposit
+                      Accept deposit
                     </Button>
                   </DialogFooter>
                 </>
