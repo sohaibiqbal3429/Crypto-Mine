@@ -127,9 +127,10 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
 
   const pendingDeposit = summary.userStatus.pendingDeposit
   const awaitingReview = pendingDeposit?.status === "pending"
+  const acceptedDeposit = pendingDeposit?.status === "approved"
   const rejectedDeposit = pendingDeposit?.status === "rejected"
   const alreadyJoined = summary.userStatus.isParticipant
-  const disableJoin = alreadyJoined || awaitingReview
+  const disableJoin = alreadyJoined || awaitingReview || acceptedDeposit
   const pendingTxLabel = pendingDeposit?.txId ? `${pendingDeposit.txId.slice(0, 10)}…` : "your transaction"
   const participantLabel = useMemo(
     () => new Intl.NumberFormat("en-US").format(summary.participants),
@@ -453,9 +454,19 @@ export function GiftBoxDashboard({ initialSummary, initialHistory }: GiftBoxDash
                   ) : null}
                 </div>
               ) : null}
+              {acceptedDeposit ? (
+                <div className="mt-4 rounded-xl border border-emerald-300/60 bg-emerald-500/20 p-4 text-sm text-emerald-50">
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200/80">Status: Submitted</p>
+                  <p className="mt-1 font-semibold text-emerald-100">Submission accepted</p>
+                  <p className="mt-1">
+                    Your Gift Box giveaway entry has been submitted successfully. You're locked in for the next draw and
+                    will receive your instant reward shortly.
+                  </p>
+                </div>
+              ) : null}
               {rejectedDeposit ? (
                 <div className="mt-4 rounded-xl border border-rose-300/60 bg-rose-500/20 p-4 text-sm text-rose-100">
-                  <p className="font-semibold text-rose-50">Deposit rejected</p>
+                  <p className="font-semibold text-rose-50">Request rejected</p>
                   <p className="mt-1">
                     {rejectedDeposit.rejectionReason || "Please submit a new transaction hash to try again."}
                   </p>
