@@ -263,20 +263,30 @@ export function TransactionTable({
         <div
           key={transaction._id}
           style={style}
-          className="grid grid-cols-1 gap-2 border-b px-4 py-3 text-sm md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:items-center md:gap-4"
+          className="flex flex-col gap-4 border-b px-4 py-4 text-sm sm:flex-row sm:items-center sm:justify-between md:grid md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] md:gap-4"
         >
-          <div className="space-y-1 md:col-span-2">
+          <div className="space-y-3 text-left md:col-span-2">
             <div className="font-medium">{transaction.userId?.name || "Unknown"}</div>
             <div className="text-xs text-muted-foreground">{transaction.userId?.email}</div>
             <div className="text-xs font-mono text-muted-foreground">{transaction._id}</div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground md:hidden">
+              <span className="flex items-center gap-2">
+                <Badge variant="secondary" className="capitalize">
+                  {transaction.type}
+                </Badge>
+                <span>${transaction.amount.toFixed(2)}</span>
+              </span>
+              <span className="capitalize">{transaction.status}</span>
+              <span>{new Date(transaction.createdAt).toLocaleString()}</span>
+            </div>
           </div>
-          <div>
+          <div className="hidden md:block">
             <Badge variant="secondary" className="capitalize">
               {transaction.type}
             </Badge>
           </div>
-          <div className="font-mono">${transaction.amount.toFixed(2)}</div>
-          <div>
+          <div className="hidden font-mono md:block">${transaction.amount.toFixed(2)}</div>
+          <div className="hidden md:block">
             <Badge
               variant={
                 transaction.status === "approved"
@@ -290,10 +300,10 @@ export function TransactionTable({
               {transaction.status}
             </Badge>
           </div>
-          <div className="text-xs text-muted-foreground">
+          <div className="hidden text-xs text-muted-foreground md:block">
             {new Date(transaction.createdAt).toLocaleString()}
           </div>
-          <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto md:justify-end">
+          <div className="flex w-full items-center justify-end gap-2 md:w-auto">
             {requiresAction ? (
               <Badge variant="outline" className="uppercase">
                 Action needed
@@ -303,7 +313,7 @@ export function TransactionTable({
               size="sm"
               variant="ghost"
               onClick={() => openDetails(transaction)}
-              className="gap-1 w-full justify-center md:w-auto"
+              className="w-full justify-center gap-1 sm:w-auto md:w-auto"
             >
               <Eye className="h-4 w-4" /> Review
             </Button>
@@ -402,6 +412,10 @@ export function TransactionTable({
         </div>
 
         <div className="overflow-hidden rounded-md border">
+          <div className="flex items-center justify-between bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+            <span>User</span>
+            <span>Actions</span>
+          </div>
           <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
             <span className="col-span-2">User</span>
             <span>Type</span>
