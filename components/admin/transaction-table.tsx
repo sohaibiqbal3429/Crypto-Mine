@@ -432,7 +432,7 @@ export function TransactionTable({
         </div>
       </CardContent>
       <Dialog open={detailOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[90vh] w-full max-w-5xl overflow-y-auto space-y-6">
+        <DialogContent className="max-h-[95vh] w-full max-w-4xl overflow-y-auto space-y-6">
           <DialogHeader>
             <DialogTitle>Transaction details</DialogTitle>
             <DialogDescription>Review the request and approve or reject it from this panel.</DialogDescription>
