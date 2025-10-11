@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { CheckCircle2, Clock, Gift, Users, DollarSign, Loader2 } from "lucide-react"
+import { CheckCircle2, Clock, Users, DollarSign, Loader2 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { formatCurrency } from "@/lib/utils/formatting"
 import type { LucideIcon } from "lucide-react"
@@ -24,10 +24,10 @@ interface Task {
 }
 
 const iconMap: Record<Task["type"], LucideIcon> = {
-  daily: Gift,
+  daily: CheckCircle2,
   referral: Users,
   deposit: DollarSign,
-  mining: Gift,
+  mining: CheckCircle2,
 }
 
 export default function TasksPage() {
@@ -143,7 +143,7 @@ export default function TasksPage() {
 
           <div className="grid gap-6">
             {tasks.map((task) => {
-              const Icon = iconMap[task.type] ?? Gift
+              const Icon = iconMap[task.type] ?? CheckCircle2
               const progressPercentage = task.target > 0 ? (task.progress / task.target) * 100 : 0
 
               return (
@@ -196,7 +196,7 @@ export default function TasksPage() {
                             </>
                           ) : (
                             <>
-                              <Gift className="mr-2 h-4 w-4" />
+                              <DollarSign className="mr-2 h-4 w-4" />
                               Claim Reward
                             </>
                           )}

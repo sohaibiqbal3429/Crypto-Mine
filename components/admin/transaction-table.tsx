@@ -85,10 +85,7 @@ export function TransactionTable({
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null)
-  const [giftBoxActionState, setGiftBoxActionState] = useState<{ id: string; action: "approve" | "reject" } | null>(
-    null,
-  )
-  const [giftBoxActionError, setGiftBoxActionError] = useState<string | null>(null)
+  
 
   useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch])
 
@@ -187,38 +184,7 @@ export function TransactionTable({
     }
   }, [handleDialogOpenChange, onRefresh, rejectionReason, selectedTransaction])
 
-  const handleGiftBoxDecision = useCallback(
-    async (transaction: AdminTransactionRecord, depositId: string, action: "approve" | "reject") => {
-      if (transaction.type !== "giftBoxDeposit") return
-      if (transaction.status !== "pending") {
-        setGiftBoxActionError("Only pending Gift Box deposits can be reviewed.")
-        return
-      }
-      if (!depositId) {
-        setGiftBoxActionError("Missing Gift Box deposit identifier for this transaction.")
-        return
-      }
-      setGiftBoxActionError(null)
-      setGiftBoxActionState({ id: transaction._id, action })
-      try {
-        const endpoint =
-          action === "approve"
-            ? `/api/admin/giftbox/deposits/${depositId}/approve`
-            : `/api/admin/giftbox/deposits/${depositId}/reject`
-        const response = await fetch(endpoint, { method: "POST" })
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          throw new Error(data.error || `Failed to ${action === "approve" ? "accept" : "reject"} the Gift Box deposit`)
-        }
-        await Promise.resolve(onRefresh())
-      } catch (error) {
-        setGiftBoxActionError(error instanceof Error ? error.message : "Unable to process the Gift Box deposit action.")
-      } finally {
-        setGiftBoxActionState(null)
-      }
-    },
-    [onRefresh],
-  )
+  
 
   const selectedIsActionable =
     selectedTransaction?.status === "pending" &&
@@ -228,17 +194,9 @@ export function TransactionTable({
   // ---- Row (desktop + mobile) ----
   const RowInner = useCallback(
     (transaction: AdminTransactionRecord) => {
-      const isGiftBoxDeposit = transaction.type === "giftBoxDeposit"
       const requiresAction =
         transaction.status === "pending" &&
-        (transaction.type === "deposit" || transaction.type === "withdraw" || isGiftBoxDeposit)
-      const giftBoxDepositId =
-        isGiftBoxDeposit && typeof transaction.meta?.depositId === "string"
-          ? (transaction.meta.depositId as string)
-          : null
-      const isGiftBoxActionLoading = giftBoxActionState?.id === transaction._id
-      const isGiftBoxApproving = isGiftBoxActionLoading && giftBoxActionState?.action === "approve"
-      const isGiftBoxRejecting = isGiftBoxActionLoading && giftBoxActionState?.action === "reject"
+        (transaction.type === "deposit" || transaction.type === "withdraw")
 
       return (
         <>
@@ -284,35 +242,7 @@ export function TransactionTable({
                 <span className="hidden xs:inline">Review</span>
               </Button>
 
-              {isGiftBoxDeposit && transaction.status === "pending" ? (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "approve") : null
-                    }
-                    disabled={isGiftBoxActionLoading || !giftBoxDepositId}
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60"
-                    aria-label="Accept"
-                  >
-                    {isGiftBoxApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                    <span className="hidden xs:inline">Accept</span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "reject") : null
-                    }
-                    disabled={isGiftBoxActionLoading || !giftBoxDepositId}
-                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-60"
-                    aria-label="Reject"
-                  >
-                    {isGiftBoxRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                    <span className="hidden xs:inline">Reject</span>
-                  </Button>
-                </>
-              ) : null}
+              
             </div>
           </div>
 
@@ -344,7 +274,7 @@ export function TransactionTable({
         </>
       )
     },
-    [giftBoxActionState, handleGiftBoxDecision, openDetails],
+    [openDetails],
   )
 
   const renderRow = useCallback(
@@ -383,11 +313,7 @@ export function TransactionTable({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        {giftBoxActionError ? (
-          <Alert variant="destructive">
-            <AlertDescription>{giftBoxActionError}</AlertDescription>
-          </Alert>
-        ) : null}
+        
 
         {/* Filters */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

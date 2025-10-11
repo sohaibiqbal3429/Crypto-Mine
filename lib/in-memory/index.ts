@@ -25,11 +25,6 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
-  giftBoxCycles: { winnerUserId: { collection: "users" } },
-  giftBoxParticipants: {
-    userId: { collection: "users" },
-    cycleId: { collection: "giftBoxCycles" },
-  },
 }
 
 const DEMO_PASSWORD = "admin123"
@@ -271,15 +266,9 @@ class InMemoryDatabase {
     this.collections.set("miningSessions", new InMemoryCollection("miningSessions", createMiningSessions(users)))
     this.collections.set("settings", new InMemoryCollection("settings", createSettings()))
     this.collections.set("commissionRules", new InMemoryCollection("commissionRules", createCommissionRules()))
-    const giftBoxSeed = createGiftBoxSeed(users)
-    this.collections.set("giftBoxCycles", new InMemoryCollection("giftBoxCycles", giftBoxSeed.cycles))
-    this.collections.set(
-      "giftBoxParticipants",
-      new InMemoryCollection("giftBoxParticipants", giftBoxSeed.participants),
-    )
     this.collections.set(
       "transactions",
-      new InMemoryCollection("transactions", createTransactions(users, giftBoxSeed)),
+      new InMemoryCollection("transactions", createTransactions(users)),
     )
     this.collections.set("notifications", new InMemoryCollection("notifications", createNotifications(users)))
     this.collections.set("walletAddresses", new InMemoryCollection("walletAddresses", createWalletAddresses(users)))
@@ -319,8 +308,6 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "MiningSession", collection: db.getCollection("miningSessions") },
     { name: "Settings", collection: db.getCollection("settings") },
     { name: "CommissionRule", collection: db.getCollection("commissionRules") },
-    { name: "GiftBoxCycle", collection: db.getCollection("giftBoxCycles") },
-    { name: "GiftBoxParticipant", collection: db.getCollection("giftBoxParticipants") },
     { name: "Transaction", collection: db.getCollection("transactions") },
     { name: "Notification", collection: db.getCollection("notifications") },
     { name: "WalletAddress", collection: db.getCollection("walletAddresses") },
@@ -949,15 +936,6 @@ function createSettings(): InMemoryDocument[] {
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80, capitalLockDays: 30 },
       joiningBonus: { threshold: 100, pct: 5 },
       commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
-      giftBox: {
-        ticketPrice: 10,
-        payoutPercentage: 90,
-        cycleHours: 72,
-        winnersCount: 1,
-        autoDrawEnabled: true,
-        refundPercentage: 0,
-        depositAddress: "TRhSCE8igyVmMuuRqukZEQDkn3MuEAdvfw",
-      },
       createdAt: now,
       updatedAt: now,
     },
@@ -1204,175 +1182,12 @@ function createCommissionRules(): InMemoryDocument[] {
   ]
 }
 
-type GiftBoxSeed = {
-  cycles: InMemoryDocument[]
-  participants: InMemoryDocument[]
-  entryTransactions: InMemoryDocument[]
-  payoutTransactions: InMemoryDocument[]
-  rewardTransactions: InMemoryDocument[]
-}
-
 function hashUserId(value: string): string {
   return createHash("sha256").update(value).digest("hex")
 }
 
-function createGiftBoxSeed(users: InMemoryDocument[]): GiftBoxSeed {
-  const now = new Date()
-  const cycleHours = 72
-  const cycleMs = cycleHours * 60 * 60 * 1000
-  const ticketPrice = 10
-  const payoutPercentage = 90
 
-  const currentCycleId = generateObjectId()
-  const previousCycleId = generateObjectId()
-
-  const currentStartTime = new Date(now.getTime() - 12 * 60 * 60 * 1000)
-  const currentEndTime = new Date(currentStartTime.getTime() + cycleMs)
-  const previousStartTime = new Date(currentStartTime.getTime() - cycleMs)
-  const previousEndTime = currentStartTime
-
-  const participants: InMemoryDocument[] = []
-  const entryTransactions: InMemoryDocument[] = []
-  const rewardTransactions: InMemoryDocument[] = []
-
-  const previousParticipants = users.slice(0, Math.min(users.length, 5))
-  const previousWinner = previousParticipants[0] ?? null
-
-  previousParticipants.forEach((user, index) => {
-    const joinedAt = new Date(previousStartTime.getTime() + index * 60 * 60 * 1000)
-    participants.push({
-      _id: generateObjectId(),
-      userId: user._id,
-      cycleId: previousCycleId,
-      hashedUserId: hashUserId(String(user._id)),
-      status: "active",
-      depositId: null,
-      createdAt: joinedAt,
-      updatedAt: previousEndTime,
-    })
-    entryTransactions.push({
-      _id: generateObjectId(),
-      userId: user._id,
-      type: "giftBoxEntry",
-      amount: ticketPrice,
-      status: "approved",
-      meta: { cycleId: previousCycleId },
-      createdAt: joinedAt,
-      updatedAt: joinedAt,
-    })
-  })
-
-  const currentParticipants = users.slice(0, Math.min(users.length, 3))
-  currentParticipants.forEach((user, index) => {
-    const joinedAt = new Date(currentStartTime.getTime() + index * 45 * 60 * 1000)
-    participants.push({
-      _id: generateObjectId(),
-      userId: user._id,
-      cycleId: currentCycleId,
-      hashedUserId: hashUserId(String(user._id)),
-      status: "active",
-      depositId: null,
-      createdAt: joinedAt,
-      updatedAt: joinedAt,
-    })
-    entryTransactions.push({
-      _id: generateObjectId(),
-      userId: user._id,
-      type: "giftBoxEntry",
-      amount: ticketPrice,
-      status: "approved",
-      meta: { cycleId: currentCycleId },
-      createdAt: joinedAt,
-      updatedAt: joinedAt,
-    })
-  })
-
-  const payoutTransactions: InMemoryDocument[] = []
-  let payoutTxId: string | null = null
-
-  if (previousWinner) {
-    payoutTxId = generateObjectId()
-    payoutTransactions.push({
-      _id: payoutTxId,
-      userId: previousWinner._id,
-      type: "giftBoxPayout",
-      amount: Math.round((ticketPrice * previousParticipants.length * payoutPercentage) / 100),
-      status: "approved",
-      meta: { cycleId: previousCycleId, note: "Gift box demo payout" },
-      createdAt: previousEndTime,
-      updatedAt: previousEndTime,
-    })
-  }
-
-  const fairnessProof = {
-    serverSeed: randomBytes(32).toString("hex"),
-    clientSeed: randomBytes(16).toString("hex"),
-    nonce: previousParticipants.length,
-    hash: randomBytes(32).toString("hex"),
-    winnerIndex: 0,
-  }
-
-  const cycles: InMemoryDocument[] = [
-    {
-      _id: previousCycleId,
-      status: "completed",
-      startTime: previousStartTime,
-      endTime: previousEndTime,
-      ticketPrice,
-      payoutPercentage,
-      totalParticipants: previousParticipants.length,
-      winnerUserId: previousWinner?._id ?? null,
-      payoutTxId,
-      winnerSnapshot: previousWinner
-        ? {
-            userId: previousWinner._id,
-            name: previousWinner.name,
-            referralCode: previousWinner.referralCode,
-            email: previousWinner.email,
-            creditedAt: previousEndTime,
-          }
-        : null,
-      fairnessProof,
-      createdAt: previousStartTime,
-      updatedAt: previousEndTime,
-    },
-    {
-      _id: currentCycleId,
-      status: "open",
-      startTime: currentStartTime,
-      endTime: currentEndTime,
-      ticketPrice,
-      payoutPercentage,
-      totalParticipants: currentParticipants.length,
-      winnerUserId: null,
-      payoutTxId: null,
-      winnerSnapshot: null,
-      fairnessProof: null,
-      createdAt: currentStartTime,
-      updatedAt: now,
-    },
-  ]
-
-  if (currentParticipants[0]) {
-    rewardTransactions.push({
-      _id: generateObjectId(),
-      userId: currentParticipants[0]._id,
-      type: "giftBoxReward",
-      amount: 30,
-      status: "approved",
-      meta: {
-        cycleId: currentCycleId,
-        note: "Demo reward for approved deposit",
-      },
-      createdAt: currentStartTime,
-      updatedAt: currentStartTime,
-    })
-  }
-
-  return { cycles, participants, entryTransactions, payoutTransactions, rewardTransactions }
-}
-
-function createTransactions(users: InMemoryDocument[], giftBoxSeed?: GiftBoxSeed): InMemoryDocument[] {
+function createTransactions(users: InMemoryDocument[]): InMemoryDocument[] {
   const now = new Date()
   const transactions: InMemoryDocument[] = []
 
@@ -1423,17 +1238,6 @@ function createTransactions(users: InMemoryDocument[], giftBoxSeed?: GiftBoxSeed
     )
   })
 
-  if (giftBoxSeed?.entryTransactions?.length) {
-    transactions.push(...giftBoxSeed.entryTransactions)
-  }
-
-  if (giftBoxSeed?.payoutTransactions?.length) {
-    transactions.push(...giftBoxSeed.payoutTransactions)
-  }
-
-  if (giftBoxSeed?.rewardTransactions?.length) {
-    transactions.push(...giftBoxSeed.rewardTransactions)
-  }
 
   return transactions
 }
@@ -1485,3 +1289,4 @@ function createWalletAddresses(users: InMemoryDocument[]): InMemoryDocument[] {
 export function getDemoCredentials() {
   return { email: "admin@cryptomining.com", password: DEMO_PASSWORD }
 }
+

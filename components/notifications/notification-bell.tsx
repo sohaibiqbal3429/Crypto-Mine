@@ -39,8 +39,9 @@ export function NotificationBell() {
       const response = await fetch("/api/notifications?limit=10")
       if (response.ok) {
         const data = await response.json()
-        setNotifications(data.notifications)
-        setUnreadCount(data.unreadCount)
+        const list = Array.isArray(data.notifications) ? data.notifications : []
+        setNotifications(list)
+        setUnreadCount(list.reduce((acc: number, n: any) => acc + (n?.read ? 0 : 1), 0))
       }
     } catch (error) {
       console.error("Failed to fetch notifications:", error)
@@ -104,12 +105,6 @@ export function NotificationBell() {
         return "⚠️"
       case "mining-reward":
         return "⛏️"
-      case "giftbox-cycle-started":
-        return "🧾"
-      case "giftbox-joined":
-        return "🎫"
-      case "giftbox-won":
-        return "🎁"
       default:
         return "📢"
     }
