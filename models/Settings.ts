@@ -40,7 +40,7 @@ const SettingsSchema = new Schema<ISettings>(
   {
     mining: {
       minPct: { type: Number, default: 1.5 },
-      maxPct: { type: Number, default: 5.0 },
+      maxPct: { type: Number, default: 1.5 },
       roiCap: { type: Number, default: 3 },
     },
     gating: {

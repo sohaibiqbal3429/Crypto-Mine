@@ -9,8 +9,8 @@ import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
 import { applyTeamProfitOverrides } from "@/lib/utils/commission"
 
 const DEFAULT_MINING_SETTINGS = {
-  minPct: 2.5,
-  maxPct: 2.5,
+  minPct: 1.5,
+  maxPct: 1.5,
   roiCap: 3,
 }
 
@@ -78,8 +78,8 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
   }
 
   const settings = {
-    minPct: DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: DEFAULT_MINING_SETTINGS.maxPct,
+    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
+    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
     roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
   const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
@@ -150,8 +150,8 @@ export async function performMiningClick(userId: string) {
   }
 
   const settings = {
-    minPct: DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: DEFAULT_MINING_SETTINGS.maxPct,
+    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
+    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
     roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
 

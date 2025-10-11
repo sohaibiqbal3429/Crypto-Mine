@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/auth"
 import dbConnect from "@/lib/mongodb"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import Settings from "@/models/Settings"
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,9 +20,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const settingsDoc = await Settings.findOne().select({ "gating.activeMinDeposit": 1 }).lean()
+    const activeDepositThreshold = settingsDoc?.gating?.activeMinDeposit ?? 80
+
     const [totalUsers, activeUsers, totalsAggregate, pendingDeposits, pendingWithdrawals] = await Promise.all([
       User.estimatedDocumentCount().exec(),
-      User.countDocuments({ status: "active" }).exec(),
+      User.countDocuments({ depositTotal: { $gte: activeDepositThreshold } }).exec(),
       User.aggregate([
         {
           $group: {
