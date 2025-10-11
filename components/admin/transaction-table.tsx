@@ -339,45 +339,57 @@ export function TransactionTable({
               <span>{new Date(transaction.createdAt).toLocaleString()}</span>
             </div>
           </div>
-          <div className="row-start-1 flex flex-col items-end gap-2 md:col-start-6 md:row-start-1 md:items-end">
+          <div className="row-start-1 flex flex-wrap items-center justify-end gap-2 md:col-start-6 md:row-start-1">
             {requiresAction ? (
-              <Badge variant="outline" className="self-end uppercase">
+              <Badge variant="outline" className="rounded-full px-3 py-1 text-xs uppercase tracking-wide">
                 Action needed
               </Badge>
             ) : null}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => openDetails(transaction)}
-              className="min-w-[112px] justify-center gap-1 transition-colors hover:bg-secondary/80"
-            >
-              <Eye className="h-4 w-4" /> Review
-            </Button>
-            {isGiftBoxDeposit && transaction.status === "pending" ? (
-              <div className="flex w-full flex-col gap-2 md:w-auto">
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "approve") : null
-                  }
-                  disabled={isGiftBoxActionLoading || !giftBoxDepositId}
-                  className="min-w-[112px] justify-center gap-1 md:w-full"
-                >
-                  {isGiftBoxApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Accept
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "reject") : null
-                  }
-                  disabled={isGiftBoxActionLoading || !giftBoxDepositId}
-                  className="min-w-[112px] justify-center gap-1 md:w-full"
-                >
-                  {isGiftBoxRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Reject
-                </Button>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => openDetails(transaction)}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:bg-secondary/80 hover:shadow-sm"
+              >
+                <Eye className="h-4 w-4" /> Review
+              </Button>
+              {isGiftBoxDeposit && transaction.status === "pending" ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "approve") : null
+                    }
+                    disabled={isGiftBoxActionLoading || !giftBoxDepositId}
+                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:shadow-sm disabled:opacity-60"
+                  >
+                    {isGiftBoxApproving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Accept
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      giftBoxDepositId ? void handleGiftBoxDecision(transaction, giftBoxDepositId, "reject") : null
+                    }
+                    disabled={isGiftBoxActionLoading || !giftBoxDepositId}
+                    className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all hover:-translate-y-[1px] hover:shadow-sm disabled:opacity-60"
+                  >
+                    {isGiftBoxRejecting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    Reject
+                  </Button>
+                </>
+              ) : null}
+            </div>
           </div>
           <div className="hidden md:flex md:col-start-2 md:row-start-1 md:items-start md:gap-2 md:pl-2">
             <Badge variant="secondary" className="capitalize">
@@ -387,19 +399,18 @@ export function TransactionTable({
           <div className="hidden font-mono md:flex md:col-start-3 md:row-start-1 md:items-start">
             ${transaction.amount.toFixed(2)}
           </div>
-          <div className="hidden md:flex md:col-start-4 md:row-start-1 md:items-start">
-            <Badge
-              variant={
+          <div className="hidden md:flex md:col-start-4 md:row-start-1 md:items-center">
+            <span
+              className={
                 transaction.status === "approved"
-                  ? "default"
+                  ? "rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
                   : transaction.status === "pending"
-                    ? "secondary"
-                    : "destructive"
+                    ? "rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700"
+                    : "rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700"
               }
-              className="capitalize"
             >
               {transaction.status}
-            </Badge>
+            </span>
           </div>
           <div className="hidden text-xs text-muted-foreground md:flex md:col-start-5 md:row-start-1 md:items-start">
             {new Date(transaction.createdAt).toLocaleString()}
