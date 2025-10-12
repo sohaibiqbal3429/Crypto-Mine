@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Check, Copy } from "lucide-react"
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,7 @@ interface LuckyDrawDepositModalProps {
 }
 
 const FIXED_AMOUNT = 10
+const LUCKY_DRAW_DEPOSIT_ADDRESS = "0xde7b66da140bdbe9d113966c690eeb9cff83d756"
 
 export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDrawDepositModalProps) {
   const { toast } = useToast()
@@ -27,6 +29,8 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
   const [receiptInputKey, setReceiptInputKey] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [addressCopied, setAddressCopied] = useState(false)
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -42,6 +46,14 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
       }
     }
   }, [receiptPreview])
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
     const file = event.target.files?.[0] ?? null
@@ -63,6 +75,26 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
       return null
     })
     setReceiptInputKey(Date.now())
+  }
+
+  const handleCopyAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(LUCKY_DRAW_DEPOSIT_ADDRESS)
+      setAddressCopied(true)
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setAddressCopied(false)
+        copyTimeoutRef.current = null
+      }, 2000)
+    } catch (copyError) {
+      console.error("Lucky draw deposit address copy failed", copyError)
+      toast({
+        variant: "destructive",
+        description: "Unable to copy the deposit address automatically. Please copy it manually.",
+      })
+    }
   }
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
@@ -153,6 +185,40 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
           <div className="space-y-2">
             <Label htmlFor="lucky-draw-amount">Amount</Label>
             <Input id="lucky-draw-amount" readOnly value={`$${FIXED_AMOUNT.toFixed(2)}`} className="bg-muted" />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="lucky-draw-address">Deposit address (BEP20)</Label>
+            <div className="space-y-2 rounded-lg border border-dashed p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  id="lucky-draw-address"
+                  readOnly
+                  value={LUCKY_DRAW_DEPOSIT_ADDRESS}
+                  className="font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleCopyAddress}
+                  className="sm:w-auto"
+                >
+                  {addressCopied ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" /> Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-4 w-4" /> Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Send $10 USDT via the BEP20 network to this address before submitting your transaction hash and
+                receipt.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">

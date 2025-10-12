@@ -228,11 +228,12 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           throw new Error(data.error || "Unable to load transactions")
         }
         const payload = await response.json()
+        const records = Array.isArray(payload.data) ? (payload.data as AdminTransactionRecord[]) : []
         const nextCursor = payload.nextCursor ?? null
         transactionCursorRef.current = nextCursor
         setTransactionCursor(nextCursor)
         setTransactionHasMore(Boolean(nextCursor))
-        setTransactions((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+        setTransactions((prev) => (isReset ? records : [...prev, ...records]))
       } catch (error) {
         console.error(error)
         setTransactionError(error instanceof Error ? error.message : "Unable to load transactions")
@@ -275,11 +276,12 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           throw new Error(data.error || "Unable to load users")
         }
         const payload = await response.json()
+        const records = Array.isArray(payload.data) ? (payload.data as AdminUserRecord[]) : []
         const nextCursor = payload.nextCursor ?? null
         userCursorRef.current = nextCursor
         setUserCursor(nextCursor)
         setUserHasMore(Boolean(nextCursor))
-        setUsers((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+        setUsers((prev) => (isReset ? records : [...prev, ...records]))
       } catch (error) {
         console.error(error)
         setUserError(error instanceof Error ? error.message : "Unable to load users")
