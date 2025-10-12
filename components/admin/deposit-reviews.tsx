@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { Check, Loader2, RefreshCw, X } from "lucide-react"
 
 import type { LuckyDrawDepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -136,12 +137,16 @@ export function AdminDepositsTable({
                 </TableCell>
               </TableRow>
             ) : (
-              deposits.map((deposit) => (
-                <TableRow key={deposit.id} className="bg-background/50">
-                  <TableCell className="font-medium">{deposit.userName ?? "Unknown participant"}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1 text-xs text-muted-foreground">
-                      <div className="text-foreground">${deposit.amountUsd.toFixed(2)} submitted</div>
+              deposits.map((deposit) => {
+                const amountUsd = ensureNumber(deposit.amountUsd, 0)
+                const submittedAt = ensureDate(deposit.submittedAt)
+
+                return (
+                  <TableRow key={deposit.id} className="bg-background/50">
+                    <TableCell className="font-medium">{deposit.userName ?? "Unknown participant"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="text-foreground">${amountUsd.toFixed(2)} submitted</div>
                       <div>
                         <span className="text-foreground">Tx:</span>{" "}
                         <span className="break-all font-mono">{deposit.txHash || "—"}</span>
@@ -167,33 +172,34 @@ export function AdminDepositsTable({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell>{renderReceipt(deposit)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {format(new Date(deposit.submittedAt), "MMM d, yyyy • HH:mm:ss")}
-                  </TableCell>
-                  <TableCell>{renderStatusBadge(deposit.status)}</TableCell>
-                  <TableCell className="space-x-2 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-emerald-400/40 text-emerald-600"
-                      disabled={deposit.status !== "PENDING" || loading}
-                      onClick={() => onAccept(deposit.id)}
-                    >
-                      <Check className="mr-1 h-4 w-4" /> Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-rose-400/40 text-rose-500"
-                      disabled={deposit.status !== "PENDING" || loading}
-                      onClick={() => onReject(deposit.id)}
-                    >
-                      <X className="mr-1 h-4 w-4" /> Reject
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+                    <TableCell>{renderReceipt(deposit)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {submittedAt ? format(submittedAt, "MMM d, yyyy • HH:mm:ss") : "Unknown"}
+                    </TableCell>
+                    <TableCell>{renderStatusBadge(deposit.status)}</TableCell>
+                    <TableCell className="space-x-2 text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-emerald-400/40 text-emerald-600"
+                        disabled={deposit.status !== "PENDING" || loading}
+                        onClick={() => onAccept(deposit.id)}
+                      >
+                        <Check className="mr-1 h-4 w-4" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-rose-400/40 text-rose-500"
+                        disabled={deposit.status !== "PENDING" || loading}
+                        onClick={() => onReject(deposit.id)}
+                      >
+                        <X className="mr-1 h-4 w-4" /> Reject
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

@@ -21,6 +21,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, RefreshCw, Download, Eye, Check, X } from "lucide-react"
 import type { AdminTransactionRecord } from "@/lib/types/admin"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
 const ROW_HEIGHT = 112
 const VIRTUAL_LIST_HEIGHT = 540
@@ -190,10 +191,16 @@ export function TransactionTable({
     selectedTransaction?.status === "pending" &&
     (selectedTransaction?.type === "deposit" || selectedTransaction?.type === "withdraw")
   const requiresTxHash = selectedTransaction?.type === "withdraw"
+  const selectedAmount = selectedTransaction ? ensureNumber(selectedTransaction.amount, 0) : 0
+  const selectedCreatedAt = selectedTransaction ? ensureDate(selectedTransaction.createdAt) : null
+  const selectedCreatedAtLabel = selectedCreatedAt ? selectedCreatedAt.toLocaleString() : "Unknown"
 
   // ---- Row (desktop + mobile) ----
   const RowInner = useCallback(
     (transaction: AdminTransactionRecord) => {
+      const amount = ensureNumber(transaction.amount, 0)
+      const createdAt = ensureDate(transaction.createdAt)
+      const createdAtLabel = createdAt ? createdAt.toLocaleString() : "Unknown"
       const requiresAction =
         transaction.status === "pending" &&
         (transaction.type === "deposit" || transaction.type === "withdraw")
@@ -212,10 +219,10 @@ export function TransactionTable({
                 <Badge variant="secondary" className="capitalize">
                   {transaction.type}
                 </Badge>
-                <span className="font-mono">${transaction.amount.toFixed(2)}</span>
+                <span className="font-mono">${amount.toFixed(2)}</span>
               </span>
               <span className="capitalize">{transaction.status}</span>
-              <span>{new Date(transaction.createdAt).toLocaleString()}</span>
+              <span>{createdAtLabel}</span>
             </div>
           </div>
 
@@ -253,7 +260,7 @@ export function TransactionTable({
             </Badge>
           </div>
           <div className="hidden font-mono md:flex md:col-start-3 md:row-start-1 md:items-start">
-            ${transaction.amount.toFixed(2)}
+            ${amount.toFixed(2)}
           </div>
           <div className="hidden md:flex md:col-start-4 md:row-start-1 md:items-center">
             <span
@@ -269,7 +276,7 @@ export function TransactionTable({
             </span>
           </div>
           <div className="hidden text-xs text-muted-foreground md:flex md:col-start-5 md:row-start-1 md:items-start">
-            {new Date(transaction.createdAt).toLocaleString()}
+            {createdAtLabel}
           </div>
         </>
       )
@@ -494,8 +501,8 @@ export function TransactionTable({
                       </Badge>
                     </div>
                   </div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Amount</span><div className="font-mono text-base font-semibold">${selectedTransaction.amount.toFixed(2)}</div></div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Created at</span><div>{new Date(selectedTransaction.createdAt).toLocaleString()}</div></div>
+                  <div><span className="text-xs uppercase text-muted-foreground">Amount</span><div className="font-mono text-base font-semibold">${selectedAmount.toFixed(2)}</div></div>
+                  <div><span className="text-xs uppercase text-muted-foreground">Created at</span><div>{selectedCreatedAtLabel}</div></div>
                   {selectedTransaction.meta?.transactionHash ? (
                     <div>
                       <span className="text-xs uppercase text-muted-foreground">Transaction hash</span>

@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { Award, CalendarClock, Trophy } from "lucide-react"
 
 import type { LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,6 +45,11 @@ interface AdminWinnerBoxProps {
 export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing = false, history = [] }: AdminWinnerBoxProps) {
   const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(() => deposits.find((deposit) => deposit.status === "APPROVED")?.id)
 
+  const prizePool = ensureNumber(round.prizePoolUsd, 0)
+  const roundEnd = ensureDate(round.endAtUtc)
+  const roundEndLabel = roundEnd ? format(roundEnd, "MMM d, yyyy • HH:mm 'UTC'") : "Date TBD"
+  const lastWinnerDate = ensureDate(round.lastWinner?.announcedAt)
+
   useEffect(() => {
     if (!selectedDepositId) {
       const accepted = deposits.find((deposit) => deposit.status === "APPROVED")
@@ -76,15 +82,15 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
         <div className="space-y-3 rounded-xl border border-white/40 bg-white/60 p-4 shadow-inner">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <CalendarClock className="h-5 w-5 text-purple-500" />
-            <span>Next draw closes on {format(new Date(round.endAtUtc), "MMM d, yyyy • HH:mm 'UTC'")}.</span>
+            <span>Next draw closes on {roundEndLabel}.</span>
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge className="bg-purple-500/15 text-purple-600">Entries: {round.totalEntries}</Badge>
-            <Badge className="bg-emerald-500/15 text-emerald-600">Prize: ${round.prizePoolUsd.toFixed(2)}</Badge>
+            <Badge className="bg-emerald-500/15 text-emerald-600">Prize: ${prizePool.toFixed(2)}</Badge>
           </div>
           {round.lastWinner ? (
             <p className="text-xs text-muted-foreground">
-              Last winner: <span className="font-semibold text-foreground">{round.lastWinner.name}</span> on {format(new Date(round.lastWinner.announcedAt), "MMM d, yyyy")}
+              Last winner: <span className="font-semibold text-foreground">{round.lastWinner.name}</span> on {lastWinnerDate ? format(lastWinnerDate, "MMM d, yyyy") : "Unknown"}
             </p>
           ) : null}
         </div>
@@ -111,7 +117,7 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
           </Select>
           <Button onClick={handleAnnounce} disabled={!selectedDepositId || announcing || approvedDeposits.length === 0}>
             <Award className="mr-2 h-4 w-4" />
-            {announcing ? "Announcing…" : `Announce & Credit $${round.prizePoolUsd.toFixed(2)}`}
+            {announcing ? "Announcing…" : `Announce & Credit $${prizePool.toFixed(2)}`}
           </Button>
         </div>
 
@@ -121,14 +127,18 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
             {history.length === 0 ? (
               <p>No previous rounds logged yet.</p>
             ) : (
-              history.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between rounded-lg border border-white/40 bg-white/50 p-2">
-                  <span className="font-medium text-foreground">{entry.winner}</span>
-                  <span>
-                    {format(new Date(entry.announcedAt), "MMM d, yyyy")} • ${entry.prizeUsd.toFixed(2)}
-                  </span>
-                </div>
-              ))
+              history.map((entry) => {
+                const historyDate = ensureDate(entry.announcedAt)
+                const prize = ensureNumber(entry.prizeUsd, 0)
+                return (
+                  <div key={entry.id} className="flex items-center justify-between rounded-lg border border-white/40 bg-white/50 p-2">
+                    <span className="font-medium text-foreground">{entry.winner}</span>
+                    <span>
+                      {(historyDate ? format(historyDate, "MMM d, yyyy") : "Unknown")} • ${prize.toFixed(2)}
+                    </span>
+                  </div>
+                )
+              })
             )}
           </div>
         </div>
