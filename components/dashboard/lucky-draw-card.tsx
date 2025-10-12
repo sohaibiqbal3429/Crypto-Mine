@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { differenceInSeconds, format } from "date-fns"
 import { CalendarDays, Gift, History, RefreshCw, Timer } from "lucide-react"
 
@@ -122,7 +122,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
     }
   }, [highlightedDeposit])
 
-  const renderStatusBadge = (status: DepositStatus) => {
+  const renderStatusBadge = (status: LuckyDrawDepositStatus) => {
     switch (status) {
       case "APPROVED":
         return <Badge className="bg-emerald-500/15 text-emerald-500">Approved</Badge>
