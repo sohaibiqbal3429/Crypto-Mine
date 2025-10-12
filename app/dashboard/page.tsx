@@ -7,6 +7,8 @@ import { ImportantUpdateModal } from "@/components/dashboard/important-update-mo
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { HalvingChart } from "@/components/dashboard/halving-chart"
+import { LuckyDrawCard } from "@/components/dashboard/lucky-draw-card"
+import { InviteAndEarnPanel } from "@/components/dashboard/invite-and-earn-panel"
 import { Sidebar } from "@/components/layout/sidebar"
 
 interface DashboardData {
@@ -102,6 +104,13 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
             <HalvingChart />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <LuckyDrawCard />
+            </div>
+            <InviteAndEarnPanel referralCode={data.user.referralCode} />
           </div>
         </div>
       </main>

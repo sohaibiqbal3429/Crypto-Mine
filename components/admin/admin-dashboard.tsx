@@ -1,12 +1,16 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable, type TransactionFilters } from "@/components/admin/transaction-table"
 import { UserTable, type UserFilters } from "@/components/admin/user-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw } from "lucide-react"
+import { AdminDepositsTable, type AdminDepositRecord } from "@/components/admin/deposit-reviews"
+import { AdminWinnerBox } from "@/components/admin/winner-announcement"
+import { useToast } from "@/components/ui/use-toast"
+import type { DepositStatus } from "@/components/dashboard/lucky-draw-card"
 import type {
   AdminSessionUser,
   AdminStats,
@@ -26,6 +30,7 @@ const USER_LIMIT = 100
 export function AdminDashboard({ initialUser, initialStats, initialError = null }: AdminDashboardProps) {
   const [user, setUser] = useState(initialUser)
   const [stats, setStats] = useState(initialStats)
+  const { toast } = useToast()
 
   const [transactions, setTransactions] = useState<AdminTransactionRecord[]>([])
   const [transactionCursor, setTransactionCursor] = useState<string | null>(null)
@@ -45,6 +50,130 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const transactionLoadingRef = useRef(false)
   const userCursorRef = useRef<string | null>(null)
   const userLoadingRef = useRef(false)
+
+  const [luckyRound, setLuckyRound] = useState({
+    id: "demo-round",
+    startAtUtc: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    endAtUtc: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    prizePoolUsd: 30,
+    lastWinner: {
+      name: "Wallet Ninja",
+      announcedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+  })
+  const [luckyDeposits, setLuckyDeposits] = useState<AdminDepositRecord[]>([
+    {
+      id: "ld-1",
+      user: "Ava Sterling",
+      txHash: "0x9f5a...12cd34",
+      receiptReference: "https://bscscan.com/tx/0x9f5a",
+      submittedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      status: "PENDING",
+      roundId: "demo-round",
+    },
+    {
+      id: "ld-2",
+      user: "Noah Quinn",
+      txHash: "0xa3b8...ff0042",
+      receiptReference: "receipt-noah.pdf",
+      submittedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      status: "ACCEPTED",
+      roundId: "demo-round",
+    },
+    {
+      id: "ld-3",
+      user: "Mia Rivers",
+      txHash: "0xf45d...aa88bc",
+      receiptReference: "https://bscscan.com/tx/0xf45d",
+      submittedAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+      status: "REJECTED",
+      roundId: "demo-round",
+    },
+  ])
+  const [roundHistory, setRoundHistory] = useState([
+    {
+      id: "round-001",
+      winner: "Wallet Ninja",
+      announcedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      prizeUsd: 30,
+    },
+  ])
+  const [announcingWinner, setAnnouncingWinner] = useState(false)
+
+  const currentRound = useMemo(
+    () => ({
+      ...luckyRound,
+      totalEntries: luckyDeposits.filter((deposit) => deposit.status === "ACCEPTED").length,
+    }),
+    [luckyRound, luckyDeposits],
+  )
+
+  const updateDepositStatus = useCallback(
+    (depositId: string, nextStatus: DepositStatus) => {
+      setLuckyDeposits((prev) =>
+        prev.map((deposit) => (deposit.id === depositId ? { ...deposit, status: nextStatus } : deposit)),
+      )
+    },
+    [],
+  )
+
+  const handleAcceptDeposit = useCallback(
+    (depositId: string) => {
+      const target = luckyDeposits.find((deposit) => deposit.id === depositId)
+      if (!target || target.status === "ACCEPTED") return
+
+      updateDepositStatus(depositId, "ACCEPTED")
+      setStats((prev) => ({ ...prev, pendingDeposits: Math.max(0, prev.pendingDeposits - 1) }))
+      toast({ description: `${target.user}'s deposit has been accepted and entered into the current round.` })
+    },
+    [luckyDeposits, toast, updateDepositStatus],
+  )
+
+  const handleRejectDeposit = useCallback(
+    (depositId: string) => {
+      const target = luckyDeposits.find((deposit) => deposit.id === depositId)
+      if (!target || target.status === "REJECTED") return
+
+      updateDepositStatus(depositId, "REJECTED")
+      setStats((prev) => ({ ...prev, pendingDeposits: Math.max(0, prev.pendingDeposits - 1) }))
+      toast({ variant: "destructive", description: `${target.user}'s deposit has been rejected.` })
+    },
+    [luckyDeposits, toast, updateDepositStatus],
+  )
+
+  const handleAnnounceWinner = useCallback(
+    (depositId: string) => {
+      const winnerDeposit = luckyDeposits.find((deposit) => deposit.id === depositId && deposit.status === "ACCEPTED")
+      if (!winnerDeposit) {
+        toast({ variant: "destructive", description: "Select an accepted deposit before announcing a winner." })
+        return
+      }
+
+      setAnnouncingWinner(true)
+      setTimeout(() => {
+        const announcementTime = new Date().toISOString()
+        setLuckyRound((prev) => ({
+          ...prev,
+          lastWinner: {
+            name: winnerDeposit.user,
+            announcedAt: announcementTime,
+          },
+        }))
+        setRoundHistory((prev) => [
+          {
+            id: `history-${announcementTime}`,
+            winner: winnerDeposit.user,
+            announcedAt: announcementTime,
+            prizeUsd: luckyRound.prizePoolUsd,
+          },
+          ...prev,
+        ])
+        toast({ description: `${winnerDeposit.user} has been announced as the Blind Box winner. $${luckyRound.prizePoolUsd.toFixed(2)} credited automatically.` })
+        setAnnouncingWinner(false)
+      }, 400)
+    },
+    [luckyDeposits, luckyRound.prizePoolUsd, toast],
+  )
 
   const fetchStats = useCallback(async () => {
     const response = await fetch("/api/admin/stats")
@@ -240,6 +369,19 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
             <StatCard label="Active users" value={stats.activeUsers.toLocaleString()} />
             <StatCard label="Pending deposits" value={stats.pendingDeposits.toLocaleString()} />
             <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals.toLocaleString()} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <AdminDepositsTable deposits={luckyDeposits} onAccept={handleAcceptDeposit} onReject={handleRejectDeposit} />
+            </div>
+            <AdminWinnerBox
+              round={currentRound}
+              deposits={luckyDeposits}
+              onAnnounceWinner={handleAnnounceWinner}
+              announcing={announcingWinner}
+              history={roundHistory}
+            />
           </div>
 
           <TransactionTable
