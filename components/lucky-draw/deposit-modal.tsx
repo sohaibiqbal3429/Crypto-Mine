@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import type { LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import type { DepositWalletOption } from "@/lib/config/wallet"
+import { Copy, Check } from "lucide-react"
 
 interface LuckyDrawDepositModalProps {
   open: boolean
@@ -27,13 +29,68 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
   const [receiptInputKey, setReceiptInputKey] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [walletOptions, setWalletOptions] = useState<DepositWalletOption[]>([])
+  const [walletLoading, setWalletLoading] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null)
+
+  const primaryWalletOption = useMemo(() => walletOptions[0] ?? null, [walletOptions])
 
   useEffect(() => {
     if (!open) {
       setError(null)
       setSubmitting(false)
+      setCopiedAddress(null)
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open || walletOptions.length > 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const fetchWalletOptions = async () => {
+      setWalletLoading(true)
+      setWalletError(null)
+
+      try {
+        const response = await fetch("/api/lucky-draw/wallet-options")
+        const payload = await response.json().catch(() => null)
+
+        if (!response.ok) {
+          const message = payload?.error ?? "Unable to load deposit wallet information."
+          if (!cancelled) {
+            setWalletError(message)
+            setWalletOptions([])
+          }
+          return
+        }
+
+        const options = Array.isArray(payload?.options) ? (payload.options as DepositWalletOption[]) : []
+        if (!cancelled) {
+          setWalletOptions(options)
+        }
+      } catch (fetchError) {
+        console.error("Failed to load lucky draw wallet options", fetchError)
+        if (!cancelled) {
+          setWalletError("Unable to load deposit wallet information. Please try again later.")
+          setWalletOptions([])
+        }
+      } finally {
+        if (!cancelled) {
+          setWalletLoading(false)
+        }
+      }
+    }
+
+    void fetchWalletOptions()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, walletOptions.length])
 
   useEffect(() => {
     return () => {
@@ -63,6 +120,23 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
       return null
     })
     setReceiptInputKey(Date.now())
+  }
+
+  const handleCopyAddress = async (address: string) => {
+    if (!address || copiedAddress === address) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopiedAddress(address)
+      setTimeout(() => {
+        setCopiedAddress((current) => (current === address ? null : current))
+      }, 2000)
+    } catch (copyError) {
+      console.error("Failed to copy lucky draw wallet address", copyError)
+      setCopiedAddress(null)
+    }
   }
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
@@ -148,6 +222,62 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
+
+        <div className="mt-4 space-y-3 rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-primary">Send exactly $10 USDT (BEP20)</p>
+            <p className="text-xs text-muted-foreground">
+              Transfer your funds to the wallet below before submitting your transaction hash and receipt.
+            </p>
+          </div>
+
+          {walletLoading ? (
+            <p className="text-sm text-muted-foreground">Loading BEP20 deposit address…</p>
+          ) : walletError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{walletError}</AlertDescription>
+            </Alert>
+          ) : walletOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No BEP20 deposit wallet is configured yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {walletOptions.map((option) => (
+                <div
+                  key={option.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/20 bg-background/60 p-3"
+                >
+                  <div className="space-y-1">
+                    <p className="text-xs uppercase text-muted-foreground">{option.network}</p>
+                    <p className="break-all font-mono text-sm text-foreground">{option.address}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyAddress(option.address)}
+                  >
+                    {copiedAddress === option.address ? (
+                      <>
+                        <Check className="mr-2 h-3 w-3" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="mr-2 h-3 w-3" /> Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {primaryWalletOption ? (
+            <p className="text-[11px] text-muted-foreground">
+              Only BEP20 transfers to <span className="font-mono text-xs">{primaryWalletOption.address}</span> are accepted for the
+              Lucky Draw. Other networks will be rejected.
+            </p>
+          ) : null}
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
