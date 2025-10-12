@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import { Award, CalendarClock, Trophy } from "lucide-react"
 
-import type { AdminDepositRecord } from "@/components/admin/deposit-reviews"
+import type { LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,7 +35,7 @@ interface AdminWinnerBoxProps {
       announcedAt: string
     } | null
   }
-  deposits: AdminDepositRecord[]
+  deposits: LuckyDrawDeposit[]
   onAnnounceWinner: (depositId: string) => void
   announcing?: boolean
   history?: RoundHistoryEntry[]
@@ -103,7 +103,7 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
               ) : (
                 acceptedDeposits.map((deposit) => (
                   <SelectItem key={deposit.id} value={deposit.id}>
-                    {deposit.user} • {deposit.txHash.slice(0, 6)}…{deposit.txHash.slice(-4)}
+                    {(deposit.userName ?? "Participant").trim()} • {deposit.txHash}
                   </SelectItem>
                 ))
               )}

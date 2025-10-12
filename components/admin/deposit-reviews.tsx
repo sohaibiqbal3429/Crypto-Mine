@@ -4,24 +4,14 @@ import { useMemo } from "react"
 import { format } from "date-fns"
 import { Check, X } from "lucide-react"
 
-import type { DepositStatus } from "@/components/dashboard/lucky-draw-card"
+import type { DepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-export interface AdminDepositRecord {
-  id: string
-  user: string
-  txHash: string
-  receiptReference: string
-  submittedAt: string
-  status: DepositStatus
-  roundId: string
-}
-
 interface AdminDepositsTableProps {
-  deposits: AdminDepositRecord[]
+  deposits: LuckyDrawDeposit[]
   onAccept: (depositId: string) => void
   onReject: (depositId: string) => void
 }
@@ -90,8 +80,10 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
             ) : (
               deposits.map((deposit) => (
                 <TableRow key={deposit.id} className="bg-background/50">
-                  <TableCell className="font-medium">{deposit.user}</TableCell>
-                  <TableCell className="font-mono text-xs">{deposit.txHash}</TableCell>
+                  <TableCell className="font-medium">
+                    {deposit.userName ?? "Unknown participant"}
+                  </TableCell>
+                  <TableCell className="break-all font-mono text-xs">{deposit.txHash}</TableCell>
                   <TableCell>
                     {isUrl(deposit.receiptReference) ? (
                       <Button variant="link" className="px-0" asChild>
@@ -100,7 +92,7 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
                         </a>
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">{deposit.receiptReference}</span>
+                      <span className="break-all text-xs text-muted-foreground">{deposit.receiptReference}</span>
                     )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
