@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { format } from "date-fns"
 import { Check, Loader2, RefreshCw, X } from "lucide-react"
 
-import type { DepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import type { LuckyDrawDepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,15 +30,15 @@ export function AdminDepositsTable({
 }: AdminDepositsTableProps) {
   const summary = useMemo(() => {
     const pending = deposits.filter((deposit) => deposit.status === "PENDING").length
-    const accepted = deposits.filter((deposit) => deposit.status === "ACCEPTED").length
+    const approved = deposits.filter((deposit) => deposit.status === "APPROVED").length
     const rejected = deposits.filter((deposit) => deposit.status === "REJECTED").length
-    return { pending, accepted, rejected }
+    return { pending, approved, rejected }
   }, [deposits])
 
-  const renderStatusBadge = (status: DepositStatus) => {
+  const renderStatusBadge = (status: LuckyDrawDepositStatus) => {
     switch (status) {
-      case "ACCEPTED":
-        return <Badge className="bg-emerald-500/15 text-emerald-600">Accepted</Badge>
+      case "APPROVED":
+        return <Badge className="bg-emerald-500/15 text-emerald-600">Approved</Badge>
       case "REJECTED":
         return <Badge className="bg-rose-500/15 text-rose-500">Rejected</Badge>
       default:
@@ -90,7 +90,7 @@ export function AdminDepositsTable({
             Pending: {summary.pending}
           </Badge>
           <Badge variant="outline" className="border-emerald-400/40 text-emerald-500">
-            Accepted: {summary.accepted}
+            Approved: {summary.approved}
           </Badge>
           <Badge variant="outline" className="border-rose-400/40 text-rose-500">
             Rejected: {summary.rejected}
@@ -159,6 +159,12 @@ export function AdminDepositsTable({
                           <span className="text-foreground">Exchange:</span> {deposit.exchangePlatform}
                         </div>
                       ) : null}
+                      {deposit.adminNote ? (
+                        <div>
+                          <span className="text-foreground">Admin note:</span>{" "}
+                          <span className="break-all text-xs text-muted-foreground">{deposit.adminNote}</span>
+                        </div>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>{renderReceipt(deposit)}</TableCell>
@@ -174,7 +180,7 @@ export function AdminDepositsTable({
                       disabled={deposit.status !== "PENDING" || loading}
                       onClick={() => onAccept(deposit.id)}
                     >
-                      <Check className="mr-1 h-4 w-4" /> Accept
+                      <Check className="mr-1 h-4 w-4" /> Approve
                     </Button>
                     <Button
                       size="sm"

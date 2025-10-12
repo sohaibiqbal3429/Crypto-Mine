@@ -3,7 +3,10 @@
 const TRANSACTION_NUMBER_MAX_LENGTH = 120
 
 export const depositSchema = z.object({
-  amount: z.number().min(30, "Minimum deposit is $30 USDT"),
+  amount: z
+    .number()
+    .min(30, "Minimum deposit is $30 USDT")
+    .max(30, "Maximum single deposit is $30."),
   transactionNumber: z
     .string()
     .trim()

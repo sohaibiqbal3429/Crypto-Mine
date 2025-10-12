@@ -256,8 +256,9 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 name="amount"
                 type="number"
                 min={minDeposit}
+                max={30}
                 step="0.01"
-                placeholder={`Enter amount (min $${minDeposit})`}
+                placeholder={`Enter amount (min $${minDeposit}, max $30)`}
                 value={formState.amount}
                 onChange={(event) =>
                   setFormState((previous) => ({ ...previous, amount: event.target.value }))

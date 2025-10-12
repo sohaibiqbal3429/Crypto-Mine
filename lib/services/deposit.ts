@@ -117,6 +117,13 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     throw new DepositSubmissionError("Please review the form and try again")
   }
 
+  const normalizedTransactionHash = parsed.data.transactionNumber.trim()
+  const isFakeDeposit = normalizedTransactionHash === TEST_TRANSACTION_NUMBER
+
+  if (!isFakeDeposit && parsed.data.amount > 30) {
+    throw new DepositSubmissionError("Maximum single deposit is $30.")
+  }
+
   const walletOption = resolveWalletOption(parsed.data.network)
 
   await dbConnect()
@@ -128,9 +135,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
 
   const settings = await Settings.findOne()
   const minDeposit = settings?.gating?.minDeposit ?? FAKE_DEPOSIT_AMOUNT
-
-  const normalizedTransactionHash = parsed.data.transactionNumber.trim()
-  const isFakeDeposit = normalizedTransactionHash === TEST_TRANSACTION_NUMBER
 
   if (!isFakeDeposit && parsed.data.amount < minDeposit) {
     throw new DepositSubmissionError(`Minimum deposit is $${minDeposit} USDT`)

@@ -23,6 +23,7 @@ export interface IBalance extends Document {
   teamRewardsAvailable: number
   teamRewardsClaimed: number
   teamRewardsLastClaimedAt?: Date
+  luckyDrawCredits: number
   updatedAt: Date
 }
 
@@ -51,6 +52,7 @@ const BalanceSchema = new Schema<IBalance>(
     teamRewardsAvailable: { type: Number, default: 0 },
     teamRewardsClaimed: { type: Number, default: 0 },
     teamRewardsLastClaimedAt: { type: Date },
+    luckyDrawCredits: { type: Number, default: 0 },
   },
   {
     timestamps: true,

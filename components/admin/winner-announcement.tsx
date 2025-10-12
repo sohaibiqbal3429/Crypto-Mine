@@ -42,18 +42,18 @@ interface AdminWinnerBoxProps {
 }
 
 export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing = false, history = [] }: AdminWinnerBoxProps) {
-  const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(() => deposits.find((deposit) => deposit.status === "ACCEPTED")?.id)
+  const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(() => deposits.find((deposit) => deposit.status === "APPROVED")?.id)
 
   useEffect(() => {
     if (!selectedDepositId) {
-      const accepted = deposits.find((deposit) => deposit.status === "ACCEPTED")
+      const accepted = deposits.find((deposit) => deposit.status === "APPROVED")
       if (accepted) {
         setSelectedDepositId(accepted.id)
       }
     }
   }, [deposits, selectedDepositId])
 
-  const acceptedDeposits = deposits.filter((deposit) => deposit.status === "ACCEPTED")
+  const approvedDeposits = deposits.filter((deposit) => deposit.status === "APPROVED")
 
   const handleAnnounce = () => {
     if (selectedDepositId) {
@@ -93,15 +93,15 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
           <p className="text-sm font-semibold text-foreground">Choose winner from accepted deposits</p>
           <Select value={selectedDepositId} onValueChange={(value) => setSelectedDepositId(value)}>
             <SelectTrigger className="bg-white/70">
-              <SelectValue placeholder="Select an accepted deposit" />
+              <SelectValue placeholder="Select an approved deposit" />
             </SelectTrigger>
             <SelectContent>
-              {acceptedDeposits.length === 0 ? (
+              {approvedDeposits.length === 0 ? (
                 <SelectItem value="" disabled>
-                  No accepted deposits yet
+                  No approved deposits yet
                 </SelectItem>
               ) : (
-                acceptedDeposits.map((deposit) => (
+                approvedDeposits.map((deposit) => (
                   <SelectItem key={deposit.id} value={deposit.id}>
                     {(deposit.userName ?? "Participant").trim()} • {deposit.txHash}
                   </SelectItem>
@@ -109,7 +109,7 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
               )}
             </SelectContent>
           </Select>
-          <Button onClick={handleAnnounce} disabled={!selectedDepositId || announcing || acceptedDeposits.length === 0}>
+          <Button onClick={handleAnnounce} disabled={!selectedDepositId || announcing || approvedDeposits.length === 0}>
             <Award className="mr-2 h-4 w-4" />
             {announcing ? "Announcing…" : `Announce & Credit $${round.prizePoolUsd.toFixed(2)}`}
           </Button>

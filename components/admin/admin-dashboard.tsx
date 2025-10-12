@@ -83,7 +83,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const currentRound = useMemo(
     () => ({
       ...luckyRound,
-      totalEntries: luckyDeposits.filter((deposit) => deposit.status === "ACCEPTED").length,
+      totalEntries: luckyDeposits.filter((deposit) => deposit.status === "APPROVED").length,
     }),
     [luckyRound, luckyDeposits],
   )
@@ -91,14 +91,14 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const handleAcceptDeposit = useCallback(
     async (depositId: string) => {
       const target = luckyDeposits.find((deposit) => deposit.id === depositId)
-      if (!target || target.status === "ACCEPTED") return
+      if (!target || target.status === "APPROVED") return
 
       try {
-        const changed = await updateDepositStatus(depositId, "ACCEPTED")
+        const changed = await updateDepositStatus(depositId, "APPROVED")
         if (!changed) return
 
         toast({
-          description: `${target.userName ?? "Participant"}'s deposit has been accepted and entered into the current round.`,
+          description: `${target.userName ?? "Participant"}'s deposit has been approved and entered into the current round.`,
         })
       } catch (error) {
         console.error(error)
@@ -118,7 +118,15 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       if (!target || target.status === "REJECTED") return
 
       try {
-        const changed = await updateDepositStatus(depositId, "REJECTED")
+        let note: string | undefined
+        if (typeof window !== "undefined") {
+          const input = window.prompt("Add an optional note for the participant (optional):", "")
+          if (input !== null) {
+            note = input.trim().length > 0 ? input.trim() : undefined
+          }
+        }
+
+        const changed = await updateDepositStatus(depositId, "REJECTED", note)
         if (!changed) return
 
         toast({ variant: "destructive", description: `${target.userName ?? "Participant"}'s deposit has been rejected.` })
@@ -136,7 +144,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
 
   const handleAnnounceWinner = useCallback(
     (depositId: string) => {
-      const winnerDeposit = luckyDeposits.find((deposit) => deposit.id === depositId && deposit.status === "ACCEPTED")
+      const winnerDeposit = luckyDeposits.find((deposit) => deposit.id === depositId && deposit.status === "APPROVED")
       if (!winnerDeposit) {
         toast({ variant: "destructive", description: "Select an accepted deposit before announcing a winner." })
         return
@@ -173,7 +181,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   useEffect(() => {
     setStats((prev) => ({
       ...prev,
-      pendingDeposits: luckyDeposits.filter((deposit) => deposit.status === "PENDING").length,
+      pendingLuckyDrawDeposits: luckyDeposits.filter((deposit) => deposit.status === "PENDING").length,
     }))
   }, [luckyDeposits])
 
@@ -184,7 +192,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
     }
     const payload = await response.json()
     if (payload.stats) {
-      setStats(payload.stats)
+      setStats((prev) => ({ ...prev, ...payload.stats }))
     }
   }, [])
 
@@ -366,11 +374,15 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="Total users" value={stats.totalUsers.toLocaleString()} />
             <StatCard label="Active users" value={stats.activeUsers.toLocaleString()} />
             <StatCard label="Pending deposits" value={stats.pendingDeposits.toLocaleString()} />
             <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals.toLocaleString()} />
+            <StatCard
+              label="Lucky draw pending"
+              value={stats.pendingLuckyDrawDeposits.toLocaleString()}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
