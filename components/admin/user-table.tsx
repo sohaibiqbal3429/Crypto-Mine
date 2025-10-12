@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Loader2, RefreshCw, Settings } from "lucide-react"
 import type { AdminUserRecord } from "@/lib/types/admin"
 import { getNextLevelRequirement } from "@/lib/utils/leveling"
+import { ensureNumber } from "@/lib/utils/safe-parsing"
 
 const DESKTOP_ROW_HEIGHT = 128
 const VIRTUAL_LIST_HEIGHT = 540
@@ -73,6 +74,13 @@ export function UserTable({
   const [adjustForm, setAdjustForm] = useState({ type: "add", amount: "", reason: "" })
   const [adjustLoading, setAdjustLoading] = useState(false)
   const [adjustError, setAdjustError] = useState<string | null>(null)
+
+  const selectedDepositTotal = ensureNumber(selectedUser?.depositTotal, 0)
+  const selectedWithdrawTotal = ensureNumber(selectedUser?.withdrawTotal, 0)
+  const selectedBalanceCurrent = ensureNumber(selectedUser?.balance?.current, 0)
+  const selectedBalanceEarning = ensureNumber(selectedUser?.balance?.totalEarning, 0)
+  const selectedLevel = ensureNumber(selectedUser?.level, 0)
+  const selectedDirectActive = ensureNumber(selectedUser?.directActiveCount, 0)
 
   const debouncedSearch = useMemo(
     () =>
@@ -132,9 +140,15 @@ export function UserTable({
   // ---- Row (desktop + mobile) ----
   const RowInner = useCallback(
     (user: AdminUserRecord) => {
-      const nextRequirement = getNextLevelRequirement(user.level)
-      const progressLabel =
-        nextRequirement !== null ? `${user.directActiveCount} / ${nextRequirement}` : `${user.directActiveCount} / —`
+      const level = ensureNumber(user.level, 0)
+      const directActiveCount = ensureNumber(user.directActiveCount, 0)
+      const depositTotal = ensureNumber(user.depositTotal, 0)
+      const withdrawTotal = ensureNumber(user.withdrawTotal, 0)
+      const balanceCurrent = ensureNumber(user.balance?.current, 0)
+      const balanceEarnings = ensureNumber(user.balance?.totalEarning, 0)
+
+      const nextRequirement = getNextLevelRequirement(level)
+      const progressLabel = nextRequirement !== null ? `${directActiveCount} / ${nextRequirement}` : `${directActiveCount} / —`
 
       return (
         <>
@@ -147,12 +161,12 @@ export function UserTable({
             {/* Mobile summary */}
             <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted-foreground md:hidden">
               <span className="flex items-center gap-2">
-                <Badge variant="secondary" className="capitalize">Lvl {user.level}</Badge>
+                <Badge variant="secondary" className="capitalize">Lvl {level}</Badge>
                 <span>Prog: {progressLabel}</span>
               </span>
-              <span className="font-mono">${user.depositTotal.toFixed(2)}</span>
-              <span>Bal ${user.balance.current.toFixed(2)}</span>
-              <span className="opacity-80">Earn ${user.balance.totalEarning.toFixed(2)}</span>
+              <span className="font-mono">${depositTotal.toFixed(2)}</span>
+              <span>Bal ${balanceCurrent.toFixed(2)}</span>
+              <span className="opacity-80">Earn ${balanceEarnings.toFixed(2)}</span>
             </div>
           </div>
 
@@ -179,16 +193,16 @@ export function UserTable({
 
           {/* Desktop columns */}
           <div className="hidden text-xs text-muted-foreground md:block">
-            <div>Level {user.level}</div>
+            <div>Level {level}</div>
             <div>Progress: {progressLabel}</div>
           </div>
           <div className="hidden text-sm font-mono md:block">
-            <div>${user.depositTotal.toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground">Withdraw ${user.withdrawTotal.toFixed(2)}</div>
+            <div>${depositTotal.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Withdraw ${withdrawTotal.toFixed(2)}</div>
           </div>
           <div className="hidden text-sm font-mono md:block">
-            <div>Balance ${user.balance.current.toFixed(2)}</div>
-            <div className="text-xs text-muted-foreground">Earnings ${user.balance.totalEarning.toFixed(2)}</div>
+            <div>Balance ${balanceCurrent.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Earnings ${balanceEarnings.toFixed(2)}</div>
           </div>
         </>
       )
@@ -332,10 +346,10 @@ export function UserTable({
             <div className="rounded-md border p-3">
               <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Balances</h4>
               <div className="space-y-1 text-sm font-mono">
-                <div>Deposit ${selectedUser?.depositTotal.toFixed(2) ?? "0.00"}</div>
-                <div>Withdraw ${selectedUser?.withdrawTotal.toFixed(2) ?? "0.00"}</div>
-                <div>Balance ${selectedUser?.balance.current.toFixed(2) ?? "0.00"}</div>
-                <div>Earnings ${selectedUser?.balance.totalEarning.toFixed(2) ?? "0.00"}</div>
+                <div>Deposit ${selectedDepositTotal.toFixed(2)}</div>
+                <div>Withdraw ${selectedWithdrawTotal.toFixed(2)}</div>
+                <div>Balance ${selectedBalanceCurrent.toFixed(2)}</div>
+                <div>Earnings ${selectedBalanceEarning.toFixed(2)}</div>
               </div>
             </div>
 
@@ -343,8 +357,8 @@ export function UserTable({
             <div className="rounded-md border p-3">
               <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Level</h4>
               <div className="space-y-1 text-sm">
-                <div>Level {selectedUser?.level}</div>
-                <div>Direct Active: {selectedUser?.directActiveCount}</div>
+                <div>Level {selectedLevel}</div>
+                <div>Direct Active: {selectedDirectActive}</div>
                 <Badge variant={selectedUser?.status === "active" ? "default" : "secondary"} className="capitalize">
                   {selectedUser?.status ?? "inactive"}
                 </Badge>

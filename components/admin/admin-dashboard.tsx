@@ -12,6 +12,7 @@ import { AdminWinnerBox } from "@/components/admin/winner-announcement"
 import { useToast } from "@/components/ui/use-toast"
 import { useLuckyDrawDeposits } from "@/hooks/use-lucky-draw-deposits"
 import type { LuckyDrawRound } from "@/lib/types/lucky-draw"
+import { formatNumberWithFallback } from "@/lib/utils/safe-parsing"
 import type {
   AdminSessionUser,
   AdminStats,
@@ -375,14 +376,11 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <StatCard label="Total users" value={stats.totalUsers.toLocaleString()} />
-            <StatCard label="Active users" value={stats.activeUsers.toLocaleString()} />
-            <StatCard label="Pending deposits" value={stats.pendingDeposits.toLocaleString()} />
-            <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals.toLocaleString()} />
-            <StatCard
-              label="Lucky draw pending"
-              value={stats.pendingLuckyDrawDeposits.toLocaleString()}
-            />
+            <StatCard label="Total users" value={stats.totalUsers} />
+            <StatCard label="Active users" value={stats.activeUsers} />
+            <StatCard label="Pending deposits" value={stats.pendingDeposits} />
+            <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals} />
+            <StatCard label="Lucky draw pending" value={stats.pendingLuckyDrawDeposits} />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -433,14 +431,15 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value }: { label: string; value: unknown }) {
+  const formattedValue = formatNumberWithFallback(value, "0")
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-2xl font-semibold">{value}</p>
+        <p className="text-2xl font-semibold">{formattedValue}</p>
       </CardContent>
     </Card>
   )
