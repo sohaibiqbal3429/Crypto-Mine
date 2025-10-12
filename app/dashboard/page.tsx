@@ -108,7 +108,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="xl:col-span-2">
-              <LuckyDrawCard />
+              <LuckyDrawCard currentUser={user} />
             </div>
             <InviteAndEarnPanel referralCode={data.user.referralCode} />
           </div>

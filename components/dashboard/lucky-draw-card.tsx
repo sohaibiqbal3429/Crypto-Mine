@@ -20,38 +20,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
+import { useLuckyDrawDeposits } from "@/hooks/use-lucky-draw-deposits"
+import type { LuckyDrawDeposit, LuckyDrawRound, DepositStatus } from "@/lib/types/lucky-draw"
 
 const DEPOSIT_ADDRESS = "0xde7b66da140bdbe9d113966c690eeb9cff83d756"
 const REQUIRED_AMOUNT = 10
-
-export type DepositStatus = "PENDING" | "ACCEPTED" | "REJECTED"
-
-interface LuckyDrawDeposit {
-  id: string
-  txHash: string
-  receiptReference: string
-  submittedAt: string
-  status: DepositStatus
-}
-
-interface LuckyDrawRound {
-  id: string
-  startAtUtc: string
-  endAtUtc: string
-  prizePoolUsd: number
-  lastWinner?: {
-    name: string
-    announcedAt: string
-  } | null
-}
 
 interface LuckyDrawCardProps {
   round?: LuckyDrawRound
   deposits?: LuckyDrawDeposit[]
   onDepositSubmit?: (deposit: LuckyDrawDeposit) => void
+  currentUser?: {
+    id?: string
+    _id?: string
+    name?: string
+    email?: string
+  }
 }
 
-export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit }: LuckyDrawCardProps) {
+export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, currentUser }: LuckyDrawCardProps) {
   const { toast } = useToast()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -60,6 +47,8 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit }
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
   const [confirmedAmount, setConfirmedAmount] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  const { deposits: storedDeposits, addDeposit } = useLuckyDrawDeposits()
 
   const [localRound] = useState<LuckyDrawRound>(
     round ?? {
@@ -74,26 +63,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit }
     },
   )
 
-  const [localDeposits, setLocalDeposits] = useState<LuckyDrawDeposit[]>(
-    depositsProp ?? [
-      {
-        id: "demo-1",
-        txHash: "0x1234...abcd",
-        receiptReference: "https://bscscan.com/tx/0x1234",
-        submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        status: "ACCEPTED",
-      },
-      {
-        id: "demo-2",
-        txHash: "0x9876...wxyz",
-        receiptReference: "Receipt-upload.pdf",
-        submittedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-        status: "PENDING",
-      },
-    ],
-  )
-
-  const deposits = depositsProp ?? localDeposits
+  const deposits = depositsProp ?? storedDeposits
 
   const acceptedEntries = useMemo(() => deposits.filter((deposit) => deposit.status === "ACCEPTED").length, [deposits])
 
@@ -149,12 +119,18 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit }
         receiptReference,
         submittedAt: new Date().toISOString(),
         status: "PENDING",
+        userId: currentUser?.id ?? currentUser?._id,
+        userName: currentUser?.name?.trim() || undefined,
+        userEmail: currentUser?.email?.trim() || undefined,
+        roundId: (round ?? localRound).id,
       }
 
       if (onDepositSubmit) {
         onDepositSubmit(newDeposit)
-      } else {
-        setLocalDeposits((prev) => [newDeposit, ...prev])
+      }
+
+      if (!depositsProp) {
+        addDeposit(newDeposit)
       }
 
       toast({ description: "Review submitted — awaiting admin confirmation." })
@@ -270,11 +246,11 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit }
                   className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/50 bg-white/60 p-3 text-sm shadow-sm"
                 >
                   <div className="space-y-1">
-                    <p className="font-medium text-foreground">{deposit.txHash}</p>
+                    <p className="break-all font-medium text-foreground">{deposit.txHash}</p>
                     <p className="text-xs text-muted-foreground">
                       Submitted {format(new Date(deposit.submittedAt), "MMM d, yyyy • HH:mm 'UTC'")}
                     </p>
-                    <p className="text-xs text-blue-600">{deposit.receiptReference}</p>
+                    <p className="break-all text-xs text-blue-600">{deposit.receiptReference}</p>
                   </div>
                   {renderStatusBadge(deposit.status)}
                 </div>
