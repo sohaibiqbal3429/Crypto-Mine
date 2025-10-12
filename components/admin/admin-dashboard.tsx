@@ -52,7 +52,13 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const userCursorRef = useRef<string | null>(null)
   const userLoadingRef = useRef(false)
 
-  const { deposits: luckyDeposits, updateDepositStatus } = useLuckyDrawDeposits()
+  const {
+    deposits: luckyDeposits,
+    updateDepositStatus,
+    loading: luckyDepositsLoading,
+    error: luckyDepositsError,
+    refresh: refreshLuckyDeposits,
+  } = useLuckyDrawDeposits({ scope: "admin", autoRefresh: false })
 
   const [luckyRound, setLuckyRound] = useState<LuckyDrawRound>({
     id: "demo-round",
@@ -83,29 +89,47 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   )
 
   const handleAcceptDeposit = useCallback(
-    (depositId: string) => {
+    async (depositId: string) => {
       const target = luckyDeposits.find((deposit) => deposit.id === depositId)
       if (!target || target.status === "ACCEPTED") return
 
-      const changed = updateDepositStatus(depositId, "ACCEPTED")
-      if (!changed) return
+      try {
+        const changed = await updateDepositStatus(depositId, "ACCEPTED")
+        if (!changed) return
 
-      toast({
-        description: `${target.userName ?? "Participant"}'s deposit has been accepted and entered into the current round.`,
-      })
+        toast({
+          description: `${target.userName ?? "Participant"}'s deposit has been accepted and entered into the current round.`,
+        })
+      } catch (error) {
+        console.error(error)
+        toast({
+          variant: "destructive",
+          description:
+            error instanceof Error ? error.message : "Unable to approve deposit. Please try again.",
+        })
+      }
     },
     [luckyDeposits, toast, updateDepositStatus],
   )
 
   const handleRejectDeposit = useCallback(
-    (depositId: string) => {
+    async (depositId: string) => {
       const target = luckyDeposits.find((deposit) => deposit.id === depositId)
       if (!target || target.status === "REJECTED") return
 
-      const changed = updateDepositStatus(depositId, "REJECTED")
-      if (!changed) return
+      try {
+        const changed = await updateDepositStatus(depositId, "REJECTED")
+        if (!changed) return
 
-      toast({ variant: "destructive", description: `${target.userName ?? "Participant"}'s deposit has been rejected.` })
+        toast({ variant: "destructive", description: `${target.userName ?? "Participant"}'s deposit has been rejected.` })
+      } catch (error) {
+        console.error(error)
+        toast({
+          variant: "destructive",
+          description:
+            error instanceof Error ? error.message : "Unable to reject deposit. Please try again.",
+        })
+      }
     },
     [luckyDeposits, toast, updateDepositStatus],
   )
@@ -351,7 +375,14 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="xl:col-span-2">
-              <AdminDepositsTable deposits={luckyDeposits} onAccept={handleAcceptDeposit} onReject={handleRejectDeposit} />
+              <AdminDepositsTable
+                deposits={luckyDeposits}
+                loading={luckyDepositsLoading}
+                error={luckyDepositsError}
+                onRefresh={refreshLuckyDeposits}
+                onAccept={handleAcceptDeposit}
+                onReject={handleRejectDeposit}
+              />
             </div>
             <AdminWinnerBox
               round={currentRound}
