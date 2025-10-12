@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { differenceInSeconds, format } from "date-fns"
@@ -11,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLuckyDrawDeposits } from "@/hooks/use-lucky-draw-deposits"
-import type { LuckyDrawDeposit, LuckyDrawRound, DepositStatus } from "@/lib/types/lucky-draw"
+import type { LuckyDrawDeposit, LuckyDrawRound, LuckyDrawDepositStatus } from "@/lib/types/lucky-draw"
+import { LuckyDrawDepositModal } from "@/components/lucky-draw/deposit-modal"
 
 const REQUIRED_AMOUNT = 10
 
@@ -50,8 +50,10 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
 
   const deposits = depositsProp ?? storedDeposits
 
-  const acceptedEntries = useMemo(
-    () => deposits.filter((deposit) => deposit.status === "ACCEPTED").length,
+  const [depositModalOpen, setDepositModalOpen] = useState(false)
+
+  const approvedEntries = useMemo(
+    () => deposits.filter((deposit) => deposit.status === "APPROVED").length,
     [deposits],
   )
 
@@ -82,6 +84,13 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
 
   const latestWinner = (round ?? localRound).lastWinner
 
+  const handleDepositSuccess = useCallback(
+    (_deposit?: LuckyDrawDeposit) => {
+      refreshDeposits()
+    },
+    [refreshDeposits],
+  )
+
   const statusAlert = useMemo(() => {
     if (!highlightedDeposit) {
       return null
@@ -91,11 +100,11 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
     const submittedAt = format(new Date(highlightedDeposit.submittedAt), "MMM d, yyyy • HH:mm 'UTC'")
 
     switch (highlightedDeposit.status) {
-      case "ACCEPTED":
+      case "APPROVED":
         return {
           variant: "default" as const,
           title: "Deposit approved",
-          description: `Your deposit of $${amount} has been accepted and credited. Submitted ${submittedAt}.`,
+          description: `Your deposit of $${amount} has been approved and credited. Submitted ${submittedAt}.`,
         }
       case "REJECTED":
         return {
@@ -115,8 +124,8 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
 
   const renderStatusBadge = (status: DepositStatus) => {
     switch (status) {
-      case "ACCEPTED":
-        return <Badge className="bg-emerald-500/15 text-emerald-500">Accepted</Badge>
+      case "APPROVED":
+        return <Badge className="bg-emerald-500/15 text-emerald-500">Approved</Badge>
       case "REJECTED":
         return <Badge className="bg-rose-500/15 text-rose-500">Rejected</Badge>
       default:
@@ -174,8 +183,8 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           <SummaryTile
             icon={<History className="h-5 w-5" />}
             label="Total Entries"
-            value={`${acceptedEntries} participant${acceptedEntries === 1 ? "" : "s"}`}
-            helper="Automatically counts accepted deposits"
+            value={`${approvedEntries} participant${approvedEntries === 1 ? "" : "s"}`}
+            helper="Automatically counts approved deposits"
           />
           <SummaryTile
             icon={<CalendarDays className="h-5 w-5" />}
@@ -185,23 +194,23 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge className="bg-emerald-500/15 text-emerald-600">
-            Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
-          </Badge>
-          <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
-          <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
-        </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge className="bg-emerald-500/15 text-emerald-600">
+              Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
+            </Badge>
+            <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
+            <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
+          </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="lg" asChild disabled={depositsLoading}>
-            <Link href="/wallet/deposit">Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}</Link>
+          <Button size="lg" disabled={depositsLoading} onClick={() => setDepositModalOpen(true)}>
+            Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}
           </Button>
           <Button variant="outline" className="backdrop-blur" size="lg">
             View Leaderboard
           </Button>
           <div className="text-sm text-muted-foreground">
-            {acceptedEntries} participant{acceptedEntries === 1 ? " has" : "s have"} been approved so far.
+            {approvedEntries} participant{approvedEntries === 1 ? " has" : "s have"} been approved so far.
           </div>
         </div>
 
@@ -273,13 +282,23 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
                       <p className="break-all text-xs text-blue-600">{deposit.receiptReference}</p>
                     ) : null}
                   </div>
-                  {renderStatusBadge(deposit.status)}
+                  <div className="flex flex-col items-end gap-1 text-right">
+                    {renderStatusBadge(deposit.status)}
+                    {deposit.adminNote && deposit.status === "REJECTED" ? (
+                      <p className="max-w-[16rem] text-xs text-rose-500">Note: {deposit.adminNote}</p>
+                    ) : null}
+                  </div>
                 </div>
               ))
             )}
           </div>
         </div>
       </CardContent>
+      <LuckyDrawDepositModal
+        open={depositModalOpen}
+        onOpenChange={setDepositModalOpen}
+        onSuccess={handleDepositSuccess}
+      />
     </Card>
   )
 }

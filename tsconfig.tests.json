@@ -1,5 +1,4 @@
 {
-  "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist-tests",
     "noEmit": false,
@@ -11,8 +10,20 @@
     "isolatedModules": false,
     "emitDeclarationOnly": false,
     "declaration": false,
-    "baseUrl": "."
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"]
+    }
   },
-  "include": ["tests/**/*.ts", "lib/utils/locked-capital.ts", "types/**/*.d.ts"],
+  "include": [
+    "tests/**/*.ts",
+    "lib/utils/locked-capital.ts",
+    "lib/validations/**/*.ts",
+    "lib/services/lucky-draw-deposits.ts",
+    "types/**/*.d.ts"
+  ],
   "exclude": ["node_modules"]
 }

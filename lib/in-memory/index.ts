@@ -18,6 +18,7 @@ type SortSpec = Record<string, 1 | -1>
 type QueryFilter = Record<string, any>
 
 type UpdateSpec = Record<string, any>
+type UpdateOptions = { upsert?: boolean }
 
 const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }>> = {
   balances: { userId: { collection: "users" } },
@@ -25,6 +26,11 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
+  luckyDrawDeposits: {
+    userId: { collection: "users" },
+    decidedBy: { collection: "users" },
+  },
+  ledgerEntries: { userId: { collection: "users" } },
 }
 
 const DEMO_PASSWORD = "admin123"
@@ -193,23 +199,52 @@ class InMemoryCollection<T extends InMemoryDocument> {
     return results
   }
 
-  async create(doc: Partial<T>): Promise<T> {
-    const now = new Date()
-    const newDoc: T = {
-      ...(deepClone(doc) as T),
-      _id: doc._id ?? generateObjectId(),
-      createdAt: doc.createdAt ?? now,
-      updatedAt: doc.updatedAt ?? now,
+  async create(doc: Partial<T> | Partial<T>[], _options?: unknown): Promise<T | T[]> {
+    const createSingle = async (entry: Partial<T>): Promise<T> => {
+      const now = new Date()
+      const newDoc: T = {
+        ...(deepClone(entry) as T),
+        _id: entry._id ?? generateObjectId(),
+        createdAt: entry.createdAt ?? now,
+        updatedAt: entry.updatedAt ?? now,
+      }
+
+      this.documents.push(newDoc)
+      return createModelInstance(deepClone(newDoc)) as T
     }
 
-    this.documents.push(newDoc)
-    return createModelInstance(deepClone(newDoc)) as T
+    if (Array.isArray(doc)) {
+      const created = await Promise.all(doc.map((item) => createSingle(item)))
+      return created
+    }
+
+    return createSingle(doc)
   }
 
-  async updateOne(filter: QueryFilter, update: UpdateSpec): Promise<{ acknowledged: boolean; modifiedCount: number }> {
+  async updateOne(
+    filter: QueryFilter,
+    update: UpdateSpec,
+    options: UpdateOptions = {},
+  ): Promise<{ acknowledged: boolean; modifiedCount: number; upsertedId?: string | null }> {
     const doc = this.documents.find((item) => matchesFilter(item, filter))
     if (!doc) {
-      return { acknowledged: true, modifiedCount: 0 }
+      if (!options.upsert) {
+        return { acknowledged: true, modifiedCount: 0 }
+      }
+
+      const seed = extractEqualityFilter(filter)
+      const now = new Date()
+      const newDoc: T = {
+        ...(deepClone(seed) as T),
+        _id: generateObjectId(),
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      this.documents.push(newDoc)
+      applyUpdateOperators(newDoc as unknown as Record<string, any>, update, { isUpsert: true })
+      newDoc.updatedAt = new Date()
+      return { acknowledged: true, modifiedCount: 1, upsertedId: newDoc._id }
     }
 
     applyUpdateOperators(doc, update)
@@ -273,6 +308,8 @@ class InMemoryDatabase {
     this.collections.set("notifications", new InMemoryCollection("notifications", createNotifications(users)))
     this.collections.set("walletAddresses", new InMemoryCollection("walletAddresses", createWalletAddresses(users)))
     this.collections.set("levelHistories", new InMemoryCollection("levelHistories", []))
+    this.collections.set("luckyDrawDeposits", new InMemoryCollection("luckyDrawDeposits", []))
+    this.collections.set("ledgerEntries", new InMemoryCollection("ledgerEntries", []))
 
     this.initialized = true
   }
@@ -312,6 +349,8 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "Notification", collection: db.getCollection("notifications") },
     { name: "WalletAddress", collection: db.getCollection("walletAddresses") },
     { name: "LevelHistory", collection: db.getCollection("levelHistories") },
+    { name: "LuckyDrawDeposit", collection: db.getCollection("luckyDrawDeposits") },
+    { name: "LedgerEntry", collection: db.getCollection("ledgerEntries") },
   ] as const
 
   for (const { name, collection } of collections) {
@@ -327,7 +366,8 @@ function createModelProxy<T extends InMemoryDocument>(collection: InMemoryCollec
     countDocuments: (filter: QueryFilter = {}) => collection.countDocuments(filter),
     aggregate: (pipeline: Record<string, any>[]) => collection.aggregate(pipeline),
     create: (doc: Partial<T>) => collection.create(doc),
-    updateOne: (filter: QueryFilter, update: UpdateSpec) => collection.updateOne(filter, update),
+    updateOne: (filter: QueryFilter, update: UpdateSpec, options?: UpdateOptions) =>
+      collection.updateOne(filter, update, options),
     updateMany: (filter: QueryFilter, update: UpdateSpec) => collection.updateMany(filter, update),
     deleteOne: (filter: QueryFilter) => collection.deleteOne(filter),
     deleteMany: (filter: QueryFilter = {}) => collection.deleteMany(filter),
@@ -340,6 +380,25 @@ function createModelProxy<T extends InMemoryDocument>(collection: InMemoryCollec
       return collection.findOne(filter)
     },
   }
+}
+
+function extractEqualityFilter(filter: QueryFilter): Record<string, any> {
+  const seed: Record<string, any> = {}
+  for (const [key, value] of Object.entries(filter ?? {})) {
+    if (
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      !(value instanceof Date) &&
+      !(value instanceof mongoose.Types.ObjectId)
+    ) {
+      continue
+    }
+
+    seed[key] = value
+  }
+
+  return seed
 }
 
 function applyProjection<T extends Record<string, any>>(doc: T, projection: Projection): T {
@@ -488,6 +547,20 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
     }
 
     const actual = getValueAtPath(doc, key)
+
+    if (expected instanceof mongoose.Types.ObjectId) {
+      const actualValue =
+        actual instanceof mongoose.Types.ObjectId
+          ? actual.toString()
+          : typeof actual === "string"
+            ? actual
+            : actual?.toString?.() ?? actual
+      return actualValue === expected.toString()
+    }
+
+    if (actual instanceof mongoose.Types.ObjectId && typeof expected === "string") {
+      return actual.toString() === expected
+    }
 
     if (expected && typeof expected === "object" && !(expected instanceof Date) && !Array.isArray(expected)) {
       return Object.entries(expected).every(([operator, value]) => {
@@ -667,7 +740,11 @@ function sortDocuments(docs: any[], sortSpec: Record<string, number>): any[] {
   })
 }
 
-function applyUpdateOperators(doc: Record<string, any>, update: UpdateSpec) {
+function applyUpdateOperators(
+  doc: Record<string, any>,
+  update: UpdateSpec,
+  options: { isUpsert?: boolean } = {},
+) {
   const operators = Object.keys(update)
   const hasOperator = operators.some((key) => key.startsWith("$"))
 
@@ -681,6 +758,15 @@ function applyUpdateOperators(doc: Record<string, any>, update: UpdateSpec) {
       case "$set":
         for (const [path, pathValue] of Object.entries(value ?? {})) {
           setValueAtPath(doc, path, pathValue)
+        }
+        break
+      case "$setOnInsert":
+        if (options.isUpsert) {
+          for (const [path, pathValue] of Object.entries(value ?? {})) {
+            if (getValueAtPath(doc, path) === undefined) {
+              setValueAtPath(doc, path, pathValue)
+            }
+          }
         }
         break
       case "$inc":
@@ -908,6 +994,7 @@ function createBalances(users: InMemoryDocument[]): InMemoryDocument[] {
     teamRewardsAvailable: 75,
     teamRewardsClaimed: 120,
     teamRewardsLastClaimedAt: now,
+    luckyDrawCredits: 0,
     createdAt: now,
     updatedAt: now,
   }))

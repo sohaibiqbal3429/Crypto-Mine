@@ -52,6 +52,10 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
     return { error: "Enter a valid deposit amount" }
   }
 
+  if (amountValue > 30) {
+    return { error: "Maximum single deposit is $30." }
+  }
+
   if (!network) {
     return { error: "Select a deposit network" }
   }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { DepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import type { LuckyDrawDepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 
 type Scope = "user" | "admin"
 
@@ -10,10 +10,6 @@ interface UseLuckyDrawDepositsOptions {
   scope?: Scope
   autoRefresh?: boolean
   refreshIntervalMs?: number
-}
-
-interface UpdateDepositStatusOptions {
-  reason?: string
 }
 
 const DEFAULT_REFRESH_INTERVAL = 30_000
@@ -108,7 +104,7 @@ export function useLuckyDrawDeposits({
   }, [autoRefresh, fetchDeposits, refreshIntervalMs])
 
   const updateDepositStatus = useCallback(
-    async (depositId: string, nextStatus: DepositStatus, options: UpdateDepositStatusOptions = {}) => {
+    async (depositId: string, nextStatus: LuckyDrawDepositStatus, note?: string) => {
       if (scope !== "admin") {
         return false
       }
@@ -117,32 +113,39 @@ export function useLuckyDrawDeposits({
         return false
       }
 
-      const isAccepting = nextStatus === "ACCEPTED"
-      const endpoint = isAccepting ? "/api/admin/approve-deposit" : "/api/admin/reject-transaction"
-      const body = isAccepting
-        ? { transactionId: depositId }
-        : { transactionId: depositId, reason: options.reason ?? "" }
+      const isApproving = nextStatus === "APPROVED"
+      const endpoint = isApproving
+        ? `/api/admin/lucky-draw/deposits/${depositId}/approve`
+        : `/api/admin/lucky-draw/deposits/${depositId}/reject`
 
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        ...(isApproving ? {} : { body: JSON.stringify({ note: note ?? "" }) }),
       })
 
       if (!response.ok) {
-        throw await parseError(response, isAccepting ? "Unable to approve deposit" : "Unable to reject deposit")
+        throw await parseError(response, isApproving ? "Unable to approve deposit" : "Unable to reject deposit")
       }
 
-      setDeposits((current) =>
-        current.map((deposit) =>
-          deposit.id === depositId
-            ? {
-                ...deposit,
-                status: nextStatus,
-              }
-            : deposit,
-        ),
-      )
+      const payload = await response.json().catch(() => null)
+      const updatedDeposit: LuckyDrawDeposit | undefined = payload?.deposit
+
+      setDeposits((current) => {
+        if (!updatedDeposit) {
+          return current.map((deposit) =>
+            deposit.id === depositId
+              ? {
+                  ...deposit,
+                  status: nextStatus,
+                  adminNote: note ?? deposit.adminNote,
+                }
+              : deposit,
+          )
+        }
+
+        return current.map((deposit) => (deposit.id === depositId ? updatedDeposit : deposit))
+      })
 
       return true
     },

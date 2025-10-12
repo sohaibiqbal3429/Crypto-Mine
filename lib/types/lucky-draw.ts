@@ -1,4 +1,4 @@
-export type DepositStatus = "PENDING" | "ACCEPTED" | "REJECTED"
+export type LuckyDrawDepositStatus = "PENDING" | "APPROVED" | "REJECTED"
 
 export interface LuckyDrawDepositReceipt {
   url?: string
@@ -14,7 +14,7 @@ export interface LuckyDrawDeposit {
   txHash: string
   receiptReference: string
   submittedAt: string
-  status: DepositStatus
+  status: LuckyDrawDepositStatus
   amountUsd: number
   network?: string
   depositAddress?: string
@@ -24,6 +24,9 @@ export interface LuckyDrawDeposit {
   userName?: string
   userEmail?: string
   roundId?: string
+  adminNote?: string | null
+  decisionAt?: string | null
+  decidedBy?: string | null
 }
 
 export interface LuckyDrawRound {

@@ -35,6 +35,7 @@ export default async function AdminPage() {
     pendingWithdrawals: 0,
     totalDeposits: 0,
     totalWithdrawals: 0,
+    pendingLuckyDrawDeposits: 0,
   }
 
   try {

@@ -56,6 +56,7 @@ export interface AdminStats {
   pendingWithdrawals: number
   totalDeposits: number
   totalWithdrawals: number
+  pendingLuckyDrawDeposits: number
 }
 
 export interface AdminInitialData {
