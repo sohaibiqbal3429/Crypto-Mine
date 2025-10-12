@@ -2,9 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 import dbConnect from "@/lib/mongodb"
 import { getUserFromRequest } from "@/lib/auth"
-import Balance from "@/models/Balance"
-import Transaction from "@/models/Transaction"
-import Notification from "@/models/Notification"
+import { previewTeamEarnings, claimTeamEarnings } from "@/lib/services/team-earnings"
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,20 +13,25 @@ export async function GET(request: NextRequest) {
 
     await dbConnect()
 
-    const balance = await Balance.findOne({ userId: userPayload.userId })
-    if (!balance) {
-      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
-    }
+    const preview = await previewTeamEarnings(userPayload.userId)
 
     return NextResponse.json({
-      available: balance.teamRewardsAvailable ?? 0,
-      claimedTotal: balance.teamRewardsClaimed ?? 0,
-      lastClaimedAt: balance.teamRewardsLastClaimedAt
-        ? balance.teamRewardsLastClaimedAt.toISOString()
-        : null,
+      available: preview.available,
+      claimedTotal: preview.claimedTotal,
+      lastClaimedAt: preview.lastClaimedAt ? preview.lastClaimedAt.toISOString() : null,
+      level: preview.level,
+      rate: preview.rate,
+      coverage: preview.coverage,
+      windowStart: preview.windowStart ? preview.windowStart.toISOString() : null,
+      windowEnd: preview.windowEnd ? preview.windowEnd.toISOString() : null,
+      dgpCount: preview.dgpCount,
+      totalDgp: preview.totalDgp,
     })
   } catch (error) {
     console.error("Team rewards fetch error:", error)
+    if (error instanceof Error && error.message === "Balance not found") {
+      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -42,54 +45,44 @@ export async function POST(request: NextRequest) {
 
     await dbConnect()
 
-    const balance = await Balance.findOne({ userId: userPayload.userId })
-    if (!balance) {
-      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
+    const result = await claimTeamEarnings(userPayload.userId)
+
+    if (result.claimed <= 0) {
+      return NextResponse.json(
+        {
+          error: result.message ?? "No rewards available",
+          level: result.level,
+          rate: result.rate,
+          coverage: result.coverage,
+          windowStart: result.windowStart ? result.windowStart.toISOString() : null,
+          windowEnd: result.windowEnd ? result.windowEnd.toISOString() : null,
+          dgpCount: result.dgpCount,
+          totalDgp: result.totalDgp,
+          claimedTotal: result.claimedTotal,
+          lastClaimedAt: result.lastClaimedAt ? result.lastClaimedAt.toISOString() : null,
+        },
+        { status: 400 },
+      )
     }
-
-    const available = balance.teamRewardsAvailable ?? 0
-    if (available <= 0) {
-      return NextResponse.json({ error: "No team rewards available to claim" }, { status: 400 })
-    }
-
-    const claimDate = new Date()
-
-    balance.current = (balance.current ?? 0) + available
-    balance.totalBalance = (balance.totalBalance ?? 0) + available
-    balance.totalEarning = (balance.totalEarning ?? 0) + available
-    balance.teamRewardsClaimed = (balance.teamRewardsClaimed ?? 0) + available
-    balance.teamRewardsAvailable = 0
-    balance.teamRewardsLastClaimedAt = claimDate
-
-    await balance.save()
-
-    await Transaction.create({
-      userId: userPayload.userId,
-      type: "teamReward",
-      amount: available,
-      meta: {
-        source: "team_rewards",
-        claimedAt: claimDate.toISOString(),
-      },
-      status: "approved",
-    })
-
-    await Notification.create({
-      userId: userPayload.userId,
-      kind: "team-reward-claimed",
-      title: "Team rewards claimed",
-      body: `You claimed $${available.toFixed(2)} in team rewards.`,
-    })
 
     return NextResponse.json({
       success: true,
-      available: balance.teamRewardsAvailable,
-      claimedTotal: balance.teamRewardsClaimed,
-      lastClaimedAt: balance.teamRewardsLastClaimedAt?.toISOString() ?? null,
-      creditedAmount: available,
+      amount: result.claimed,
+      level: result.level,
+      rate: result.rate,
+      coverage: result.coverage,
+      windowStart: result.windowStart ? result.windowStart.toISOString() : null,
+      windowEnd: result.windowEnd ? result.windowEnd.toISOString() : null,
+      dgpCount: result.dgpCount,
+      totalDgp: result.totalDgp,
+      claimedTotal: result.claimedTotal,
+      lastClaimedAt: result.lastClaimedAt ? result.lastClaimedAt.toISOString() : null,
     })
   } catch (error) {
     console.error("Team rewards claim error:", error)
+    if (error instanceof Error && error.message === "Balance not found") {
+      return NextResponse.json({ error: "Balance not found" }, { status: 404 })
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
