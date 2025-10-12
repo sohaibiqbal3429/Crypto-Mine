@@ -1,29 +1,18 @@
 "use client"
 
+import Link from "next/link"
 import type { ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { differenceInSeconds, format } from "date-fns"
-import { CalendarDays, Gift, History, Timer } from "lucide-react"
+import { CalendarDays, Gift, History, RefreshCw, Timer } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
-import { useToast } from "@/components/ui/use-toast"
 import { useLuckyDrawDeposits } from "@/hooks/use-lucky-draw-deposits"
 import type { LuckyDrawDeposit, LuckyDrawRound, DepositStatus } from "@/lib/types/lucky-draw"
 
-const DEPOSIT_ADDRESS = "0xde7b66da140bdbe9d113966c690eeb9cff83d756"
 const REQUIRED_AMOUNT = 10
 
 interface LuckyDrawCardProps {
@@ -38,17 +27,13 @@ interface LuckyDrawCardProps {
   }
 }
 
-export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, currentUser }: LuckyDrawCardProps) {
-  const { toast } = useToast()
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-
-  const [txHash, setTxHash] = useState("")
-  const [receiptUrl, setReceiptUrl] = useState("")
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [confirmedAmount, setConfirmedAmount] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-
-  const { deposits: storedDeposits, addDeposit } = useLuckyDrawDeposits()
+export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardProps) {
+  const {
+    deposits: storedDeposits,
+    loading: depositsLoading,
+    error: depositsError,
+    refresh: refreshDeposits,
+  } = useLuckyDrawDeposits({ scope: "user" })
 
   const [localRound] = useState<LuckyDrawRound>(
     round ?? {
@@ -65,7 +50,10 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
 
   const deposits = depositsProp ?? storedDeposits
 
-  const acceptedEntries = useMemo(() => deposits.filter((deposit) => deposit.status === "ACCEPTED").length, [deposits])
+  const acceptedEntries = useMemo(
+    () => deposits.filter((deposit) => deposit.status === "ACCEPTED").length,
+    [deposits],
+  )
 
   const nextDrawDate = useMemo(() => new Date((round ?? localRound).endAtUtc), [round, localRound])
   const roundStartDate = useMemo(() => new Date((round ?? localRound).startAtUtc), [round, localRound])
@@ -81,69 +69,49 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
     return () => clearInterval(interval)
   }, [nextDrawDate])
 
-  const handleCopyAddress = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(DEPOSIT_ADDRESS)
-      toast({ description: "Deposit address copied to clipboard." })
-    } catch (error) {
-      console.error(error)
-      toast({ variant: "destructive", description: "Unable to copy the address. Please copy it manually." })
+  const highlightedDeposit = useMemo(() => {
+    if (deposits.length === 0) {
+      return null
     }
-  }, [toast])
 
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      if (!txHash.trim()) {
-        toast({ variant: "destructive", description: "Transaction hash is required." })
-        return
-      }
+    const exactMatch = deposits.find(
+      (deposit) => Math.abs(deposit.amountUsd - REQUIRED_AMOUNT) < 0.01,
+    )
+    return exactMatch ?? deposits[0]
+  }, [deposits])
 
-      if (!receiptUrl.trim() && !receiptFile) {
-        toast({ variant: "destructive", description: "Provide a receipt URL or upload the transaction receipt." })
-        return
-      }
+  const latestWinner = (round ?? localRound).lastWinner
 
-      if (!confirmedAmount) {
-        toast({ variant: "destructive", description: "Please confirm that you deposited exactly $10.00." })
-        return
-      }
+  const statusAlert = useMemo(() => {
+    if (!highlightedDeposit) {
+      return null
+    }
 
-      setSubmitting(true)
+    const amount = highlightedDeposit.amountUsd.toFixed(2)
+    const submittedAt = format(new Date(highlightedDeposit.submittedAt), "MMM d, yyyy • HH:mm 'UTC'")
 
-      const receiptReference = receiptUrl.trim() || receiptFile?.name || "Receipt uploaded"
-
-      const newDeposit: LuckyDrawDeposit = {
-        id: crypto.randomUUID(),
-        txHash: txHash.trim(),
-        receiptReference,
-        submittedAt: new Date().toISOString(),
-        status: "PENDING",
-        userId: currentUser?.id ?? currentUser?._id,
-        userName: currentUser?.name?.trim() || undefined,
-        userEmail: currentUser?.email?.trim() || undefined,
-        roundId: (round ?? localRound).id,
-      }
-
-      if (onDepositSubmit) {
-        onDepositSubmit(newDeposit)
-      }
-
-      if (!depositsProp) {
-        addDeposit(newDeposit)
-      }
-
-      toast({ description: "Review submitted — awaiting admin confirmation." })
-
-      setTxHash("")
-      setReceiptUrl("")
-      setReceiptFile(null)
-      setConfirmedAmount(false)
-      setIsDialogOpen(false)
-      setSubmitting(false)
-    },
-    [confirmedAmount, onDepositSubmit, receiptFile, receiptUrl, toast, txHash],
-  )
+    switch (highlightedDeposit.status) {
+      case "ACCEPTED":
+        return {
+          variant: "default" as const,
+          title: "Deposit approved",
+          description: `Your deposit of $${amount} has been accepted and credited. Submitted ${submittedAt}.`,
+        }
+      case "REJECTED":
+        return {
+          variant: "destructive" as const,
+          title: "Deposit rejected",
+          description:
+            `Your deposit of $${amount} was rejected. Please double-check your receipt and contact support if you need help. Submitted ${submittedAt}.`,
+        }
+      default:
+        return {
+          variant: "default" as const,
+          title: "Deposit pending review",
+          description: `Your deposit of $${amount} is awaiting admin review. Submitted ${submittedAt}.`,
+        }
+    }
+  }, [highlightedDeposit])
 
   const renderStatusBadge = (status: DepositStatus) => {
     switch (status) {
@@ -156,11 +124,12 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
     }
   }
 
-  const latestWinner = (round ?? localRound).lastWinner
-
   return (
     <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-purple-500/10 shadow-lg backdrop-blur">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.1),_transparent_60%)]" aria-hidden />
+      <div
+        className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.1),_transparent_60%)]"
+        aria-hidden
+      />
       <CardHeader className="relative z-10 space-y-4">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -170,16 +139,31 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
           <Gift className="h-10 w-10 text-amber-500" />
         </div>
         <div className="rounded-xl bg-white/40 p-4 shadow-inner">
-            <p className="text-sm font-medium text-foreground">
-              Pay <span className="font-semibold text-amber-600">${REQUIRED_AMOUNT.toFixed(2)}</span> to join the game and the lucky draw to win
-              <span className="font-semibold"> ${(round ?? localRound).prizePoolUsd.toFixed(2)}</span>.
+          <p className="text-sm font-medium text-foreground">
+            Pay <span className="font-semibold text-amber-600">${REQUIRED_AMOUNT.toFixed(2)}</span> to join the game and the lucky
+            draw to win
+            <span className="font-semibold"> {(round ?? localRound).prizePoolUsd.toFixed(2)}</span>.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Have a transaction recorded for $10? Submit quickly to participate.
+            Submit your transaction hash and receipt after depositing to Mintmine Pro’s wallet.
           </p>
         </div>
       </CardHeader>
       <CardContent className="relative z-10 space-y-6">
+        {statusAlert ? (
+          <Alert variant={statusAlert.variant} className="border-white/40 bg-white/70 text-foreground">
+            <AlertTitle>{statusAlert.title}</AlertTitle>
+            <AlertDescription>{statusAlert.description}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {depositsError ? (
+          <Alert variant="destructive" className="border-white/40 bg-rose-500/10">
+            <AlertTitle>Unable to load deposit status</AlertTitle>
+            <AlertDescription>{depositsError}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <div className="grid gap-4 lg:grid-cols-3">
           <SummaryTile
             icon={<Timer className="h-5 w-5" />}
@@ -202,20 +186,22 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Badge className="bg-emerald-500/15 text-emerald-600">Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}</Badge>
+          <Badge className="bg-emerald-500/15 text-emerald-600">
+            Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
+          </Badge>
           <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
           <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="lg" onClick={() => setIsDialogOpen(true)}>
-            Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}
+          <Button size="lg" asChild disabled={depositsLoading}>
+            <Link href="/wallet/deposit">Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}</Link>
           </Button>
           <Button variant="outline" className="backdrop-blur" size="lg">
             View Leaderboard
           </Button>
           <div className="text-sm text-muted-foreground">
-            3 have participated — submit your $10.00 today to participate.
+            {acceptedEntries} participant{acceptedEntries === 1 ? " has" : "s have"} been approved so far.
           </div>
         </div>
 
@@ -227,30 +213,65 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
             </Badge>
           </div>
           <p className="mt-2 text-sm text-foreground">
-            {latestWinner ? `${latestWinner.name} — announced ${format(new Date(latestWinner.announcedAt), "MMM d, yyyy")}` : "Winner will appear here once announced."}
+            {latestWinner
+              ? `${latestWinner.name} — announced ${format(new Date(latestWinner.announcedAt), "MMM d, yyyy")}`
+              : "Winner will appear here once announced."}
           </p>
         </div>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-muted-foreground">Your deposit reviews</h3>
-            <span className="text-xs text-muted-foreground">Status updates appear in real-time</span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground">Your deposit reviews</h3>
+              <p className="text-xs text-muted-foreground">Keep an eye on the status of your submissions.</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-xs"
+              onClick={refreshDeposits}
+              disabled={depositsLoading}
+            >
+              <RefreshCw className={`h-3 w-3 ${depositsLoading ? "animate-spin" : ""}`} /> Refresh
+            </Button>
           </div>
           <div className="space-y-2">
-            {deposits.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No deposits submitted yet. Submit your $10 deposit to join this round.</p>
+            {depositsLoading ? (
+              <div className="flex items-center justify-center gap-2 rounded-lg border border-white/40 bg-white/60 p-3 text-sm text-muted-foreground">
+                <RefreshCw className="h-4 w-4 animate-spin" /> Loading your deposit history…
+              </div>
+            ) : deposits.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No deposits submitted yet. Submit your $10 deposit to join this round.
+              </p>
             ) : (
               deposits.map((deposit) => (
                 <div
                   key={deposit.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/50 bg-white/60 p-3 text-sm shadow-sm"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/50 bg-white/70 p-3 text-sm shadow-sm"
                 >
                   <div className="space-y-1">
-                    <p className="break-all font-medium text-foreground">{deposit.txHash}</p>
+                    <p className="font-semibold text-foreground">
+                      ${deposit.amountUsd.toFixed(2)} • {deposit.network ?? "Network"}
+                    </p>
+                    <p className="break-all font-mono text-xs text-muted-foreground">
+                      {deposit.txHash || "Transaction hash pending"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Submitted {format(new Date(deposit.submittedAt), "MMM d, yyyy • HH:mm 'UTC'")}
                     </p>
-                    <p className="break-all text-xs text-blue-600">{deposit.receiptReference}</p>
+                    {deposit.receipt?.url ? (
+                      <a
+                        className="text-xs font-medium text-blue-600 hover:underline"
+                        href={deposit.receipt.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View receipt
+                      </a>
+                    ) : deposit.receiptReference ? (
+                      <p className="break-all text-xs text-blue-600">{deposit.receiptReference}</p>
+                    ) : null}
                   </div>
                   {renderStatusBadge(deposit.status)}
                 </div>
@@ -259,88 +280,6 @@ export function LuckyDrawCard({ round, deposits: depositsProp, onDepositSubmit, 
           </div>
         </div>
       </CardContent>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Deposit $10 via BEP20</DialogTitle>
-            <DialogDescription>
-              Deposit $10 via BNB Smart Chain (BEP20) to join the current blind box round. Use Binance or any trusted crypto
-              wallet. Once accepted, you will be entered automatically.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6">
-            <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-              <p className="font-medium text-foreground">Network: BNB Smart Chain (BEP20)</p>
-              <div className="mt-3 space-y-2">
-                <Label htmlFor="deposit-address" className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Deposit address
-                </Label>
-                <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
-                  <Input id="deposit-address" value={DEPOSIT_ADDRESS} readOnly className="border-0 p-0 focus-visible:ring-0" />
-                  <Button type="button" variant="outline" size="sm" onClick={handleCopyAddress}>
-                    Copy
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <form id="deposit-form" className="space-y-4" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="tx-hash">Transaction hash</Label>
-                <Input
-                  id="tx-hash"
-                  placeholder="Paste your BEP20 transaction hash"
-                  value={txHash}
-                  onChange={(event) => setTxHash(event.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="receipt-url">Transaction receipt URL</Label>
-                <Input
-                  id="receipt-url"
-                  type="url"
-                  placeholder="https://bscscan.com/tx/…"
-                  value={receiptUrl}
-                  onChange={(event) => setReceiptUrl(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Provide a BscScan link or upload your payment receipt below.</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="receipt-file">Upload transaction receipt</Label>
-                <Input
-                  id="receipt-file"
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(event) => setReceiptFile(event.target.files?.[0] ?? null)}
-                />
-                {receiptFile ? <p className="text-xs text-muted-foreground">Selected: {receiptFile.name}</p> : null}
-              </div>
-
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
-                <Checkbox id="confirm-amount" checked={confirmedAmount} onCheckedChange={(value) => setConfirmedAmount(Boolean(value))} />
-                <Label htmlFor="confirm-amount" className="text-sm text-foreground">
-                  I confirm I have deposited exactly $10.00 via BEP20 and understand admin approval is required before my entry is
-                  counted.
-                </Label>
-              </div>
-            </form>
-          </div>
-
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button type="submit" form="deposit-form" disabled={submitting}>
-              {submitting ? "Submitting…" : "Submit Deposit"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   )
 }

@@ -1,179 +1,157 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import type { DepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 
-const STORAGE_KEY = "crypto-mine:lucky-draw-deposits"
-const BROADCAST_EVENT = "lucky-draw-deposits:update"
+type Scope = "user" | "admin"
 
-function createDefaultDeposits(): LuckyDrawDeposit[] {
-  const now = Date.now()
-  return [
-    {
-      id: "demo-ava-sterling",
-      txHash: "0x9f5a9c238be02f4b912cd34afc0d8773e4f2abc17f8c1e2d3f4a5b6c7d8e9f01",
-      receiptReference: "https://bscscan.com/tx/0x9f5a9c238be02f4b912cd34afc0d8773e4f2abc17f8c1e2d3f4a5b6c7d8e9f01",
-      submittedAt: new Date(now - 60 * 60 * 1000).toISOString(),
-      status: "PENDING",
-      userName: "Ava Sterling",
-      userEmail: "ava@example.com",
-      roundId: "demo-round",
-    },
-    {
-      id: "demo-noah-quinn",
-      txHash: "0xa3b8c9d0e1f234567890abcdef1234567890abcdef1234567890abcdef123456",
-      receiptReference: "receipt-noah.pdf",
-      submittedAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
-      status: "ACCEPTED",
-      userName: "Noah Quinn",
-      userEmail: "noah@example.com",
-      roundId: "demo-round",
-    },
-    {
-      id: "demo-mia-rivers",
-      txHash: "0xf45d67e89abc0123456789defabcdef0123456789abcdef0123456789abcdef0",
-      receiptReference: "https://bscscan.com/tx/0xf45d67e89abc0123456789defabcdef0123456789abcdef0123456789abcdef0",
-      submittedAt: new Date(now - 6 * 60 * 60 * 1000).toISOString(),
-      status: "REJECTED",
-      userName: "Mia Rivers",
-      userEmail: "mia@example.com",
-      roundId: "demo-round",
-    },
-  ]
+interface UseLuckyDrawDepositsOptions {
+  scope?: Scope
+  autoRefresh?: boolean
+  refreshIntervalMs?: number
 }
 
-function readDepositsFromStorage(): LuckyDrawDeposit[] | null {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      return null
-    }
-
-    const parsed = JSON.parse(raw) as LuckyDrawDeposit[]
-    if (!Array.isArray(parsed)) {
-      return null
-    }
-
-    return parsed
-  } catch (error) {
-    console.error("Failed to read lucky draw deposits from storage", error)
-    return null
-  }
+interface UpdateDepositStatusOptions {
+  reason?: string
 }
 
-function persistDepositsToStorage(deposits: LuckyDrawDeposit[]) {
-  if (typeof window === "undefined") {
-    return
-  }
+const DEFAULT_REFRESH_INTERVAL = 30_000
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(deposits))
-  window.dispatchEvent(new CustomEvent<LuckyDrawDeposit[]>(BROADCAST_EVENT, { detail: deposits }))
+function resolveEndpoint(scope: Scope): string {
+  return scope === "admin" ? "/api/admin/lucky-draw/deposits" : "/api/dashboard/lucky-draw-deposits"
 }
 
-export function useLuckyDrawDeposits() {
-  const [deposits, setDeposits] = useState<LuckyDrawDeposit[]>(() => {
-    const stored = readDepositsFromStorage()
-    if (stored) {
-      return stored
-    }
+function parseError(response: Response, fallback: string): Promise<Error> {
+  return response
+    .json()
+    .catch(() => null)
+    .then((data) => {
+      const message = (data?.error || data?.message || fallback) as string
+      return new Error(message)
+    })
+}
 
-    const defaults = createDefaultDeposits()
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults))
+export function useLuckyDrawDeposits({
+  scope = "user",
+  autoRefresh = scope === "user",
+  refreshIntervalMs = DEFAULT_REFRESH_INTERVAL,
+}: UseLuckyDrawDepositsOptions = {}) {
+  const [deposits, setDeposits] = useState<LuckyDrawDeposit[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const endpoint = useMemo(() => resolveEndpoint(scope), [scope])
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const fetchDeposits = useCallback(async () => {
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(endpoint, { cache: "no-store", signal: controller.signal })
+      if (!response.ok) {
+        throw await parseError(response, "Unable to load deposits")
+      }
+
+      const payload = await response.json()
+      const nextDeposits = Array.isArray(payload.deposits) ? (payload.deposits as LuckyDrawDeposit[]) : []
+      setDeposits(nextDeposits)
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        return
+      }
+      console.error("Lucky draw deposits fetch error", error)
+      setError(error instanceof Error ? error.message : "Unable to load deposits")
+    } finally {
+      setLoading(false)
     }
-    return defaults
-  })
+  }, [endpoint])
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    fetchDeposits()
+    return () => {
+      abortControllerRef.current?.abort()
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+      }
+    }
+  }, [fetchDeposits])
+
+  useEffect(() => {
+    if (!autoRefresh) {
       return
     }
 
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) {
-        return
+    const schedule = () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
       }
-
-      if (!event.newValue) {
-        setDeposits([])
-        return
-      }
-
-      try {
-        const parsed = JSON.parse(event.newValue) as LuckyDrawDeposit[]
-        setDeposits(parsed)
-      } catch (error) {
-        console.error("Failed to parse lucky draw deposits from storage event", error)
-      }
+      refreshTimerRef.current = setTimeout(async () => {
+        await fetchDeposits()
+        schedule()
+      }, refreshIntervalMs)
     }
 
-    const handleBroadcast = (event: Event) => {
-      const customEvent = event as CustomEvent<LuckyDrawDeposit[]>
-      const detail = customEvent.detail
-      if (Array.isArray(detail)) {
-        setDeposits(detail)
-      }
-    }
-
-    window.addEventListener("storage", handleStorage)
-    window.addEventListener(BROADCAST_EVENT, handleBroadcast as EventListener)
+    schedule()
 
     return () => {
-      window.removeEventListener("storage", handleStorage)
-      window.removeEventListener(BROADCAST_EVENT, handleBroadcast as EventListener)
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+      }
     }
-  }, [])
-
-  const updateDeposits = useCallback(
-    (updater: LuckyDrawDeposit[] | ((current: LuckyDrawDeposit[]) => LuckyDrawDeposit[])) => {
-      setDeposits((current) => {
-        const next = typeof updater === "function" ? (updater as (curr: LuckyDrawDeposit[]) => LuckyDrawDeposit[])(current) : updater
-        persistDepositsToStorage(next)
-        return next
-      })
-    },
-    [],
-  )
-
-  const addDeposit = useCallback(
-    (deposit: LuckyDrawDeposit) => {
-      updateDeposits((current) => [deposit, ...current])
-    },
-    [updateDeposits],
-  )
+  }, [autoRefresh, fetchDeposits, refreshIntervalMs])
 
   const updateDepositStatus = useCallback(
-    (depositId: string, nextStatus: DepositStatus) => {
-      let changed = false
-      updateDeposits((current) =>
-        current.map((deposit) => {
-          if (deposit.id !== depositId) {
-            return deposit
-          }
+    async (depositId: string, nextStatus: DepositStatus, options: UpdateDepositStatusOptions = {}) => {
+      if (scope !== "admin") {
+        return false
+      }
 
-          if (deposit.status !== nextStatus) {
-            changed = true
-          }
+      if (nextStatus === "PENDING") {
+        return false
+      }
 
-          return { ...deposit, status: nextStatus }
-        }),
+      const isAccepting = nextStatus === "ACCEPTED"
+      const endpoint = isAccepting ? "/api/admin/approve-deposit" : "/api/admin/reject-transaction"
+      const body = isAccepting
+        ? { transactionId: depositId }
+        : { transactionId: depositId, reason: options.reason ?? "" }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+
+      if (!response.ok) {
+        throw await parseError(response, isAccepting ? "Unable to approve deposit" : "Unable to reject deposit")
+      }
+
+      setDeposits((current) =>
+        current.map((deposit) =>
+          deposit.id === depositId
+            ? {
+                ...deposit,
+                status: nextStatus,
+              }
+            : deposit,
+        ),
       )
-      return changed
+
+      return true
     },
-    [updateDeposits],
+    [scope],
   )
 
-  const replaceDeposits = useCallback(
-    (nextDeposits: LuckyDrawDeposit[]) => {
-      updateDeposits(nextDeposits)
-    },
-    [updateDeposits],
-  )
+  const refresh = useCallback(async () => {
+    await fetchDeposits()
+  }, [fetchDeposits])
 
-  return { deposits, addDeposit, updateDepositStatus, replaceDeposits }
+  return { deposits, loading, error, updateDepositStatus, refresh }
 }

@@ -2,9 +2,10 @@
 
 import { useMemo } from "react"
 import { format } from "date-fns"
-import { Check, X } from "lucide-react"
+import { Check, Loader2, RefreshCw, X } from "lucide-react"
 
 import type { DepositStatus, LuckyDrawDeposit } from "@/lib/types/lucky-draw"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,11 +13,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 interface AdminDepositsTableProps {
   deposits: LuckyDrawDeposit[]
+  loading?: boolean
+  error?: string | null
   onAccept: (depositId: string) => void
   onReject: (depositId: string) => void
+  onRefresh?: () => void
 }
 
-export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDepositsTableProps) {
+export function AdminDepositsTable({
+  deposits,
+  loading = false,
+  error = null,
+  onAccept,
+  onReject,
+  onRefresh,
+}: AdminDepositsTableProps) {
   const summary = useMemo(() => {
     const pending = deposits.filter((deposit) => deposit.status === "PENDING").length
     const accepted = deposits.filter((deposit) => deposit.status === "ACCEPTED").length
@@ -35,7 +46,35 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
     }
   }
 
-  const isUrl = (value: string) => value.startsWith("http") || value.startsWith("blob:")
+  const isUrl = (value: string) => value.startsWith("http") || value.startsWith("/")
+
+  const renderReceipt = (deposit: LuckyDrawDeposit) => {
+    if (deposit.receipt?.url) {
+      return (
+        <Button variant="link" className="px-0" asChild>
+          <a href={deposit.receipt.url} target="_blank" rel="noopener noreferrer">
+            View Receipt
+          </a>
+        </Button>
+      )
+    }
+
+    if (deposit.receiptReference && isUrl(deposit.receiptReference)) {
+      return (
+        <Button variant="link" className="px-0" asChild>
+          <a href={deposit.receiptReference} target="_blank" rel="noopener noreferrer">
+            View Receipt
+          </a>
+        </Button>
+      )
+    }
+
+    return deposit.receiptReference ? (
+      <span className="break-all text-xs text-muted-foreground">{deposit.receiptReference}</span>
+    ) : (
+      <span className="text-xs text-muted-foreground">Not provided</span>
+    )
+  }
 
   return (
     <Card className="border-0 bg-gradient-to-br from-slate-900/10 via-slate-900/5 to-slate-900/10 shadow-lg">
@@ -46,7 +85,7 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
             Review $10 BEP20 deposits submitted for the Blind Box Lucky Draw and approve eligible entries.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline" className="border-amber-400/40 text-amber-500">
             Pending: {summary.pending}
           </Badge>
@@ -56,14 +95,24 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
           <Badge variant="outline" className="border-rose-400/40 text-rose-500">
             Rejected: {summary.rejected}
           </Badge>
+          {onRefresh ? (
+            <Button size="sm" variant="ghost" className="gap-1 text-xs" onClick={onRefresh} disabled={loading}>
+              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Refresh
+            </Button>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        {error ? (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Tx Hash</TableHead>
+              <TableHead>Details</TableHead>
               <TableHead>Receipt</TableHead>
               <TableHead>Submitted At (UTC)</TableHead>
               <TableHead>Status</TableHead>
@@ -71,7 +120,16 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
             </TableRow>
           </TableHeader>
           <TableBody>
-            {deposits.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading deposits…
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : deposits.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                   No deposits submitted for review yet.
@@ -80,21 +138,30 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
             ) : (
               deposits.map((deposit) => (
                 <TableRow key={deposit.id} className="bg-background/50">
-                  <TableCell className="font-medium">
-                    {deposit.userName ?? "Unknown participant"}
-                  </TableCell>
-                  <TableCell className="break-all font-mono text-xs">{deposit.txHash}</TableCell>
+                  <TableCell className="font-medium">{deposit.userName ?? "Unknown participant"}</TableCell>
                   <TableCell>
-                    {isUrl(deposit.receiptReference) ? (
-                      <Button variant="link" className="px-0" asChild>
-                        <a href={deposit.receiptReference} target="_blank" rel="noopener noreferrer">
-                          View Receipt
-                        </a>
-                      </Button>
-                    ) : (
-                      <span className="break-all text-xs text-muted-foreground">{deposit.receiptReference}</span>
-                    )}
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div className="text-foreground">${deposit.amountUsd.toFixed(2)} submitted</div>
+                      <div>
+                        <span className="text-foreground">Tx:</span>{" "}
+                        <span className="break-all font-mono">{deposit.txHash || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-foreground">Network:</span>{" "}
+                        {deposit.network ? deposit.network : "—"}
+                      </div>
+                      <div>
+                        <span className="text-foreground">Address:</span>{" "}
+                        <span className="break-all font-mono">{deposit.depositAddress ?? "—"}</span>
+                      </div>
+                      {deposit.exchangePlatform ? (
+                        <div>
+                          <span className="text-foreground">Exchange:</span> {deposit.exchangePlatform}
+                        </div>
+                      ) : null}
+                    </div>
                   </TableCell>
+                  <TableCell>{renderReceipt(deposit)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {format(new Date(deposit.submittedAt), "MMM d, yyyy • HH:mm:ss")}
                   </TableCell>
@@ -104,7 +171,7 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
                       size="sm"
                       variant="outline"
                       className="border-emerald-400/40 text-emerald-600"
-                      disabled={deposit.status !== "PENDING"}
+                      disabled={deposit.status !== "PENDING" || loading}
                       onClick={() => onAccept(deposit.id)}
                     >
                       <Check className="mr-1 h-4 w-4" /> Accept
@@ -113,7 +180,7 @@ export function AdminDepositsTable({ deposits, onAccept, onReject }: AdminDeposi
                       size="sm"
                       variant="outline"
                       className="border-rose-400/40 text-rose-500"
-                      disabled={deposit.status !== "PENDING"}
+                      disabled={deposit.status !== "PENDING" || loading}
                       onClick={() => onReject(deposit.id)}
                     >
                       <X className="mr-1 h-4 w-4" /> Reject
