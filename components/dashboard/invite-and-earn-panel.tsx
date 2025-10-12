@@ -27,20 +27,37 @@ export function InviteAndEarnPanel({ referralCode = "CRYPTO123", activeInvites =
     }
   }, [referralCode, toast])
 
-  const handleShare = useCallback(() => {
-    const sharePayload = {
-      title: "Join me on Mintmine Pro",
-      text: `Use my referral code ${referralCode} to start mining and earn rewards together!`,
-      url: typeof window !== "undefined" ? window.location.origin : "https://mintmine.pro",
+  const handleShare = useCallback(async () => {
+    const referralLink = `https://mintminepro.com/auth/register?ref=${encodeURIComponent(referralCode)}`
+
+    try {
+      await navigator.clipboard.writeText(referralLink)
+      toast({ description: "Referral link copied to clipboard." })
+    } catch (error) {
+      console.error(error)
+      toast({ variant: "destructive", description: "Unable to copy the referral link. Try copying manually." })
     }
 
     if (navigator.share) {
-      navigator
-        .share(sharePayload)
-        .then(() => toast({ description: "Invite shared successfully." }))
-        .catch(() => toast({ variant: "destructive", description: "Sharing was cancelled." }))
+      const sharePayload = {
+        title: "Join me on Mintmine Pro",
+        text: `Use my referral code ${referralCode} to start mining and earn rewards together!`,
+        url: referralLink,
+      }
+
+      try {
+        await navigator.share(sharePayload)
+        toast({ description: "Invite shared successfully." })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return
+        }
+
+        console.error(error)
+        toast({ variant: "destructive", description: "Unable to complete sharing." })
+      }
     } else {
-      toast({ description: "Sharing is not supported on this device. Copy the code instead." })
+      toast({ description: "Sharing isn't supported here. Send the copied link directly." })
     }
   }, [referralCode, toast])
 
