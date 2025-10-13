@@ -176,9 +176,9 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
         <div className="grid gap-4 lg:grid-cols-3">
           <SummaryTile
             icon={<Timer className="h-5 w-5" />}
-            label="Countdown"
+            label="Winner announcement in"
             value={countdown}
-            helper={`Next draw: ${format(nextDrawDate, "MMM d, yyyy • HH:mm:ss 'UTC'")}`}
+            helper={`Countdown locks after 72 hours • Official reveal ${format(nextDrawDate, "MMM d, yyyy • HH:mm:ss 'UTC'")}`}
           />
           <SummaryTile
             icon={<History className="h-5 w-5" />}
@@ -190,14 +190,32 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
             icon={<CalendarDays className="h-5 w-5" />}
             label="Round Window"
             value={`${format(roundStartDate, "MMM d, HH:mm 'UTC'")} → ${format(nextDrawDate, "MMM d, HH:mm 'UTC'")}`}
-            helper="72-hour cadence"
+            helper="Join anytime before the 72-hour reveal"
           />
         </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge className="bg-emerald-500/15 text-emerald-600">
-              Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
-            </Badge>
+        <Alert className="border-white/40 bg-white/70 text-foreground">
+          <AlertTitle>How the Blind Box Lucky Draw works</AlertTitle>
+          <AlertDescription>
+            <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+              <li>
+                Admins can select a provisional winner at any time during the round, but the official announcement unlocks exactly
+                72 hours (3 days) after the round kicks off.
+              </li>
+              <li>When the announcement goes live, the selected player immediately sees the win reflected in their dashboard.</li>
+              <li>
+                Each round runs on a rolling 72-hour countdown. For example, if a round begins on October 13 at 12:00 AM and you
+                visit on October 15 at 12:00 PM, you&apos;ll see the winner reveal scheduled for 60 hours later—there&apos;s still time to
+                join before the timer hits zero.
+              </li>
+            </ul>
+          </AlertDescription>
+        </Alert>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge className="bg-emerald-500/15 text-emerald-600">
+            Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
+          </Badge>
             <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
             <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
           </div>
