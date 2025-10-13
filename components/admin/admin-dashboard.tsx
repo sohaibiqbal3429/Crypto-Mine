@@ -96,8 +96,6 @@ interface AdminDashboardProps {
 
 const TRANSACTION_LIMIT = 50
 const USER_LIMIT = 100
-const ANNOUNCEMENT_DELAY_MS = 72 * 60 * 60 * 1000
-
 interface PendingAnnouncement {
   id: string
   winner: string
@@ -240,8 +238,46 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
     [luckyDeposits, toast, updateDepositStatus],
   )
 
+  const fetchLuckyRound = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/lucky-draw/round", { cache: "no-store" })
+      const payload = await readJsonSafe<{ round?: LuckyDrawRound; error?: unknown }>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to load lucky draw round"
+        throw new Error(message)
+      }
+
+      if (!payload?.round) {
+        throw new Error("Received an invalid response while loading the lucky draw round")
+      }
+
+      runIfMounted(() => {
+        setLuckyRound(payload.round)
+        if (!payload.round.selectedWinner && announceTimeoutRef.current) {
+          clearTimeout(announceTimeoutRef.current)
+          announceTimeoutRef.current = null
+        }
+        setPendingAnnouncement(
+          payload.round.selectedWinner
+            ? {
+                id: payload.round.selectedWinner.depositId ?? "",
+                winner: payload.round.selectedWinner.name,
+                announcementAt: payload.round.announcementAtUtc ?? payload.round.endAtUtc,
+                prizeUsd: payload.round.prizePoolUsd,
+              }
+            : null,
+        )
+      })
+    } catch (error) {
+      console.error("Failed to load lucky draw round", error)
+      const message = error instanceof Error ? error.message : "Unable to load lucky draw round"
+      toast({ variant: "destructive", description: message })
+    }
+  }, [runIfMounted, toast])
+
   const handleAnnounceWinner = useCallback(
-    (depositId: string) => {
+    async (depositId: string) => {
       const winnerDeposit = luckyDeposits.find((deposit) => deposit.id === depositId && deposit.status === "APPROVED")
       if (!winnerDeposit) {
         toast({ variant: "destructive", description: "Select an accepted deposit before announcing a winner." })
@@ -252,76 +288,102 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       if (announceTimeoutRef.current) {
         clearTimeout(announceTimeoutRef.current)
       }
-      const selectionTime = new Date()
-      const scheduledAnnouncement = new Date(selectionTime.getTime() + ANNOUNCEMENT_DELAY_MS)
-      const winnerName = winnerDeposit.userName ?? "Participant"
-      const announcementIso = scheduledAnnouncement.toISOString()
-      const selectionIso = selectionTime.toISOString()
-      const prizeUsd = luckyRound.prizePoolUsd
 
-      runIfMounted(() =>
-        setLuckyRound((prev) => ({
-          ...prev,
-          announcementAtUtc: announcementIso,
-          selectedWinner: {
-            name: winnerName,
-            selectedAt: selectionIso,
-          },
-        })),
-      )
-      runIfMounted(() =>
-        setPendingAnnouncement({
-          id: depositId,
-          winner: winnerName,
-          announcementAt: announcementIso,
-          prizeUsd,
-        }),
-      )
-
-      const delay = Math.max(0, scheduledAnnouncement.getTime() - Date.now())
-      const safeDelay = Math.min(delay, 2_147_483_647)
-      announceTimeoutRef.current = setTimeout(() => {
-        if (!isMountedRef.current) {
-          return
-        }
-        const announcementTime = new Date().toISOString()
-        runIfMounted(() =>
-          setLuckyRound((prev) => ({
-            ...prev,
-            lastWinner: {
-              name: winnerName,
-              announcedAt: announcementTime,
-            },
-            selectedWinner: null,
-          })),
-        )
-        runIfMounted(() =>
-          setRoundHistory((prev) => [
-            {
-              id: `history-${announcementTime}`,
-              winner: winnerName,
-              announcedAt: announcementTime,
-              prizeUsd,
-            },
-            ...prev,
-          ]),
-        )
-        runIfMounted(() => setPendingAnnouncement(null))
-        toast({
-          description: `${winnerName} has been announced as the Blind Box winner. $${prizeUsd.toFixed(2)} credited automatically.`,
+      try {
+        const response = await fetch("/api/admin/lucky-draw/round", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ depositId }),
         })
-        runIfMounted(() => setAnnouncingWinner(false))
-      }, safeDelay)
+        const payload = await readJsonSafe<{ round?: LuckyDrawRound; error?: unknown }>(response)
 
-      toast({
-        description: `${winnerName} selected for the Blind Box prize. Official announcement on ${format(
-          scheduledAnnouncement,
-          "MMM d, yyyy • HH:mm 'UTC'",
-        )}.`,
-      })
-      runIfMounted(() => setAnnouncingWinner(false))
+        if (!response.ok) {
+          const message = typeof payload?.error === "string" ? payload.error : "Unable to schedule winner"
+          throw new Error(message)
+        }
+
+        if (!payload?.round) {
+          throw new Error("Received an invalid response while scheduling the winner")
+        }
+
+        const nextRound = payload.round
+        const winnerName = nextRound.selectedWinner?.name ?? winnerDeposit.userName ?? "Participant"
+        const announcementIso = nextRound.announcementAtUtc ?? nextRound.endAtUtc
+        const prizeUsd = nextRound.prizePoolUsd
+
+        runIfMounted(() => {
+          setLuckyRound(nextRound)
+          setPendingAnnouncement(
+            nextRound.selectedWinner
+              ? {
+                  id: nextRound.selectedWinner.depositId ?? depositId,
+                  winner: winnerName,
+                  announcementAt: announcementIso,
+                  prizeUsd,
+                }
+              : null,
+          )
+        })
+
+        const announcementDate = announcementIso ? new Date(announcementIso) : null
+        if (announcementDate) {
+          const delay = Math.max(0, announcementDate.getTime() - Date.now())
+          const safeDelay = Math.min(delay, 2_147_483_647)
+          announceTimeoutRef.current = setTimeout(() => {
+            if (!isMountedRef.current) {
+              return
+            }
+            const announcementTime = new Date().toISOString()
+            runIfMounted(() =>
+              setLuckyRound((prev) => ({
+                ...prev,
+                lastWinner: {
+                  name: winnerName,
+                  announcedAt: announcementTime,
+                },
+                selectedWinner: null,
+              })),
+            )
+            runIfMounted(() =>
+              setRoundHistory((prev) => [
+                {
+                  id: `history-${announcementTime}`,
+                  winner: winnerName,
+                  announcedAt: announcementTime,
+                  prizeUsd,
+                },
+                ...prev,
+              ]),
+            )
+            runIfMounted(() => setPendingAnnouncement(null))
+            toast({
+              description: `${winnerName} has been announced as the Blind Box winner. $${prizeUsd.toFixed(2)} credited automatically.`,
+            })
+            announceTimeoutRef.current = null
+          }, safeDelay)
+        } else {
+          announceTimeoutRef.current = null
+        }
+
+        toast({
+          description: announcementDate
+            ? `${winnerName} selected for the Blind Box prize. Official announcement on ${format(
+                announcementDate,
+                "MMM d, yyyy • HH:mm 'UTC'",
+              )}.`
+            : `${winnerName} selected for the Blind Box prize. Announcement timing will be shared soon.`,
+        })
+      } catch (error) {
+        console.error(error)
+        toast({
+          variant: "destructive",
+          description: error instanceof Error ? error.message : "Unable to schedule winner. Please try again.",
+        })
+      } finally {
+        runIfMounted(() => setAnnouncingWinner(false))
+      }
     },
-    [announceTimeoutRef, luckyDeposits, luckyRound.prizePoolUsd, runIfMounted, toast],
+    [announceTimeoutRef, luckyDeposits, runIfMounted, toast],
   )
 
   useEffect(() => {
@@ -502,6 +564,10 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   }, [fetchUsers])
 
   useEffect(() => {
+    fetchLuckyRound().catch(() => null)
+  }, [fetchLuckyRound])
+
+  useEffect(() => {
     fetch("/api/auth/me", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) {
@@ -526,8 +592,13 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       setTransactionCursor(null)
       setUserCursor(null)
     })
-    await Promise.allSettled([fetchTransactions({ reset: true }), fetchUsers({ reset: true }), fetchStats()])
-  }, [fetchStats, fetchTransactions, fetchUsers, runIfMounted])
+    await Promise.allSettled([
+      fetchTransactions({ reset: true }),
+      fetchUsers({ reset: true }),
+      fetchStats(),
+      fetchLuckyRound(),
+    ])
+  }, [fetchLuckyRound, fetchStats, fetchTransactions, fetchUsers, runIfMounted])
 
   useEffect(() => {
     fetchStats().catch(() => null)

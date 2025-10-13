@@ -10,6 +10,7 @@ import {
   approveLuckyDrawDeposit,
   rejectLuckyDrawDeposit,
 } from "@/lib/services/lucky-draw-deposits"
+import { getActiveLuckyDrawRound, scheduleLuckyDrawWinner } from "@/lib/services/lucky-draw-rounds"
 import LedgerEntry from "@/models/LedgerEntry"
 import Balance from "@/models/Balance"
 import User from "@/models/User"
@@ -130,4 +131,40 @@ test("rejecting a lucky draw deposit stores admin note without ledger entry", as
 
   const ledgerCount = await LedgerEntry.countDocuments({ refId: deposit._id })
   assert.equal(ledgerCount, 0, "ledger entry should not be created for rejected deposits")
+})
+
+test("scheduling a lucky draw winner persists selection", async () => {
+  const [user, admin] = await Promise.all([
+    createUniqueUser(),
+    createUniqueUser({ role: "admin" }),
+  ])
+
+  const deposit = await submitLuckyDrawDeposit({
+    userId: toId(user._id),
+    transactionHash: randomUUID().replace(/-/g, ""),
+    receiptUrl: "https://example.com/receipt.png",
+  })
+  await approveLuckyDrawDeposit({ adminId: toId(admin._id), depositId: toId(deposit._id) })
+
+  const beforeRound = await getActiveLuckyDrawRound()
+  assert.equal(beforeRound.selectedWinner, null, "no winner should be locked before scheduling")
+
+  const scheduledRound = await scheduleLuckyDrawWinner({
+    adminId: toId(admin._id),
+    depositId: toId(deposit._id),
+  })
+  assert.equal(
+    scheduledRound.selectedWinner?.depositId,
+    toId(deposit._id),
+    "scheduled winner should reference the approved deposit",
+  )
+  assert.ok(scheduledRound.selectedWinner?.selectedAt, "selection timestamp should be recorded")
+
+  const persistedRound = await getActiveLuckyDrawRound()
+  assert.equal(
+    persistedRound.selectedWinner?.depositId,
+    toId(deposit._id),
+    "winner selection should persist after reloading the round",
+  )
+  assert.ok(persistedRound.announcementAtUtc, "announcement time should be scheduled")
 })
