@@ -26,6 +26,15 @@ const SettingsSchema = new mongoose.Schema(
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },
     },
+    blindBox: {
+      roundDurationHours: { type: Number, default: 72 },
+      minDeposit: { type: Number, default: 10 },
+      entryValue: { type: Number, default: 10 },
+      allowMultiples: { type: Boolean, default: true },
+      network: { type: String, default: "BEP20" },
+      address: { type: String, default: "Bep20" },
+      prizePoolPercent: { type: Number, default: 100 },
+    },
   },
   {
     timestamps: true,

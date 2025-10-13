@@ -20,6 +20,7 @@ import type {
   AdminTransactionRecord,
   AdminUserRecord,
 } from "@/lib/types/admin"
+import { GiftboxControlPanel } from "@/components/admin/giftbox-control-panel"
 
 type JsonRecord = Record<string, unknown>
 
@@ -633,6 +634,8 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
             filters={transactionFilters}
             onFiltersChange={handleTransactionFiltersChange}
           />
+
+          <GiftboxControlPanel />
 
           <UserTable
             items={users}

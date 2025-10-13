@@ -17,6 +17,11 @@ export interface AdminTransactionRecord {
   amount: number
   status: string
   meta: Record<string, any>
+  network?: string | null
+  address?: string | null
+  txHash?: string | null
+  receiptUrl?: string | null
+  reason?: string | null
   createdAt: string
 }
 
