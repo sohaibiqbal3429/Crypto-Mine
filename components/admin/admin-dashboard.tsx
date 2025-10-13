@@ -20,6 +20,73 @@ import type {
   AdminUserRecord,
 } from "@/lib/types/admin"
 
+type JsonRecord = Record<string, unknown>
+
+interface TransactionsResponse extends JsonRecord {
+  data?: AdminTransactionRecord[]
+  nextCursor?: unknown
+  error?: unknown
+}
+
+interface UsersResponse extends JsonRecord {
+  data?: AdminUserRecord[]
+  nextCursor?: unknown
+  error?: unknown
+}
+
+interface StatsResponse extends JsonRecord {
+  stats?: Partial<AdminStats>
+  error?: unknown
+}
+
+async function readJsonSafe<T extends JsonRecord>(response: Response): Promise<T | null> {
+  try {
+    const clone = response.clone()
+    const text = await clone.text()
+    if (!text) {
+      return null
+    }
+
+    try {
+      return JSON.parse(text) as T
+    } catch (parseError) {
+      console.error("Failed to parse JSON response", parseError, {
+        preview: text.slice(0, 200),
+      })
+      return null
+    }
+  } catch (error) {
+    console.error("Unexpected error while reading response", error)
+    return null
+  }
+}
+
+function normalizeAdminStats(stats: Partial<AdminStats> | null | undefined): Partial<AdminStats> {
+  if (!stats || typeof stats !== "object") {
+    return {}
+  }
+
+  const numericKeys: Array<keyof AdminStats> = [
+    "totalUsers",
+    "activeUsers",
+    "pendingDeposits",
+    "pendingWithdrawals",
+    "totalDeposits",
+    "totalWithdrawals",
+    "pendingLuckyDrawDeposits",
+  ]
+
+  const safeStats: Partial<AdminStats> = {}
+  for (const key of numericKeys) {
+    const value = stats[key]
+    if (typeof value === "number" && Number.isFinite(value)) {
+      safeStats[key] = value
+    }
+  }
+
+  return safeStats
+}
+
 interface AdminDashboardProps {
   initialUser: AdminSessionUser
   initialStats: AdminStats
@@ -52,6 +119,24 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   const transactionLoadingRef = useRef(false)
   const userCursorRef = useRef<string | null>(null)
   const userLoadingRef = useRef(false)
+  const lastStatsErrorRef = useRef<string | null>(null)
+  const announceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
+
+  const runIfMounted = useCallback((callback: () => void) => {
+    if (isMountedRef.current) {
+      callback()
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+      if (announceTimeoutRef.current) {
+        clearTimeout(announceTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const {
     deposits: luckyDeposits,
@@ -151,59 +236,92 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         return
       }
 
-      setAnnouncingWinner(true)
-      setTimeout(() => {
+      runIfMounted(() => setAnnouncingWinner(true))
+      if (announceTimeoutRef.current) {
+        clearTimeout(announceTimeoutRef.current)
+      }
+      announceTimeoutRef.current = setTimeout(() => {
+        if (!isMountedRef.current) {
+          return
+        }
         const announcementTime = new Date().toISOString()
-        setLuckyRound((prev) => ({
-          ...prev,
-          lastWinner: {
-            name: winnerDeposit.userName ?? "Participant",
-            announcedAt: announcementTime,
-          },
-        }))
-        setRoundHistory((prev) => [
-          {
-            id: `history-${announcementTime}`,
-            winner: winnerDeposit.userName ?? "Participant",
-            announcedAt: announcementTime,
-            prizeUsd: luckyRound.prizePoolUsd,
-          },
-          ...prev,
-        ])
+        runIfMounted(() =>
+          setLuckyRound((prev) => ({
+            ...prev,
+            lastWinner: {
+              name: winnerDeposit.userName ?? "Participant",
+              announcedAt: announcementTime,
+            },
+          })),
+        )
+        runIfMounted(() =>
+          setRoundHistory((prev) => [
+            {
+              id: `history-${announcementTime}`,
+              winner: winnerDeposit.userName ?? "Participant",
+              announcedAt: announcementTime,
+              prizeUsd: luckyRound.prizePoolUsd,
+            },
+            ...prev,
+          ]),
+        )
         toast({
           description: `${winnerDeposit.userName ?? "Participant"} has been announced as the Blind Box winner. $${luckyRound.prizePoolUsd.toFixed(2)} credited automatically.`,
         })
-        setAnnouncingWinner(false)
+        runIfMounted(() => setAnnouncingWinner(false))
       }, 400)
     },
-    [luckyDeposits, luckyRound.prizePoolUsd, toast],
+    [announceTimeoutRef, luckyDeposits, luckyRound.prizePoolUsd, runIfMounted, toast],
   )
 
   useEffect(() => {
-    setStats((prev) => ({
-      ...prev,
-      pendingLuckyDrawDeposits: luckyDeposits.filter((deposit) => deposit.status === "PENDING").length,
-    }))
-  }, [luckyDeposits])
+    runIfMounted(() =>
+      setStats((prev) => ({
+        ...prev,
+        pendingLuckyDrawDeposits: luckyDeposits.filter((deposit) => deposit.status === "PENDING").length,
+      })),
+    )
+  }, [luckyDeposits, runIfMounted])
 
   const fetchStats = useCallback(async () => {
-    const response = await fetch("/api/admin/stats")
-    if (!response.ok) {
-      return
+    try {
+      const response = await fetch("/api/admin/stats", { cache: "no-store" })
+      const payload = await readJsonSafe<StatsResponse>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to load stats"
+        throw new Error(message)
+      }
+
+      if (!payload) {
+        throw new Error("Received an empty response while loading stats")
+      }
+
+      const normalized = normalizeAdminStats(payload.stats)
+      if (Object.keys(normalized).length > 0) {
+        runIfMounted(() => setStats((prev) => ({ ...prev, ...normalized })))
+      }
+
+      lastStatsErrorRef.current = null
+    } catch (error) {
+      console.error(error)
+      const message = error instanceof Error ? error.message : "Unable to load stats"
+      if (lastStatsErrorRef.current !== message) {
+        toast({ variant: "destructive", description: message })
+        lastStatsErrorRef.current = message
+      }
     }
-    const payload = await response.json()
-    if (payload.stats) {
-      setStats((prev) => ({ ...prev, ...payload.stats }))
-    }
-  }, [])
+  }, [runIfMounted, toast])
 
   const fetchTransactions = useCallback(
     async (options: { reset?: boolean } = {}) => {
       if (transactionLoadingRef.current) return
       const isReset = options.reset ?? false
       transactionLoadingRef.current = true
-      setTransactionLoading(true)
-      setTransactionError(null)
+      runIfMounted(() => {
+        setTransactionLoading(true)
+        setTransactionError(null)
+      })
 
       const params = new URLSearchParams()
       params.set("limit", String(TRANSACTION_LIMIT))
@@ -219,36 +337,47 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       try {
         if (isReset) {
           transactionCursorRef.current = null
-          setTransactionCursor(null)
-          setTransactionHasMore(false)
+          runIfMounted(() => {
+            setTransactionCursor(null)
+            setTransactionHasMore(false)
+            setTransactions([])
+          })
         }
-        const response = await fetch(`/api/admin/transactions?${params.toString()}`)
+        const response = await fetch(`/api/admin/transactions?${params.toString()}`, { cache: "no-store" })
+        const payload = await readJsonSafe<TransactionsResponse>(response)
+
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          throw new Error(data.error || "Unable to load transactions")
+          const message = typeof payload?.error === "string" ? payload.error : "Unable to load transactions"
+          throw new Error(message)
         }
-        const payload = await response.json()
-        const nextCursor = payload?.nextCursor ?? null
+
+        const nextCursorValue = typeof payload?.nextCursor === "string" && payload.nextCursor.length > 0 ? payload.nextCursor : null
         const transactionData = Array.isArray(payload?.data) ? payload.data : []
 
         if (!Array.isArray(payload?.data)) {
           console.warn("Unexpected transactions payload", payload)
-          setTransactionError((current) => current ?? "Received an invalid response while loading transactions")
+          runIfMounted(() =>
+            setTransactionError((current) => current ?? "Received an invalid response while loading transactions"),
+          )
         }
 
-        transactionCursorRef.current = nextCursor
-        setTransactionCursor(nextCursor)
-        setTransactionHasMore(Boolean(nextCursor) && transactionData.length > 0)
-        setTransactions((prev) => (isReset ? transactionData : [...prev, ...transactionData]))
+        transactionCursorRef.current = nextCursorValue
+        runIfMounted(() => {
+          setTransactionCursor(nextCursorValue)
+          setTransactionHasMore(Boolean(nextCursorValue) && transactionData.length > 0)
+          setTransactions((prev) => (isReset ? transactionData : [...prev, ...transactionData]))
+        })
       } catch (error) {
         console.error(error)
-        setTransactionError(error instanceof Error ? error.message : "Unable to load transactions")
+        runIfMounted(() =>
+          setTransactionError(error instanceof Error ? error.message : "Unable to load transactions"),
+        )
       } finally {
         transactionLoadingRef.current = false
-        setTransactionLoading(false)
+        runIfMounted(() => setTransactionLoading(false))
       }
     },
-    [transactionFilters],
+    [runIfMounted, transactionFilters],
   )
 
   const fetchUsers = useCallback(
@@ -256,8 +385,10 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       if (userLoadingRef.current) return
       const isReset = options.reset ?? false
       userLoadingRef.current = true
-      setUserLoading(true)
-      setUserError(null)
+      runIfMounted(() => {
+        setUserLoading(true)
+        setUserError(null)
+      })
 
       const params = new URLSearchParams()
       params.set("limit", String(USER_LIMIT))
@@ -273,36 +404,43 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       try {
         if (isReset) {
           userCursorRef.current = null
-          setUserCursor(null)
-          setUserHasMore(false)
+          runIfMounted(() => {
+            setUserCursor(null)
+            setUserHasMore(false)
+            setUsers([])
+          })
         }
-        const response = await fetch(`/api/admin/users?${params.toString()}`)
+        const response = await fetch(`/api/admin/users?${params.toString()}`, { cache: "no-store" })
+        const payload = await readJsonSafe<UsersResponse>(response)
+
         if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          throw new Error(data.error || "Unable to load users")
+          const message = typeof payload?.error === "string" ? payload.error : "Unable to load users"
+          throw new Error(message)
         }
-        const payload = await response.json()
-        const nextCursor = payload?.nextCursor ?? null
+
+        const nextCursorValue = typeof payload?.nextCursor === "string" && payload.nextCursor.length > 0 ? payload.nextCursor : null
         const userData = Array.isArray(payload?.data) ? payload.data : []
 
         if (!Array.isArray(payload?.data)) {
           console.warn("Unexpected users payload", payload)
-          setUserError((current) => current ?? "Received an invalid response while loading users")
+          runIfMounted(() => setUserError((current) => current ?? "Received an invalid response while loading users"))
         }
 
-        userCursorRef.current = nextCursor
-        setUserCursor(nextCursor)
-        setUserHasMore(Boolean(nextCursor) && userData.length > 0)
-        setUsers((prev) => (isReset ? userData : [...prev, ...userData]))
+        userCursorRef.current = nextCursorValue
+        runIfMounted(() => {
+          setUserCursor(nextCursorValue)
+          setUserHasMore(Boolean(nextCursorValue) && userData.length > 0)
+          setUsers((prev) => (isReset ? userData : [...prev, ...userData]))
+        })
       } catch (error) {
         console.error(error)
-        setUserError(error instanceof Error ? error.message : "Unable to load users")
+        runIfMounted(() => setUserError(error instanceof Error ? error.message : "Unable to load users"))
       } finally {
         userLoadingRef.current = false
-        setUserLoading(false)
+        runIfMounted(() => setUserLoading(false))
       }
     },
-    [userFilters],
+    [runIfMounted, userFilters],
   )
 
   useEffect(() => {
@@ -314,23 +452,32 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
   }, [fetchUsers])
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((response) => (response.ok ? response.json() : null))
+    fetch("/api/auth/me", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) {
+          return null
+        }
+        return readJsonSafe<{ user?: Partial<AdminSessionUser> }>(response)
+      })
       .then((payload) => {
         if (payload?.user) {
-          setUser((prev) => ({ ...prev, ...payload.user }))
+          runIfMounted(() => setUser((prev) => ({ ...prev, ...payload.user })))
         }
       })
-      .catch(() => null)
-  }, [])
+      .catch((error) => {
+        console.error("Failed to refresh admin session", error)
+      })
+  }, [runIfMounted])
 
   const refreshAll = useCallback(async () => {
     transactionCursorRef.current = null
     userCursorRef.current = null
-    setTransactionCursor(null)
-    setUserCursor(null)
-    await Promise.all([fetchTransactions({ reset: true }), fetchUsers({ reset: true }), fetchStats()])
-  }, [fetchStats, fetchTransactions, fetchUsers])
+    runIfMounted(() => {
+      setTransactionCursor(null)
+      setUserCursor(null)
+    })
+    await Promise.allSettled([fetchTransactions({ reset: true }), fetchUsers({ reset: true }), fetchStats()])
+  }, [fetchStats, fetchTransactions, fetchUsers, runIfMounted])
 
   useEffect(() => {
     fetchStats().catch(() => null)
@@ -355,16 +502,23 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(transactionFilters),
       })
+      const payload = await readJsonSafe<{ error?: unknown }>(response)
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to queue export")
+        const message = typeof payload?.error === "string" ? payload.error : "Failed to queue export"
+        throw new Error(message)
       }
-      alert("Export queued. You will receive an email when it is ready.")
+      if (typeof window !== "undefined") {
+        window.alert("Export queued. You will receive an email when it is ready.")
+      } else {
+        toast({ description: "Export queued. You will receive an email when it is ready." })
+      }
     } catch (error) {
       console.error(error)
-      setTransactionError(error instanceof Error ? error.message : "Unable to queue export")
+      runIfMounted(() =>
+        setTransactionError(error instanceof Error ? error.message : "Unable to queue export"),
+      )
     }
-  }, [transactionFilters])
+  }, [runIfMounted, toast, transactionFilters])
 
   if (!user) {
     return (
