@@ -1,20 +1,30 @@
-import { Queue, Worker, type JobsOptions } from "bullmq"
+import { Queue, Worker, type Job, type JobsOptions } from "bullmq"
 
-const connection = process.env.REDIS_URL
-  ? { connection: { url: process.env.REDIS_URL } }
-  : undefined
+const hasRedis = Boolean(process.env.REDIS_URL)
+const queueOptions = hasRedis ? { connection: { url: process.env.REDIS_URL! } } : undefined
 
-export const reportQueue = new Queue("reports", connection)
+const reportQueueInstance = hasRedis ? new Queue("reports", queueOptions) : null
 
-export function enqueueReport<T>(name: string, data: T, options?: JobsOptions) {
-  return reportQueue.add(name, data, options)
+export function isReportQueueEnabled(): boolean {
+  return reportQueueInstance !== null
+}
+
+export function enqueueReport<T>(name: string, data: T, options?: JobsOptions): Promise<Job<T>> | null {
+  if (!reportQueueInstance) {
+    console.warn(`[queue] Skipping job "${name}" because REDIS_URL is not configured.`)
+    return null
+  }
+
+  return reportQueueInstance.add(name, data, options)
 }
 
 export function createReportWorker(handler: Parameters<typeof Worker>[1]) {
-  if (!process.env.REDIS_URL) {
+  if (!hasRedis) {
     console.warn("[queue] REDIS_URL not set. Workers are disabled.")
     return null
   }
 
-  return new Worker("reports", handler, connection)
+  return new Worker("reports", handler, queueOptions)
 }
+
+export const reportQueue = reportQueueInstance

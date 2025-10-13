@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
+import { Badge } from "@/components/ui/badge"
+import { Copy, Check } from "lucide-react"
 import type { LuckyDrawDeposit } from "@/lib/types/lucky-draw"
 
 interface LuckyDrawDepositModalProps {
@@ -17,6 +19,10 @@ interface LuckyDrawDepositModalProps {
 }
 
 const FIXED_AMOUNT = 10
+const LUCKY_DRAW_WALLET = {
+  network: "BEP20",
+  address: "0xde7b66da140bdbe9d113966c690eeb9cff83d756",
+}
 
 export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDrawDepositModalProps) {
   const { toast } = useToast()
@@ -27,11 +33,13 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
   const [receiptInputKey, setReceiptInputKey] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setError(null)
       setSubmitting(false)
+      setCopied(false)
     }
   }, [open])
 
@@ -133,6 +141,18 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
     }
   }
 
+  const handleCopyAddress = async () => {
+    if (copied) return
+
+    try {
+      await navigator.clipboard.writeText(LUCKY_DRAW_WALLET.address)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (copyError) {
+      console.error("Failed to copy lucky draw address", copyError)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
@@ -142,6 +162,27 @@ export function LuckyDrawDepositModal({ open, onOpenChange, onSuccess }: LuckyDr
             Submit your $10 transaction hash and receipt to enter the next Lucky Draw round.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="mt-2 space-y-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Deposit address</p>
+              <p className="text-xs text-muted-foreground">
+                Send exactly $10 USDT to the verified wallet below before submitting your receipt.
+              </p>
+            </div>
+            <Badge className="bg-primary/10 text-primary">{LUCKY_DRAW_WALLET.network}</Badge>
+          </div>
+          <div className="flex flex-col gap-2 rounded-md border border-primary/30 bg-background/80 p-3 font-mono text-xs sm:flex-row sm:items-center sm:justify-between sm:text-sm">
+            <span className="truncate" title={LUCKY_DRAW_WALLET.address}>
+              {LUCKY_DRAW_WALLET.address}
+            </span>
+            <Button type="button" variant="secondary" size="sm" className="flex items-center gap-2" onClick={handleCopyAddress}>
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        </div>
 
         {error ? (
           <Alert variant="destructive" className="mt-2">
