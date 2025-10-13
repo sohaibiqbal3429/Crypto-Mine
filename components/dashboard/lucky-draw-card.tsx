@@ -41,6 +41,8 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
       startAtUtc: new Date().toISOString(),
       endAtUtc: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
       prizePoolUsd: 30,
+      announcementAtUtc: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+      selectedWinner: null,
       lastWinner: {
         name: "Wallet Ninja",
         announcedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
@@ -57,19 +59,32 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
     [deposits],
   )
 
-  const nextDrawDate = useMemo(() => new Date((round ?? localRound).endAtUtc), [round, localRound])
-  const roundStartDate = useMemo(() => new Date((round ?? localRound).startAtUtc), [round, localRound])
+  const activeRound = round ?? localRound
+  const announcementDate = useMemo(
+    () => new Date(activeRound.announcementAtUtc ?? activeRound.endAtUtc),
+    [activeRound],
+  )
+  const roundStartDate = useMemo(() => new Date(activeRound.startAtUtc), [activeRound])
+  const winnerSelection = activeRound.selectedWinner ?? null
+  const winnerSelectionDate = useMemo(
+    () => (winnerSelection ? new Date(winnerSelection.selectedAt) : null),
+    [winnerSelection],
+  )
+  const isAnnouncementPending = useMemo(
+    () => Boolean(winnerSelection && announcementDate.getTime() > Date.now()),
+    [winnerSelection, announcementDate],
+  )
 
-  const [countdown, setCountdown] = useState<string>(() => formatRemaining(nextDrawDate))
+  const [countdown, setCountdown] = useState<string>(() => formatRemaining(announcementDate))
 
   useEffect(() => {
-    setCountdown(formatRemaining(nextDrawDate))
+    setCountdown(formatRemaining(announcementDate))
     const interval = setInterval(() => {
-      setCountdown(formatRemaining(nextDrawDate))
+      setCountdown(formatRemaining(announcementDate))
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [nextDrawDate])
+  }, [announcementDate])
 
   const highlightedDeposit = useMemo(() => {
     if (deposits.length === 0) {
@@ -82,7 +97,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
     return exactMatch ?? deposits[0]
   }, [deposits])
 
-  const latestWinner = (round ?? localRound).lastWinner
+  const latestWinner = activeRound.lastWinner
 
   const handleDepositSuccess = useCallback(
     (_deposit?: LuckyDrawDeposit) => {
@@ -151,14 +166,32 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           <p className="text-sm font-medium text-foreground">
             Pay <span className="font-semibold text-amber-600">${REQUIRED_AMOUNT.toFixed(2)}</span> to join the game and the lucky
             draw to win
-            <span className="font-semibold"> {(round ?? localRound).prizePoolUsd.toFixed(2)}</span>.
+            <span className="font-semibold"> {activeRound.prizePoolUsd.toFixed(2)}</span>.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Submit your transaction hash and receipt after depositing to Mintmine Pro’s wallet.
           </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            The admin can lock in the winner at any point, but the official announcement (and prize credit) only happens when the
+            72-hour countdown ends. Deposits are accepted until the reveal.
+          </p>
         </div>
       </CardHeader>
       <CardContent className="relative z-10 space-y-6">
+        {isAnnouncementPending ? (
+          <Alert className="border-white/40 bg-white/70 text-foreground">
+            <AlertTitle>Winner selected — awaiting reveal</AlertTitle>
+            <AlertDescription>
+              The Blind Box winner has been locked in by the admin. The official announcement is scheduled for
+              {" "}
+              {format(announcementDate, "MMM d, yyyy • HH:mm 'UTC'")}. {winnerSelectionDate ? (
+                <span>
+                  Selected {format(winnerSelectionDate, "MMM d, yyyy • HH:mm 'UTC'")}.
+                </span>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {statusAlert ? (
           <Alert variant={statusAlert.variant} className="border-white/40 bg-white/70 text-foreground">
             <AlertTitle>{statusAlert.title}</AlertTitle>
@@ -176,9 +209,9 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
         <div className="grid gap-4 lg:grid-cols-3">
           <SummaryTile
             icon={<Timer className="h-5 w-5" />}
-            label="Countdown"
+            label="Winner announcement"
             value={countdown}
-            helper={`Next draw: ${format(nextDrawDate, "MMM d, yyyy • HH:mm:ss 'UTC'")}`}
+            helper={`Reveal scheduled for ${format(announcementDate, "MMM d, yyyy • HH:mm:ss 'UTC'")}`}
           />
           <SummaryTile
             icon={<History className="h-5 w-5" />}
@@ -189,14 +222,14 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           <SummaryTile
             icon={<CalendarDays className="h-5 w-5" />}
             label="Round Window"
-            value={`${format(roundStartDate, "MMM d, HH:mm 'UTC'")} → ${format(nextDrawDate, "MMM d, HH:mm 'UTC'")}`}
+            value={`${format(roundStartDate, "MMM d, HH:mm 'UTC'")} → ${format(announcementDate, "MMM d, HH:mm 'UTC'")}`}
             helper="72-hour cadence"
           />
         </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <Badge className="bg-emerald-500/15 text-emerald-600">
-              Prize Pool ${(round ?? localRound).prizePoolUsd.toFixed(2)}
+              Prize Pool ${activeRound.prizePoolUsd.toFixed(2)}
             </Badge>
             <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
             <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
@@ -211,6 +244,8 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </Button>
           <div className="text-sm text-muted-foreground">
             {approvedEntries} participant{approvedEntries === 1 ? " has" : "s have"} been approved so far.
+            {" "}
+            You can still join until the countdown ends.
           </div>
         </div>
 

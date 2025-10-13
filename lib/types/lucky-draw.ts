@@ -34,6 +34,11 @@ export interface LuckyDrawRound {
   startAtUtc: string
   endAtUtc: string
   prizePoolUsd: number
+  announcementAtUtc?: string
+  selectedWinner?: {
+    name: string
+    selectedAt: string
+  } | null
   lastWinner?: {
     name: string
     announcedAt: string
