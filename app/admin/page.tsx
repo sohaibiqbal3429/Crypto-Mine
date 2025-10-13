@@ -19,6 +19,10 @@ export default async function AdminPage() {
     redirect("/auth/login")
   }
 
+  if (session.role !== "admin") {
+    redirect("/dashboard")
+  }
+
   let initialError: string | null = null
 
   const fallbackUser = {

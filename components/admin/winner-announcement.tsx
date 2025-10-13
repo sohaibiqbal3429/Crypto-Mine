@@ -97,13 +97,17 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
 
         <div className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Choose winner from accepted deposits</p>
-          <Select value={selectedDepositId} onValueChange={(value) => setSelectedDepositId(value)}>
+          <Select
+            value={selectedDepositId}
+            onValueChange={(value) => setSelectedDepositId(value)}
+            disabled={approvedDeposits.length === 0}
+          >
             <SelectTrigger className="bg-white/70">
               <SelectValue placeholder="Select an approved deposit" />
             </SelectTrigger>
             <SelectContent>
               {approvedDeposits.length === 0 ? (
-                <SelectItem value="" disabled>
+                <SelectItem value="__no-approved" disabled>
                   No approved deposits yet
                 </SelectItem>
               ) : (
