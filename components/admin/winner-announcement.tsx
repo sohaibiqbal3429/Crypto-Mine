@@ -24,6 +24,13 @@ interface RoundHistoryEntry {
   prizeUsd: number
 }
 
+interface PendingAnnouncementSummary {
+  id: string
+  winner: string
+  announcementAt: string
+  prizeUsd: number
+}
+
 interface AdminWinnerBoxProps {
   round: {
     id: string
@@ -40,15 +47,24 @@ interface AdminWinnerBoxProps {
   onAnnounceWinner: (depositId: string) => void
   announcing?: boolean
   history?: RoundHistoryEntry[]
+  pendingAnnouncement?: PendingAnnouncementSummary | null
 }
 
-export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing = false, history = [] }: AdminWinnerBoxProps) {
+export function AdminWinnerBox({
+  round,
+  deposits,
+  onAnnounceWinner,
+  announcing = false,
+  history = [],
+  pendingAnnouncement,
+}: AdminWinnerBoxProps) {
   const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(() => deposits.find((deposit) => deposit.status === "APPROVED")?.id)
 
   const prizePool = ensureNumber(round.prizePoolUsd, 0)
-  const roundEnd = ensureDate(round.endAtUtc)
-  const roundEndLabel = roundEnd ? format(roundEnd, "MMM d, yyyy • HH:mm 'UTC'") : "Date TBD"
+  const roundClose = ensureDate(round.announcementAtUtc ?? round.endAtUtc)
+  const roundCloseLabel = roundClose ? format(roundClose, "MMM d, yyyy • HH:mm 'UTC'") : "Date TBD"
   const lastWinnerDate = ensureDate(round.lastWinner?.announcedAt)
+  const pendingAnnouncementDate = ensureDate(pendingAnnouncement?.announcementAt)
 
   useEffect(() => {
     if (!selectedDepositId) {
@@ -75,14 +91,14 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
           <Trophy className="h-6 w-6 text-purple-500" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Select a verified participant to crown the Blind Box Lucky Draw winner and automatically credit the prize pool.
+          Select a verified participant to lock in the Blind Box Lucky Draw winner. The official reveal and prize credit happen 72 hours after the selection is scheduled.
         </p>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-6">
         <div className="space-y-3 rounded-xl border border-white/40 bg-white/60 p-4 shadow-inner">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <CalendarClock className="h-5 w-5 text-purple-500" />
-            <span>Next draw closes on {roundEndLabel}.</span>
+            <span>Next draw closes on {roundCloseLabel}.</span>
           </div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             <Badge className="bg-purple-500/15 text-purple-600">Entries: {round.totalEntries}</Badge>
@@ -94,6 +110,18 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
             </p>
           ) : null}
         </div>
+
+        {pendingAnnouncement ? (
+          <div className="space-y-2 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-xs text-muted-foreground">
+            <p>
+              Winner selected: <span className="font-semibold text-foreground">{pendingAnnouncement.winner}</span>
+            </p>
+            <p>
+              Official announcement scheduled for {pendingAnnouncementDate ? format(pendingAnnouncementDate, "MMM d, yyyy • HH:mm 'UTC'") : "TBD"}.
+            </p>
+            <Badge className="bg-purple-500/20 text-purple-700">Prize ${ensureNumber(pendingAnnouncement.prizeUsd, 0).toFixed(2)}</Badge>
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           <p className="text-sm font-semibold text-foreground">Choose winner from accepted deposits</p>
@@ -121,7 +149,7 @@ export function AdminWinnerBox({ round, deposits, onAnnounceWinner, announcing =
           </Select>
           <Button onClick={handleAnnounce} disabled={!selectedDepositId || announcing || approvedDeposits.length === 0}>
             <Award className="mr-2 h-4 w-4" />
-            {announcing ? "Announcing…" : `Announce & Credit $${prizePool.toFixed(2)}`}
+            {announcing ? "Scheduling…" : `Schedule announcement & credit $${prizePool.toFixed(2)}`}
           </Button>
         </div>
 

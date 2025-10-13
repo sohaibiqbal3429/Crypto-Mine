@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { format } from "date-fns"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable, type TransactionFilters } from "@/components/admin/transaction-table"
 import { UserTable, type UserFilters } from "@/components/admin/user-table"
@@ -95,6 +96,14 @@ interface AdminDashboardProps {
 
 const TRANSACTION_LIMIT = 50
 const USER_LIMIT = 100
+const ANNOUNCEMENT_DELAY_MS = 72 * 60 * 60 * 1000
+
+interface PendingAnnouncement {
+  id: string
+  winner: string
+  announcementAt: string
+  prizeUsd: number
+}
 
 export function AdminDashboard({ initialUser, initialStats, initialError = null }: AdminDashboardProps) {
   const [user, setUser] = useState(initialUser)
@@ -151,6 +160,8 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
     startAtUtc: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     endAtUtc: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     prizePoolUsd: 30,
+    announcementAtUtc: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    selectedWinner: null,
     lastWinner: {
       name: "Wallet Ninja",
       announcedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
@@ -165,6 +176,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
     },
   ])
   const [announcingWinner, setAnnouncingWinner] = useState(false)
+  const [pendingAnnouncement, setPendingAnnouncement] = useState<PendingAnnouncement | null>(null)
 
   const currentRound = useMemo(
     () => ({
@@ -240,6 +252,34 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       if (announceTimeoutRef.current) {
         clearTimeout(announceTimeoutRef.current)
       }
+      const selectionTime = new Date()
+      const scheduledAnnouncement = new Date(selectionTime.getTime() + ANNOUNCEMENT_DELAY_MS)
+      const winnerName = winnerDeposit.userName ?? "Participant"
+      const announcementIso = scheduledAnnouncement.toISOString()
+      const selectionIso = selectionTime.toISOString()
+      const prizeUsd = luckyRound.prizePoolUsd
+
+      runIfMounted(() =>
+        setLuckyRound((prev) => ({
+          ...prev,
+          announcementAtUtc: announcementIso,
+          selectedWinner: {
+            name: winnerName,
+            selectedAt: selectionIso,
+          },
+        })),
+      )
+      runIfMounted(() =>
+        setPendingAnnouncement({
+          id: depositId,
+          winner: winnerName,
+          announcementAt: announcementIso,
+          prizeUsd,
+        }),
+      )
+
+      const delay = Math.max(0, scheduledAnnouncement.getTime() - Date.now())
+      const safeDelay = Math.min(delay, 2_147_483_647)
       announceTimeoutRef.current = setTimeout(() => {
         if (!isMountedRef.current) {
           return
@@ -249,27 +289,37 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           setLuckyRound((prev) => ({
             ...prev,
             lastWinner: {
-              name: winnerDeposit.userName ?? "Participant",
+              name: winnerName,
               announcedAt: announcementTime,
             },
+            selectedWinner: null,
           })),
         )
         runIfMounted(() =>
           setRoundHistory((prev) => [
             {
               id: `history-${announcementTime}`,
-              winner: winnerDeposit.userName ?? "Participant",
+              winner: winnerName,
               announcedAt: announcementTime,
-              prizeUsd: luckyRound.prizePoolUsd,
+              prizeUsd,
             },
             ...prev,
           ]),
         )
+        runIfMounted(() => setPendingAnnouncement(null))
         toast({
-          description: `${winnerDeposit.userName ?? "Participant"} has been announced as the Blind Box winner. $${luckyRound.prizePoolUsd.toFixed(2)} credited automatically.`,
+          description: `${winnerName} has been announced as the Blind Box winner. $${prizeUsd.toFixed(2)} credited automatically.`,
         })
         runIfMounted(() => setAnnouncingWinner(false))
-      }, 400)
+      }, safeDelay)
+
+      toast({
+        description: `${winnerName} selected for the Blind Box prize. Official announcement on ${format(
+          scheduledAnnouncement,
+          "MMM d, yyyy • HH:mm 'UTC'",
+        )}.`,
+      })
+      runIfMounted(() => setAnnouncingWinner(false))
     },
     [announceTimeoutRef, luckyDeposits, luckyRound.prizePoolUsd, runIfMounted, toast],
   )
@@ -568,6 +618,7 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
               onAnnounceWinner={handleAnnounceWinner}
               announcing={announcingWinner}
               history={roundHistory}
+              pendingAnnouncement={pendingAnnouncement}
             />
           </div>
 
