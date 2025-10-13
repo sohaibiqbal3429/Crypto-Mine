@@ -228,11 +228,18 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           throw new Error(data.error || "Unable to load transactions")
         }
         const payload = await response.json()
-        const nextCursor = payload.nextCursor ?? null
+        const nextCursor = payload?.nextCursor ?? null
+        const transactionData = Array.isArray(payload?.data) ? payload.data : []
+
+        if (!Array.isArray(payload?.data)) {
+          console.warn("Unexpected transactions payload", payload)
+          setTransactionError((current) => current ?? "Received an invalid response while loading transactions")
+        }
+
         transactionCursorRef.current = nextCursor
         setTransactionCursor(nextCursor)
-        setTransactionHasMore(Boolean(nextCursor))
-        setTransactions((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+        setTransactionHasMore(Boolean(nextCursor) && transactionData.length > 0)
+        setTransactions((prev) => (isReset ? transactionData : [...prev, ...transactionData]))
       } catch (error) {
         console.error(error)
         setTransactionError(error instanceof Error ? error.message : "Unable to load transactions")
@@ -275,11 +282,18 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
           throw new Error(data.error || "Unable to load users")
         }
         const payload = await response.json()
-        const nextCursor = payload.nextCursor ?? null
+        const nextCursor = payload?.nextCursor ?? null
+        const userData = Array.isArray(payload?.data) ? payload.data : []
+
+        if (!Array.isArray(payload?.data)) {
+          console.warn("Unexpected users payload", payload)
+          setUserError((current) => current ?? "Received an invalid response while loading users")
+        }
+
         userCursorRef.current = nextCursor
         setUserCursor(nextCursor)
-        setUserHasMore(Boolean(nextCursor))
-        setUsers((prev) => (isReset ? payload.data : [...prev, ...payload.data]))
+        setUserHasMore(Boolean(nextCursor) && userData.length > 0)
+        setUsers((prev) => (isReset ? userData : [...prev, ...userData]))
       } catch (error) {
         console.error(error)
         setUserError(error instanceof Error ? error.message : "Unable to load users")

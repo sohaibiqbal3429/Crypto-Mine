@@ -24,21 +24,39 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
   const activeDepositThreshold = settingsDoc?.gating?.activeMinDeposit ?? 80
 
   const [
-    totalUsersCount,
-    activeUsersCount,
-    totalsAggregate,
-    pendingDepositCount,
-    pendingWithdrawalCount,
-    pendingLuckyDrawDeposits,
-  ] = await Promise.all([
+    totalUsersResult,
+    activeUsersResult,
+    totalsAggregateResult,
+    pendingDepositResult,
+    pendingWithdrawalResult,
+    pendingLuckyDrawResult,
+  ] = await Promise.allSettled([
     User.estimatedDocumentCount().exec(),
     User.countDocuments({ depositTotal: { $gte: activeDepositThreshold } }).exec(),
     User.aggregate([
       {
         $group: {
           _id: null,
-          totalDeposits: { $sum: "$depositTotal" },
-          totalWithdrawals: { $sum: "$withdrawTotal" },
+          totalDeposits: {
+            $sum: {
+              $convert: {
+                input: "$depositTotal",
+                to: "double",
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          },
+          totalWithdrawals: {
+            $sum: {
+              $convert: {
+                input: "$withdrawTotal",
+                to: "double",
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          },
         },
       },
       { $project: { _id: 0, totalDeposits: 1, totalWithdrawals: 1 } },
@@ -47,6 +65,22 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     Transaction.countDocuments({ type: "withdraw", status: "pending" }).exec(),
     LuckyDrawDeposit.countDocuments({ status: "PENDING" }).exec(),
   ])
+
+  const readSettledValue = <T,>(result: PromiseSettledResult<T>, label: string, fallback: T): T => {
+    if (result.status === "fulfilled") {
+      return result.value
+    }
+
+    console.error(`[admin] Failed to load ${label}:`, result.reason)
+    return fallback
+  }
+
+  const totalUsersCount = readSettledValue(totalUsersResult, "total user count", 0)
+  const activeUsersCount = readSettledValue(activeUsersResult, "active user count", 0)
+  const totalsAggregate = readSettledValue(totalsAggregateResult, "aggregate totals", [])
+  const pendingDepositCount = readSettledValue(pendingDepositResult, "pending deposit count", 0)
+  const pendingWithdrawalCount = readSettledValue(pendingWithdrawalResult, "pending withdrawal count", 0)
+  const pendingLuckyDrawDeposits = readSettledValue(pendingLuckyDrawResult, "pending lucky draw deposits", 0)
 
   const stats: AdminStats = {
     totalUsers: totalUsersCount,
