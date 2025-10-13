@@ -38,6 +38,8 @@ export interface LuckyDrawRound {
   selectedWinner?: {
     name: string
     selectedAt: string
+    depositId?: string | null
+    userId?: string | null
   } | null
   lastWinner?: {
     name: string

@@ -53,13 +53,25 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
   const deposits = depositsProp ?? storedDeposits
 
   const [depositModalOpen, setDepositModalOpen] = useState(false)
+  const [remoteRound, setRemoteRound] = useState<LuckyDrawRound | null>(null)
+  const [roundError, setRoundError] = useState<string | null>(null)
+  const [roundLoading, setRoundLoading] = useState(false)
 
   const approvedEntries = useMemo(
     () => deposits.filter((deposit) => deposit.status === "APPROVED").length,
     [deposits],
   )
 
-  const activeRound = round ?? localRound
+  const hasApprovedPurchase = useMemo(
+    () =>
+      deposits.some(
+        (deposit) =>
+          deposit.status === "APPROVED" && Math.abs(deposit.amountUsd - REQUIRED_AMOUNT) < 0.01,
+      ),
+    [deposits],
+  )
+
+  const activeRound = round ?? remoteRound ?? localRound
   const announcementDate = useMemo(
     () => new Date(activeRound.announcementAtUtc ?? activeRound.endAtUtc),
     [activeRound],
@@ -105,6 +117,49 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
     },
     [refreshDeposits],
   )
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let cancelled = false
+
+    const fetchRound = async () => {
+      setRoundLoading(true)
+      setRoundError(null)
+      try {
+        const response = await fetch("/api/lucky-draw/round", {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          const message = typeof payload?.error === "string" ? payload.error : "Unable to load round"
+          throw new Error(message)
+        }
+
+        if (!cancelled && payload?.round) {
+          setRemoteRound(payload.round as LuckyDrawRound)
+        }
+      } catch (error) {
+        if ((error as Error).name === "AbortError" || cancelled) {
+          return
+        }
+        console.error("Lucky draw round fetch failed", error)
+        setRoundError(error instanceof Error ? error.message : "Unable to load round")
+      } finally {
+        if (!cancelled) {
+          setRoundLoading(false)
+        }
+      }
+    }
+
+    fetchRound()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [])
 
   const statusAlert = useMemo(() => {
     if (!highlightedDeposit) {
@@ -198,6 +253,12 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
             <AlertDescription>{statusAlert.description}</AlertDescription>
           </Alert>
         ) : null}
+        {roundError ? (
+          <Alert variant="destructive" className="border-white/40 bg-rose-500/10">
+            <AlertTitle>Unable to load round details</AlertTitle>
+            <AlertDescription>{roundError}</AlertDescription>
+          </Alert>
+        ) : null}
 
         {depositsError ? (
           <Alert variant="destructive" className="border-white/40 bg-rose-500/10">
@@ -236,16 +297,29 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="lg" disabled={depositsLoading} onClick={() => setDepositModalOpen(true)}>
-            Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}
-          </Button>
+          {hasApprovedPurchase ? (
+            <Button
+              size="lg"
+              disabled
+              className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15"
+            >
+              Purchased
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              disabled={depositsLoading || roundLoading}
+              onClick={() => setDepositModalOpen(true)}
+            >
+              Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}
+            </Button>
+          )}
           <Button variant="outline" className="backdrop-blur" size="lg">
             View Leaderboard
           </Button>
           <div className="text-sm text-muted-foreground">
-            {approvedEntries} participant{approvedEntries === 1 ? " has" : "s have"} been approved so far.
-            {" "}
-            You can still join until the countdown ends.
+            {approvedEntries} participant{approvedEntries === 1 ? " has" : "s have"} joined. {" "}
+            {hasApprovedPurchase ? "You have already purchased." : "You can still join until the countdown ends."}
           </div>
         </div>
 

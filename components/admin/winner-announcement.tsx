@@ -37,7 +37,11 @@ interface AdminWinnerBoxProps {
     startAtUtc: string
     endAtUtc: string
     prizePoolUsd: number
+    announcementAtUtc?: string
     totalEntries: number
+    selectedWinner?: {
+      depositId?: string | null
+    } | null
     lastWinner?: {
       name: string
       announcedAt: string
@@ -58,7 +62,10 @@ export function AdminWinnerBox({
   history = [],
   pendingAnnouncement,
 }: AdminWinnerBoxProps) {
-  const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(() => deposits.find((deposit) => deposit.status === "APPROVED")?.id)
+  const roundSelectedDepositId = round.selectedWinner?.depositId ?? undefined
+  const [selectedDepositId, setSelectedDepositId] = useState<string | undefined>(
+    () => roundSelectedDepositId ?? deposits.find((deposit) => deposit.status === "APPROVED")?.id,
+  )
 
   const prizePool = ensureNumber(round.prizePoolUsd, 0)
   const roundClose = ensureDate(round.announcementAtUtc ?? round.endAtUtc)
@@ -67,13 +74,18 @@ export function AdminWinnerBox({
   const pendingAnnouncementDate = ensureDate(pendingAnnouncement?.announcementAt)
 
   useEffect(() => {
+    if (roundSelectedDepositId) {
+      setSelectedDepositId(roundSelectedDepositId)
+      return
+    }
+
     if (!selectedDepositId) {
       const accepted = deposits.find((deposit) => deposit.status === "APPROVED")
       if (accepted) {
         setSelectedDepositId(accepted.id)
       }
     }
-  }, [deposits, selectedDepositId])
+  }, [deposits, roundSelectedDepositId, selectedDepositId])
 
   const approvedDeposits = deposits.filter((deposit) => deposit.status === "APPROVED")
 
