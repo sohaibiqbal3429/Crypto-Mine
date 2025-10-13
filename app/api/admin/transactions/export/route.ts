@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { getUserFromRequest } from "@/lib/auth"
 import dbConnect from "@/lib/mongodb"
-import { reportQueue } from "@/lib/queue"
+import { enqueueReport, isReportQueueEnabled } from "@/lib/queue"
 import User from "@/models/User"
 
 export async function POST(request: NextRequest) {
@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}))
 
-    await reportQueue.add("tx-export", {
+    if (!isReportQueueEnabled()) {
+      return NextResponse.json({ error: "Export queue is not configured" }, { status: 503 })
+    }
+
+    await enqueueReport("tx-export", {
       ...body,
       adminId: session.userId,
       requestedAt: new Date().toISOString(),
