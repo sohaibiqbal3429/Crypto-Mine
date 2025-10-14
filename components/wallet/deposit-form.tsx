@@ -61,6 +61,14 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
 
   const [selectedOptionId, setSelectedOptionId] = useState(() => options[0]?.id ?? "")
   const selectedOption = useMemo(() => options.find((option) => option.id === selectedOptionId), [options, selectedOptionId])
+  const formattedMinDeposit = useMemo(
+    () =>
+      new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(minDeposit),
+    [minDeposit],
+  )
 
   useEffect(() => {
     if (!selectedOption && options.length > 0) {
@@ -256,16 +264,34 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 name="amount"
                 type="number"
                 min={minDeposit}
-                max={30}
                 step="0.01"
-                placeholder={`Enter amount (min $${minDeposit}, max $30)`}
+                placeholder={`Enter amount (minimum $${formattedMinDeposit})`}
                 value={formState.amount}
                 onChange={(event) =>
                   setFormState((previous) => ({ ...previous, amount: event.target.value }))
                 }
+                onInput={(event) => event.currentTarget.setCustomValidity("")}
+                onInvalid={(event) => {
+                  const input = event.currentTarget
+                  if (input.validity.valueMissing) {
+                    input.setCustomValidity("")
+                    return
+                  }
+                  if (input.validity.rangeUnderflow) {
+                    input.setCustomValidity(
+                      `Minimum deposit amount is $${formattedMinDeposit}. You can deposit more if you wish.`,
+                    )
+                    return
+                  }
+
+                  input.setCustomValidity("")
+                }}
                 required
                 className="h-12 rounded-xl"
               />
+              <p className="text-xs text-muted-foreground">
+                Minimum deposit amount is ${formattedMinDeposit}. You can deposit more if you wish.
+              </p>
             </div>
 
             <div className="space-y-2">
