@@ -69,26 +69,22 @@ export function ImportantUpdateModal() {
       >
         <div className="bg-[#773004] px-6 py-4 text-white">
           <DialogTitle className="text-center text-lg font-semibold uppercase tracking-wide">
-            Important Update
+            10 Dollar Game
           </DialogTitle>
         </div>
         <div className="space-y-4 px-6 py-6 text-sm leading-6 text-muted-foreground">
           <DialogDescription asChild>
             <div className="space-y-3 text-left">
-              <p className="text-foreground">
-                Dear Investor, Please accept our sincere apologies for the delay and any inconvenience this has caused.
+               <p className="text-foreground">
+                We are excited to introduce the "10 Dollar Game" – a fun and engaging way to boost your mining power! For just $10, you can participate in this game and stand a chance to win 30 Dollar. Don't miss out on this opportunity to enhance your mining experience!
               </p>
-              <p>
-                We are actively working to resolve this presented issues
-               
-              </p>
-              <p>We appreciate your patience. Thank you for your understanding.</p>
+             
             </div>
           </DialogDescription>
         </div>
         <div className="bg-muted/40 px-6 py-4">
           <Button className="w-full" onClick={handleDismiss}>
-            Dismiss
+            Buy Now
           </Button>
         </div>
       </DialogContent>
