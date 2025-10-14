@@ -32,13 +32,17 @@ async function createUniqueUser(overrides: Record<string, unknown> = {}) {
 const toId = (value: unknown) =>
   typeof value === "string" ? value : (value as { toString?: () => string })?.toString?.() ?? ""
 
-test("wallet deposit schema enforces maximum $30", () => {
+test("wallet deposit schema enforces minimum $30 with two decimal precision", () => {
   const valid = depositSchema.safeParse({ amount: 30, transactionNumber: "0x".padEnd(66, "1"), network: "bep20" })
   assert.ok(valid.success, "$30 deposits should be accepted")
 
-  const invalid = depositSchema.safeParse({ amount: 31, transactionNumber: "0x".padEnd(66, "2"), network: "bep20" })
-  assert.equal(invalid.success, false, "amounts above $30 must be rejected")
-  assert.equal(invalid.error?.issues?.[0]?.message, "Maximum single deposit is $30.")
+  const belowMinimum = depositSchema.safeParse({ amount: 29.99, transactionNumber: "0x".padEnd(66, "2"), network: "bep20" })
+  assert.equal(belowMinimum.success, false, "amounts below $30 must be rejected")
+  assert.equal(belowMinimum.error?.issues?.[0]?.message, "Amount must be at least $30.")
+
+  const tooManyDecimals = depositSchema.safeParse({ amount: 30.123, transactionNumber: "0x".padEnd(66, "3"), network: "bep20" })
+  assert.equal(tooManyDecimals.success, false, "amounts with more than two decimals must be rejected")
+  assert.equal(tooManyDecimals.error?.issues?.[0]?.message, "Amount can have at most 2 decimal places.")
 })
 
 test("lucky draw deposit submission enforces receipt requirement and rate limit", async () => {
