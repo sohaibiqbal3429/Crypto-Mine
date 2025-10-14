@@ -204,7 +204,10 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
   }
 
   return (
-    <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-purple-500/10 shadow-lg backdrop-blur">
+    <Card
+      id="lucky-draw"
+      className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-purple-500/10 shadow-lg backdrop-blur"
+    >
       <div
         className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.1),_transparent_60%)]"
         aria-hidden
