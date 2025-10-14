@@ -278,9 +278,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                     return
                   }
                   if (input.validity.rangeUnderflow) {
-                    input.setCustomValidity(
-                      `Minimum deposit amount is $${formattedMinDeposit}. You can deposit more if you wish.`,
-                    )
+                    input.setCustomValidity(`Amount must be at least $${formattedMinDeposit}.`)
                     return
                   }
 
@@ -290,7 +288,7 @@ export function DepositForm({ options, minDeposit, onSuccess }: DepositFormProps
                 className="h-12 rounded-xl"
               />
               <p className="text-xs text-muted-foreground">
-                Minimum deposit amount is ${formattedMinDeposit}. You can deposit more if you wish.
+                {`Minimum deposit is $${formattedMinDeposit}. You can deposit more if you wish.`}
               </p>
             </div>
 

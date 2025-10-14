@@ -43,7 +43,17 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
     return { error: "Session expired. Please sign in again." }
   }
 
-  const amountValue = Number.parseFloat(String(formData.get("amount") ?? ""))
+  const amountRaw = String(formData.get("amount") ?? "").trim()
+  if (!amountRaw) {
+    return { error: "Enter a valid deposit amount" }
+  }
+
+  const amountPattern = /^\d+(?:\.\d{0,2})?$/
+  if (!amountPattern.test(amountRaw)) {
+    return { error: amountRaw.includes(".") ? "Amount can have at most 2 decimal places." : "Enter a valid deposit amount" }
+  }
+
+  const amountValue = Number.parseFloat(amountRaw)
   const transactionNumber = String(formData.get("transactionNumber") ?? "").trim()
   const exchangePlatform = String(formData.get("exchangePlatform") ?? "").trim() || undefined
   const network = String(formData.get("network") ?? "").trim()
@@ -52,8 +62,8 @@ export async function submitDepositAction(_: DepositFormState, formData: FormDat
     return { error: "Enter a valid deposit amount" }
   }
 
-  if (amountValue > 30) {
-    return { error: "Maximum single deposit is $30." }
+  if (amountValue < 30) {
+    return { error: "Amount must be at least $30." }
   }
 
   if (!network) {

@@ -2,11 +2,18 @@
 
 const TRANSACTION_NUMBER_MAX_LENGTH = 120
 
+function hasAtMostTwoDecimalPlaces(value: number): boolean {
+  const [, fractional = ""] = value.toString().split(".")
+  return fractional.length <= 2
+}
+
 export const depositSchema = z.object({
   amount: z
     .number()
-    .min(30, "Minimum deposit is $30 USDT")
-    .max(30, "Maximum single deposit is $30."),
+    .min(30, "Amount must be at least $30.")
+    .refine(hasAtMostTwoDecimalPlaces, {
+      message: "Amount can have at most 2 decimal places.",
+    }),
   transactionNumber: z
     .string()
     .trim()

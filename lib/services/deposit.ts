@@ -33,6 +33,10 @@ function resolveWalletOption(networkId: string) {
   return option
 }
 
+function formatAmount(amount: number): string {
+  return Number.isInteger(amount) ? amount.toFixed(0) : amount.toFixed(2)
+}
+
 export class DepositSubmissionError extends Error {
   constructor(message: string, public status = 400) {
     super(message)
@@ -114,15 +118,12 @@ export async function submitDeposit(input: DepositSubmissionInput) {
   })
 
   if (!parsed.success) {
-    throw new DepositSubmissionError("Please review the form and try again")
+    const firstIssue = parsed.error.issues[0]?.message
+    throw new DepositSubmissionError(firstIssue || "Please review the form and try again")
   }
 
   const normalizedTransactionHash = parsed.data.transactionNumber.trim()
   const isFakeDeposit = normalizedTransactionHash === TEST_TRANSACTION_NUMBER
-
-  if (!isFakeDeposit && parsed.data.amount > 30) {
-    throw new DepositSubmissionError("Maximum single deposit is $30.")
-  }
 
   const walletOption = resolveWalletOption(parsed.data.network)
 
@@ -137,7 +138,7 @@ export async function submitDeposit(input: DepositSubmissionInput) {
   const minDeposit = settings?.gating?.minDeposit ?? FAKE_DEPOSIT_AMOUNT
 
   if (!isFakeDeposit && parsed.data.amount < minDeposit) {
-    throw new DepositSubmissionError(`Minimum deposit is $${minDeposit} USDT`)
+    throw new DepositSubmissionError(`Amount must be at least $${formatAmount(minDeposit)}.`)
   }
 
   if (!isFakeDeposit && !isLikelyTransactionHash(normalizedTransactionHash)) {
