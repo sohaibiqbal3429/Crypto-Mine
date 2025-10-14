@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import {
   Dialog,
@@ -10,16 +10,59 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 
+const STORAGE_KEY = "important-update-dismissed"
+
 export function ImportantUpdateModal() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setOpen(true), 300)
-    return () => window.clearTimeout(timer)
+    let timer: number | undefined
+
+    const shouldShow = (() => {
+      try {
+        return window.localStorage.getItem(STORAGE_KEY) !== "true"
+      } catch (error) {
+        console.warn("Unable to access localStorage for important update modal", error)
+        return true
+      }
+    })()
+
+    if (shouldShow) {
+      timer = window.setTimeout(() => setOpen(true), 300)
+    }
+
+    return () => {
+      if (typeof timer === "number") {
+        window.clearTimeout(timer)
+      }
+    }
   }, [])
 
+  const persistDismissal = useCallback(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, "true")
+    } catch (error) {
+      console.warn("Unable to persist important update dismissal", error)
+    }
+  }, [])
+
+  const handleDismiss = useCallback(() => {
+    setOpen(false)
+    persistDismissal()
+
+    window.requestAnimationFrame(() => {
+      const luckyDrawSection = document.getElementById("lucky-draw")
+      luckyDrawSection?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }, [persistDismissal])
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(value) => {
+      setOpen(value)
+      if (!value) {
+        persistDismissal()
+      }
+    }}>
       <DialogContent
         showCloseButton={false}
         className="sm:max-w-md overflow-hidden rounded-xl border-0 p-0 shadow-2xl"
@@ -44,7 +87,7 @@ export function ImportantUpdateModal() {
           </DialogDescription>
         </div>
         <div className="bg-muted/40 px-6 py-4">
-          <Button className="w-full" onClick={() => setOpen(false)}>
+          <Button className="w-full" onClick={handleDismiss}>
             Dismiss
           </Button>
         </div>
