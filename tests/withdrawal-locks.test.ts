@@ -5,6 +5,8 @@ import {
   getWithdrawableBalance,
   partitionLotsByMaturity,
   resolveCapitalLockWindow,
+  calculateWithdrawableSnapshot,
+  normaliseAmount,
   type LockedCapitalLot,
 } from "../lib/utils/locked-capital"
 
@@ -102,4 +104,34 @@ test("capital lock window honors configured duration", () => {
   assert.equal(lockStart.getTime(), now.getTime(), "lock should start immediately")
   const expectedEnd = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000)
   assert.equal(lockEnd.getTime(), expectedEnd.getTime(), "lock end should respect settings")
+})
+
+test("withdrawable snapshot reconciles locked capital discrepancies", () => {
+  const now = new Date("2024-06-01T00:00:00Z")
+  const snapshot = calculateWithdrawableSnapshot(
+    {
+      current: 1000,
+      lockedCapital: 250,
+      pendingWithdraw: 150.236,
+      lockedCapitalLots: [
+        {
+          amount: 200,
+          lockStart: new Date("2024-05-01T00:00:00Z"),
+          lockEnd: new Date("2024-07-01T00:00:00Z"),
+          released: false,
+        },
+      ],
+    },
+    now,
+  )
+
+  assert.equal(snapshot.lockedAmount, 250, "locked capital field should be honored when greater than lot sum")
+  assert.equal(snapshot.withdrawable, 750, "withdrawable balance should subtract the reconciled locked amount")
+  assert.equal(snapshot.pendingWithdraw, 150.24, "pending withdraw should be normalised to cents")
+})
+
+test("normaliseAmount rounds to the nearest cent", () => {
+  assert.equal(normaliseAmount(123.4567), 123.46)
+  assert.equal(normaliseAmount(50), 50)
+  assert.equal(normaliseAmount(Number.NaN), 0)
 })

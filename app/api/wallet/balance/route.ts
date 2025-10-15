@@ -4,7 +4,7 @@ import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import { getUserFromRequest } from "@/lib/auth"
-import { getWithdrawableBalance } from "@/lib/utils/locked-capital"
+import { calculateWithdrawableSnapshot } from "@/lib/utils/locked-capital"
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,20 +38,28 @@ export async function GET(request: NextRequest) {
       .limit(10)
       .select("type amount status createdAt meta")
 
-    const withdrawableBalance = getWithdrawableBalance(balance, new Date())
+    const withdrawableSnapshot = calculateWithdrawableSnapshot(balance, new Date())
 
     return NextResponse.json({
       success: true,
       balance: {
-        current: balance.current,
+        current: withdrawableSnapshot.current,
         totalBalance: balance.totalBalance,
         totalEarning: balance.totalEarning,
-        lockedCapital: balance.lockedCapital,
+        lockedCapital: withdrawableSnapshot.lockedAmount,
         lockedCapitalLots: balance.lockedCapitalLots,
         staked: balance.staked,
-        pendingWithdraw: balance.pendingWithdraw,
+        pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
       },
-      withdrawableBalance,
+      withdrawableBalance: withdrawableSnapshot.withdrawable,
+      withdrawableDetail: {
+        amount: withdrawableSnapshot.withdrawable,
+        lockedAmount: withdrawableSnapshot.lockedAmount,
+        lockedAmountFromLots: withdrawableSnapshot.lockedAmountFromLots,
+        lockedCapitalField: withdrawableSnapshot.lockedCapitalField,
+        nextUnlockAt: withdrawableSnapshot.nextUnlockAt,
+        pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
+      },
       userStats: {
         depositTotal: user.depositTotal,
         withdrawTotal: user.withdrawTotal,

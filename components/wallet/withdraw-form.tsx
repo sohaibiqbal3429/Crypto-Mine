@@ -22,8 +22,11 @@ interface WalletAddressOption {
 
 interface WithdrawFormProps {
   minWithdraw: number
-  currentBalance: number
+  withdrawableBalance: number
+  lockedBalance: number
   pendingWithdraw: number
+  walletBalance: number
+  nextUnlockAt: string | null
 }
 
 const initialState: WithdrawFormState = { error: null, success: null }
@@ -52,7 +55,14 @@ function SubmitButton() {
   )
 }
 
-export function WithdrawForm({ minWithdraw, currentBalance, pendingWithdraw }: WithdrawFormProps) {
+export function WithdrawForm({
+  minWithdraw,
+  withdrawableBalance,
+  lockedBalance,
+  pendingWithdraw,
+  walletBalance,
+  nextUnlockAt,
+}: WithdrawFormProps) {
   const [state, formAction] = useFormState(submitWithdrawAction, initialState)
 
   const [amount, setAmount] = useState("")
@@ -155,6 +165,17 @@ export function WithdrawForm({ minWithdraw, currentBalance, pendingWithdraw }: W
     [addresses, selectedAddressId],
   )
 
+  const formattedUnlock = useMemo(() => {
+    if (!nextUnlockAt) {
+      return null
+    }
+    const parsed = new Date(nextUnlockAt)
+    if (Number.isNaN(parsed.getTime())) {
+      return null
+    }
+    return parsed.toLocaleString()
+  }, [nextUnlockAt])
+
   return (
     <form action={formAction} className="space-y-6">
       {state?.error && (
@@ -172,12 +193,26 @@ export function WithdrawForm({ minWithdraw, currentBalance, pendingWithdraw }: W
         </Alert>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-muted/20 p-4 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/40">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <span>Available balance: <strong className="text-foreground">${currentBalance.toFixed(2)}</strong></span>
-          <span>Pending approval: <strong className="text-foreground">${pendingWithdraw.toFixed(2)}</strong></span>
+      <div className="rounded-2xl border border-slate-200 bg-muted/20 p-4 text-sm text-muted-foreground dark:border-slate-700 dark:bg-slate-900/40 space-y-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-foreground">
+          <span>
+            Withdrawable now: <strong>${withdrawableBalance.toFixed(2)}</strong>
+          </span>
+          <span>
+            Pending approval: <strong>${pendingWithdraw.toFixed(2)}</strong>
+          </span>
         </div>
-        <p className="mt-2 text-xs">Minimum withdrawal: ${minWithdraw.toFixed(2)} USDT</p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Wallet balance: <strong className="text-foreground">${walletBalance.toFixed(2)}</strong>
+          </span>
+          <span>
+            Locked capital: <strong className="text-foreground">${lockedBalance.toFixed(2)}</strong>
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Minimum withdrawal: ${minWithdraw.toFixed(2)} USDT. {formattedUnlock ? `Next unlock on ${formattedUnlock}.` : ""}
+        </p>
       </div>
 
       <div className="space-y-4">

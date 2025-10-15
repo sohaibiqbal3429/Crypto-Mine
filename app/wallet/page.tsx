@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DepositForm } from "@/components/wallet/deposit-form"
 import { WithdrawForm } from "@/components/wallet/withdraw-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react"
+import { Wallet, ArrowUpRight, ArrowDownLeft, Lock } from "lucide-react"
 
 export default async function WalletPage() {
   const token = cookies().get("auth-token")?.value
@@ -29,6 +29,10 @@ export default async function WalletPage() {
 
   const walletOptions = getDepositWalletOptions()
 
+  const nextUnlockDate = context.withdrawable.nextUnlockAt
+    ? new Date(context.withdrawable.nextUnlockAt)
+    : null
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar user={context.user} />
@@ -45,15 +49,54 @@ export default async function WalletPage() {
           <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Current Balance</CardTitle>
-                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Withdrawable Balance</CardTitle>
+                <ArrowUpRight className="h-4 w-4 text-sky-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${context.stats.currentBalance.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Available for withdrawal</p>
+                <div className="text-2xl font-bold text-sky-600 dark:text-sky-400">${context.stats.currentBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Available for withdrawal right now</p>
               </CardContent>
             </Card>
 
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Wallet Balance</CardTitle>
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${context.stats.walletBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Funds held in wallet (locked + unlocked)</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Locked Capital</CardTitle>
+                <Lock className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600">${context.stats.lockedBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">
+                  {nextUnlockDate
+                    ? `Locked until ${nextUnlockDate.toLocaleDateString()}`
+                    : "No funds currently locked"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Withdraw</CardTitle>
+                <ArrowDownLeft className="h-4 w-4 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600">${context.stats.pendingWithdraw.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Awaiting approval</p>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
@@ -61,7 +104,7 @@ export default async function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${context.stats.totalBalance.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Lifetime balance</p>
+                <p className="text-xs text-muted-foreground">Lifetime credited funds</p>
               </CardContent>
             </Card>
 
@@ -78,12 +121,14 @@ export default async function WalletPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Withdraw</CardTitle>
-                <ArrowDownLeft className="h-4 w-4 text-orange-600" />
+                <CardTitle className="text-sm font-medium">Next Unlock</CardTitle>
+                <Lock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600">${context.stats.pendingWithdraw.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Awaiting approval</p>
+                <div className="text-2xl font-bold">
+                  {nextUnlockDate ? nextUnlockDate.toLocaleString() : "All capital unlocked"}
+                </div>
+                <p className="text-xs text-muted-foreground">Tracks the soonest capital release</p>
               </CardContent>
             </Card>
           </section>
@@ -125,8 +170,11 @@ export default async function WalletPage() {
               <CardContent className="pb-6">
                 <WithdrawForm
                   minWithdraw={context.withdrawConfig.minWithdraw}
-                  currentBalance={context.stats.currentBalance}
+                  withdrawableBalance={context.stats.currentBalance}
                   pendingWithdraw={context.stats.pendingWithdraw}
+                  lockedBalance={context.stats.lockedBalance}
+                  walletBalance={context.stats.walletBalance}
+                  nextUnlockAt={nextUnlockDate ? nextUnlockDate.toISOString() : null}
                 />
               </CardContent>
             </Card>
