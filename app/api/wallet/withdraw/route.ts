@@ -7,9 +7,22 @@ import Notification from "@/models/Notification"
 import Settings from "@/models/Settings"
 import { getUserFromRequest } from "@/lib/auth"
 import { withdrawSchema } from "@/lib/validations/wallet"
-import { getWithdrawableBalance } from "@/lib/utils/locked-capital"
+import { calculateWithdrawableSnapshot, normaliseAmount } from "@/lib/utils/locked-capital"
+import { emitAuditLog } from "@/lib/observability/audit"
+import { incrementCounter } from "@/lib/observability/metrics"
+
+const MAX_PENDING_WITHDRAWALS = 3
+
+function resolveAmountBucket(amount: number): string {
+  if (amount >= 1000) return "1000_plus"
+  if (amount >= 500) return "500_999"
+  if (amount >= 100) return "100_499"
+  return "under_100"
+}
 
 export async function POST(request: NextRequest) {
+  const now = new Date()
+
   try {
     const userPayload = getUserFromRequest(request)
     if (!userPayload) {
@@ -20,6 +33,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = withdrawSchema.parse(body)
+    const requestAmount = normaliseAmount(validatedData.amount)
 
     const [user, balanceDoc, settings] = await Promise.all([
       User.findById(userPayload.userId),
@@ -31,8 +45,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 })
     }
 
-    const minWithdraw = Number(settings?.gating?.minWithdraw ?? 30)
-
     if (!balanceDoc) {
       return NextResponse.json(
         {
@@ -42,32 +54,93 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check minimum withdrawal
-    if (validatedData.amount < minWithdraw) {
+    const minWithdraw = normaliseAmount(Number(settings?.gating?.minWithdraw ?? 30))
+
+    if (requestAmount < minWithdraw) {
+      incrementCounter("wallet.withdraw.request_rejected", 1, {
+        reason: "below_minimum",
+        bucket: resolveAmountBucket(requestAmount),
+      })
       return NextResponse.json(
         {
           error: `Minimum withdrawal is $${minWithdraw.toFixed(2)} USDT`,
+          code: "MIN_WITHDRAW_NOT_MET",
+          context: {
+            requestedAmount: requestAmount,
+            minimum: minWithdraw,
+          },
         },
         { status: 400 },
       )
     }
 
-    const withdrawableBalance = getWithdrawableBalance(balanceDoc, new Date())
+    const withdrawableSnapshot = calculateWithdrawableSnapshot(balanceDoc, now)
 
-    // Check available balance (withdrawable earnings)
-    if (validatedData.amount > withdrawableBalance) {
+    incrementCounter("wallet.withdraw.request_attempt", 1, {
+      bucket: resolveAmountBucket(requestAmount),
+    })
+
+    if (requestAmount > withdrawableSnapshot.withdrawable) {
+      const shortageCents = Math.max(
+        0,
+        Math.round(requestAmount * 100) - withdrawableSnapshot.withdrawableCents,
+      )
+      const shortage = normaliseAmount(shortageCents / 100)
+      const reasons: string[] = []
+
+      if (withdrawableSnapshot.lockedAmountCents > 0) {
+        reasons.push(`$${withdrawableSnapshot.lockedAmount.toFixed(2)} is still locked.`)
+      }
+
+      if (withdrawableSnapshot.pendingWithdraw > 0) {
+        reasons.push(`$${withdrawableSnapshot.pendingWithdraw.toFixed(2)} is already pending approval.`)
+      }
+
+      const messageParts = [
+        `Requested $${requestAmount.toFixed(2)} but only $${withdrawableSnapshot.withdrawable.toFixed(2)} is withdrawable right now.`,
+      ]
+
+      if (reasons.length) {
+        messageParts.push(reasons.join(" "))
+      }
+
+      if (withdrawableSnapshot.nextUnlockAt) {
+        messageParts.push(`Next unlock: ${withdrawableSnapshot.nextUnlockAt.toISOString()}.`)
+      }
+
+      incrementCounter("wallet.withdraw.request_rejected", 1, {
+        reason: "insufficient_withdrawable",
+        bucket: resolveAmountBucket(requestAmount),
+      })
+
+      emitAuditLog({
+        event: "withdrawal_request_rejected",
+        actorId: userPayload.userId,
+        metadata: {
+          requestedAmount: requestAmount,
+          withdrawable: withdrawableSnapshot.withdrawable,
+          lockedAmount: withdrawableSnapshot.lockedAmount,
+          pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
+          shortage,
+        },
+      })
+
       return NextResponse.json(
         {
-          error: "Insufficient withdrawable balance",
-          availableBalance: withdrawableBalance,
-          requestedAmount: validatedData.amount,
+          error: messageParts.join(" "),
+          code: "INSUFFICIENT_WITHDRAWABLE_BALANCE",
+          context: {
+            requestedAmount: requestAmount,
+            withdrawable: withdrawableSnapshot.withdrawable,
+            lockedAmount: withdrawableSnapshot.lockedAmount,
+            pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
+            shortage,
+            nextUnlockAt: withdrawableSnapshot.nextUnlockAt,
+          },
         },
         { status: 400 },
       )
     }
-
-    const updatedCurrent = balanceDoc.current - validatedData.amount
-    const updatedPendingWithdraw = balanceDoc.pendingWithdraw + validatedData.amount
 
     const pendingWithdrawals = await Transaction.countDocuments({
       userId: userPayload.userId,
@@ -75,37 +148,89 @@ export async function POST(request: NextRequest) {
       status: "pending",
     })
 
-    if (pendingWithdrawals >= 3) {
+    if (pendingWithdrawals >= MAX_PENDING_WITHDRAWALS) {
+      incrementCounter("wallet.withdraw.request_rejected", 1, {
+        reason: "too_many_pending",
+      })
+
       return NextResponse.json(
         {
-          error: "You have too many pending withdrawals. Please wait for approval.",
+          error: `You already have ${pendingWithdrawals} pending withdrawals. Please wait for approval before requesting another.`,
+          code: "PENDING_LIMIT_REACHED",
+          context: {
+            pendingWithdrawals,
+            maxPending: MAX_PENDING_WITHDRAWALS,
+          },
         },
         { status: 400 },
       )
     }
 
-    // Update balance (move to pending withdraw)
-    await Balance.updateOne(
-      { userId: userPayload.userId },
+    const guardCurrent = normaliseAmount(requestAmount + withdrawableSnapshot.lockedAmount)
+
+    const updateResult = await Balance.updateOne(
+      {
+        userId: userPayload.userId,
+        current: { $gte: guardCurrent },
+      },
       {
         $inc: {
-          current: -validatedData.amount,
-          pendingWithdraw: validatedData.amount,
+          current: -requestAmount,
+          pendingWithdraw: requestAmount,
         },
       },
     )
 
-    // Create withdrawal transaction (pending approval)
+    if (updateResult.modifiedCount === 0) {
+      const freshBalance = await Balance.findOne({ userId: userPayload.userId })
+      const refreshedSnapshot = freshBalance ? calculateWithdrawableSnapshot(freshBalance, now) : null
+
+      incrementCounter("wallet.withdraw.request_rejected", 1, {
+        reason: "stale_balance",
+      })
+
+      emitAuditLog({
+        event: "withdrawal_request_conflict",
+        actorId: userPayload.userId,
+        metadata: {
+          requestedAmount: requestAmount,
+          withdrawable: refreshedSnapshot?.withdrawable ?? 0,
+        },
+        severity: "warn",
+      })
+
+      return NextResponse.json(
+        {
+          error: `Your balance changed while processing the withdrawal. You can withdraw up to $${(refreshedSnapshot?.withdrawable ?? 0).toFixed(2)} right now.`,
+          code: "BALANCE_CHANGED",
+          context: {
+            requestedAmount: requestAmount,
+            withdrawable: refreshedSnapshot?.withdrawable ?? 0,
+          },
+        },
+        { status: 409 },
+      )
+    }
+
+    const refreshedBalance = await Balance.findOne({ userId: userPayload.userId })
+    if (!refreshedBalance) {
+      throw new Error("Balance missing after withdrawal update")
+    }
+
+    const refreshedSnapshot = calculateWithdrawableSnapshot(refreshedBalance, now)
+
     const transaction = await Transaction.create({
       userId: userPayload.userId,
       type: "withdraw",
-      amount: validatedData.amount,
+      amount: requestAmount,
       status: "pending",
       meta: {
         walletAddress: validatedData.walletAddress,
-        requestedAt: new Date(),
-        userBalance: updatedCurrent,
-        withdrawalFee: 0, // Could add withdrawal fees here
+        requestedAt: now,
+        userBalance: refreshedSnapshot.current,
+        withdrawableAfterRequest: refreshedSnapshot.withdrawable,
+        lockedAmount: refreshedSnapshot.lockedAmount,
+        withdrawalFee: 0,
       },
     })
 
@@ -113,7 +238,21 @@ export async function POST(request: NextRequest) {
       userId: userPayload.userId,
       kind: "withdraw-requested",
       title: "Withdrawal Requested",
-      body: `Your withdrawal request of $${validatedData.amount.toFixed(2)} is pending approval.`,
+      body: `Your withdrawal request of $${requestAmount.toFixed(2)} is pending approval.`,
+    })
+
+    incrementCounter("wallet.withdraw.request_success", 1, {
+      bucket: resolveAmountBucket(requestAmount),
+    })
+
+    emitAuditLog({
+      event: "withdrawal_request_submitted",
+      actorId: userPayload.userId,
+      metadata: {
+        requestedAmount: requestAmount,
+        pendingWithdraw: refreshedSnapshot.pendingWithdraw,
+        withdrawableAfterRequest: refreshedSnapshot.withdrawable,
+      },
     })
 
     return NextResponse.json({
@@ -125,8 +264,10 @@ export async function POST(request: NextRequest) {
         createdAt: transaction.createdAt,
         walletAddress: validatedData.walletAddress,
       },
-      newBalance: updatedCurrent,
-      pendingWithdraw: updatedPendingWithdraw,
+      newBalance: refreshedSnapshot.current,
+      pendingWithdraw: refreshedSnapshot.pendingWithdraw,
+      withdrawableBalance: refreshedSnapshot.withdrawable,
+      lockedBalance: refreshedSnapshot.lockedAmount,
     })
   } catch (error: any) {
     console.error("Withdrawal error:", error)
@@ -134,6 +275,18 @@ export async function POST(request: NextRequest) {
     if (error.name === "ZodError") {
       return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
     }
+
+    incrementCounter("wallet.withdraw.request_failed", 1, {
+      reason: error?.code ?? "unknown",
+    })
+
+    emitAuditLog({
+      event: "withdrawal_request_error",
+      severity: "error",
+      metadata: {
+        message: error?.message,
+      },
+    })
 
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
