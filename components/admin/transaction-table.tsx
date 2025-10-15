@@ -459,117 +459,213 @@ export function TransactionTable({
       {/* WIDE, NO-SCROLL MODAL */}
       <Dialog open={detailOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent
-          className="w-[min(1200px,95vw)] max-w-none overflow-visible p-6"
+          className="flex w-[min(95vw,900px)] max-w-none gap-0 overflow-hidden rounded-2xl border border-border/60 bg-background/95 p-0 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/85 md:w-[min(60vw,900px)]"
         >
-          <DialogHeader className="pb-2">
-            <DialogTitle>Transaction details</DialogTitle>
-            <DialogDescription>Review the request and take action.</DialogDescription>
-          </DialogHeader>
+          <div className="flex max-h-[90vh] w-full flex-col">
+            <DialogHeader className="border-b border-border/60 px-6 pb-4 pt-6 text-left sm:px-8 sm:pb-5">
+              <DialogTitle className="text-xl font-semibold leading-tight text-foreground">
+                Transaction details
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Review the request and take action.
+              </DialogDescription>
+            </DialogHeader>
 
-          {selectedTransaction ? (
-            <div className="grid gap-4 text-sm md:grid-cols-3">
-              {/* USER */}
-              <div className="rounded-md border p-3">
-                <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">User</h4>
-                <div className="space-y-1">
-                  <div><span className="text-xs uppercase text-muted-foreground">Name</span><div className="font-medium">{selectedTransaction.userId?.name || "Unknown"}</div></div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Email</span><div className="break-all text-muted-foreground">{selectedTransaction.userId?.email || "—"}</div></div>
-                  <div><span className="text-xs uppercase text-muted-foreground">User ID</span><div className="font-mono text-xs">{selectedTransaction.userId?._id || "—"}</div></div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Referral code</span><div className="text-muted-foreground">{selectedTransaction.userId?.referralCode || "—"}</div></div>
-                </div>
-              </div>
-
-              {/* TRANSACTION */}
-              <div className="rounded-md border p-3">
-                <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Transaction</h4>
-                <div className="space-y-1">
-                  <div><span className="text-xs uppercase text-muted-foreground">Type</span><div className="capitalize">{selectedTransaction.type}</div></div>
-                  <div>
-                    <span className="text-xs uppercase text-muted-foreground">Status</span>
-                    <div>
-                      <Badge
-                        variant={
-                          selectedTransaction.status === "approved"
-                            ? "default"
-                            : selectedTransaction.status === "pending"
-                              ? "secondary"
-                              : "destructive"
-                        }
-                        className="capitalize"
-                      >
-                        {selectedTransaction.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Amount</span><div className="font-mono text-base font-semibold">${selectedAmount.toFixed(2)}</div></div>
-                  <div><span className="text-xs uppercase text-muted-foreground">Created at</span><div>{selectedCreatedAtLabel}</div></div>
-                  {selectedTransaction.meta?.transactionHash ? (
-                    <div>
-                      <span className="text-xs uppercase text-muted-foreground">Transaction hash</span>
-                      <div className="break-all font-mono text-xs">{String(selectedTransaction.meta.transactionHash)}</div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* ADDITIONAL (meta) */}
-              <div className="rounded-md border p-3">
-                <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Additional</h4>
-                <div className="space-y-2">
-                  {selectedTransaction.meta
-                    ? Object.entries(selectedTransaction.meta).map(([k, v]) => (
-                        <div key={k} className="rounded bg-muted/40 p-2 text-xs">
-                          <div className="mb-1 font-medium uppercase text-muted-foreground">{k}</div>
-                          <div className="break-words">{typeof v === "object" ? JSON.stringify(v) : String(v)}</div>
+            <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+              {selectedTransaction ? (
+                <div className="space-y-6 text-sm">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {/* USER */}
+                    <section className="rounded-xl border border-border/60 bg-background/70 p-4 shadow-sm">
+                      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        User
+                      </h4>
+                      <div className="space-y-3 text-sm">
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Name</span>
+                          <div className="font-medium text-foreground">
+                            {selectedTransaction.userId?.name || "Unknown"}
+                          </div>
                         </div>
-                      ))
-                    : <div className="text-muted-foreground">—</div>}
-                </div>
-              </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Email</span>
+                          <div className="break-words text-foreground/80">
+                            {selectedTransaction.userId?.email || "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">User ID</span>
+                          <div className="font-mono text-xs text-foreground/90">
+                            {selectedTransaction.userId?._id || "—"}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Referral code</span>
+                          <div className="text-foreground/80">
+                            {selectedTransaction.userId?.referralCode || "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </section>
 
-              {/* ACTION INPUTS */}
-              {selectedIsActionable ? (
-                <div className="md:col-span-3 grid gap-3 md:grid-cols-3">
-                  {requiresTxHash ? (
-                    <div className="space-y-1">
-                      <Label htmlFor="admin-transaction-hash">Transaction hash</Label>
-                      <Input id="admin-transaction-hash" value={txHash} onChange={(e) => setTxHash(e.target.value)} />
+                    {/* TRANSACTION */}
+                    <section className="rounded-xl border border-border/60 bg-background/70 p-4 shadow-sm">
+                      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Transaction
+                      </h4>
+                      <div className="space-y-3">
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Type</span>
+                          <div className="capitalize text-foreground">
+                            {selectedTransaction.type}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Status</span>
+                          <div className="pt-1">
+                            <Badge
+                              variant={
+                                selectedTransaction.status === "approved"
+                                  ? "default"
+                                  : selectedTransaction.status === "pending"
+                                    ? "secondary"
+                                    : "destructive"
+                              }
+                              className="capitalize"
+                            >
+                              {selectedTransaction.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Amount</span>
+                          <div className="font-mono text-base font-semibold text-foreground">
+                            ${selectedAmount.toFixed(2)}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">Created at</span>
+                          <div className="text-foreground/80">{selectedCreatedAtLabel}</div>
+                        </div>
+                        {selectedTransaction.meta?.transactionHash ? (
+                          <div>
+                            <span className="text-xs uppercase tracking-wide text-muted-foreground">Transaction hash</span>
+                            <div className="break-words font-mono text-xs text-foreground/90">
+                              {String(selectedTransaction.meta.transactionHash)}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    {/* ADDITIONAL (meta) */}
+                    <section className="rounded-xl border border-border/60 bg-background/70 p-4 shadow-sm sm:col-span-2 xl:col-span-1">
+                      <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Additional details
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedTransaction.meta ? (
+                          Object.entries(selectedTransaction.meta).map(([key, value]) => (
+                            <div
+                              key={key}
+                              className="rounded-lg border border-border/40 bg-background/80 p-3 text-xs shadow-sm"
+                            >
+                              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                {key}
+                              </div>
+                              <div className="break-words whitespace-pre-wrap text-foreground/85">
+                                {typeof value === "object" ? JSON.stringify(value, null, 2) : String(value)}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-xs text-muted-foreground">No additional metadata</div>
+                        )}
+                      </div>
+                    </section>
+                  </div>
+
+                  {/* ACTION INPUTS */}
+                  {selectedIsActionable ? (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {requiresTxHash ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="admin-transaction-hash">Transaction hash</Label>
+                          <Input
+                            id="admin-transaction-hash"
+                            value={txHash}
+                            onChange={(event) => setTxHash(event.target.value)}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="admin-transaction-reason">Rejection reason</Label>
+                        <Textarea
+                          id="admin-transaction-reason"
+                          value={rejectionReason}
+                          onChange={(event) => setRejectionReason(event.target.value)}
+                          placeholder="Optional explanation for the user"
+                          className="min-h-[120px]"
+                        />
+                      </div>
                     </div>
                   ) : null}
-                  <div className="md:col-span-2 space-y-1">
-                    <Label htmlFor="admin-transaction-reason">Rejection reason</Label>
-                    <Textarea id="admin-transaction-reason" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Optional explanation for the user" />
-                  </div>
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Select a transaction to view its details.
+                </p>
+              )}
+
+              {actionError ? (
+                <Alert variant="destructive" className="mt-6">
+                  <AlertDescription>{actionError}</AlertDescription>
+                </Alert>
               ) : null}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Select a transaction to view its details.</p>
-          )}
 
-          {actionError ? (
-            <Alert variant="destructive" className="mt-2">
-              <AlertDescription>{actionError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <DialogFooter className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <Button variant="ghost" onClick={() => handleDialogOpenChange(false)} disabled={actionLoading}>
-              Close
-            </Button>
-            {selectedIsActionable ? (
-              <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button type="button" variant="outline" onClick={handleReject} disabled={actionLoading} className="gap-1">
-                  {pendingAction === "reject" && actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-                  Reject
-                </Button>
-                <Button type="button" onClick={handleApprove} disabled={actionLoading} className="gap-1">
-                  {pendingAction === "approve" && actionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Approve
-                </Button>
-              </div>
-            ) : null}
-          </DialogFooter>
+            <DialogFooter className="gap-3 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-8">
+              <Button
+                variant="ghost"
+                onClick={() => handleDialogOpenChange(false)}
+                disabled={actionLoading}
+                className="w-full sm:w-auto"
+              >
+                Close
+              </Button>
+              {selectedIsActionable ? (
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReject}
+                    disabled={actionLoading}
+                    className="gap-1 sm:min-w-[140px]"
+                  >
+                    {pendingAction === "reject" && actionLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    Reject
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleApprove}
+                    disabled={actionLoading}
+                    className="gap-1 sm:min-w-[160px]"
+                  >
+                    {pendingAction === "approve" && actionLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Approve
+                  </Button>
+                </div>
+              ) : null}
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>
