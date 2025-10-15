@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     const [balances, levelHistoryDocs] = await Promise.all([
       userIds.length
         ? Balance.find({ userId: { $in: userIds } })
-            .select({ current: 1, totalBalance: 1, totalEarning: 1, lockedCapital: 1, staked: 1, pendingWithdraw: 1 })
+            .select({ current: 1, totalBalance: 1, totalEarning: 1, staked: 1, pendingWithdraw: 1 })
             .lean()
         : [],
       userIds.length
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
           current: Number(balance.current ?? 0),
           totalBalance: Number(balance.totalBalance ?? 0),
           totalEarning: Number(balance.totalEarning ?? 0),
-          lockedCapital: Number(balance.lockedCapital ?? 0),
+          lockedCapital: 0,
           staked: Number(balance.staked ?? 0),
           pendingWithdraw: Number(balance.pendingWithdraw ?? 0),
         },

@@ -23,10 +23,8 @@ interface WalletAddressOption {
 interface WithdrawFormProps {
   minWithdraw: number
   withdrawableBalance: number
-  lockedBalance: number
   pendingWithdraw: number
   walletBalance: number
-  nextUnlockAt: string | null
 }
 
 const initialState: WithdrawFormState = { error: null, success: null }
@@ -58,10 +56,8 @@ function SubmitButton() {
 export function WithdrawForm({
   minWithdraw,
   withdrawableBalance,
-  lockedBalance,
   pendingWithdraw,
   walletBalance,
-  nextUnlockAt,
 }: WithdrawFormProps) {
   const [state, formAction] = useFormState(submitWithdrawAction, initialState)
 
@@ -165,17 +161,6 @@ export function WithdrawForm({
     [addresses, selectedAddressId],
   )
 
-  const formattedUnlock = useMemo(() => {
-    if (!nextUnlockAt) {
-      return null
-    }
-    const parsed = new Date(nextUnlockAt)
-    if (Number.isNaN(parsed.getTime())) {
-      return null
-    }
-    return parsed.toLocaleString()
-  }, [nextUnlockAt])
-
   return (
     <form action={formAction} className="space-y-6">
       {state?.error && (
@@ -206,12 +191,10 @@ export function WithdrawForm({
           <span>
             Wallet balance: <strong className="text-foreground">${walletBalance.toFixed(2)}</strong>
           </span>
-          <span>
-            Locked capital: <strong className="text-foreground">${lockedBalance.toFixed(2)}</strong>
-          </span>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Minimum withdrawal: ${minWithdraw.toFixed(2)} USDT. {formattedUnlock ? `Next unlock on ${formattedUnlock}.` : ""}
+          Minimum withdrawal: ${minWithdraw.toFixed(2)} USDT. Any balance above the minimum is ready for immediate
+          withdrawal.
         </p>
       </div>
 

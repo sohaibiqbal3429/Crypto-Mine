@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DepositForm } from "@/components/wallet/deposit-form"
 import { WithdrawForm } from "@/components/wallet/withdraw-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Wallet, ArrowUpRight, ArrowDownLeft, Lock } from "lucide-react"
+import { Wallet, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 
 export default async function WalletPage() {
   const token = cookies().get("auth-token")?.value
@@ -28,10 +28,6 @@ export default async function WalletPage() {
   }
 
   const walletOptions = getDepositWalletOptions()
-
-  const nextUnlockDate = context.withdrawable.nextUnlockAt
-    ? new Date(context.withdrawable.nextUnlockAt)
-    : null
 
   return (
     <div className="flex h-screen bg-background">
@@ -65,22 +61,7 @@ export default async function WalletPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">${context.stats.walletBalance.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Funds held in wallet (locked + unlocked)</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Locked Capital</CardTitle>
-                <Lock className="h-4 w-4 text-orange-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">${context.stats.lockedBalance.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {nextUnlockDate
-                    ? `Locked until ${nextUnlockDate.toLocaleDateString()}`
-                    : "No funds currently locked"}
-                </p>
+                <p className="text-xs text-muted-foreground">Total funds in your wallet</p>
               </CardContent>
             </Card>
 
@@ -116,19 +97,6 @@ export default async function WalletPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">${context.stats.totalEarning.toFixed(2)}</div>
                 <p className="text-xs text-muted-foreground">From mining & commissions</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Next Unlock</CardTitle>
-                <Lock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {nextUnlockDate ? nextUnlockDate.toLocaleString() : "All capital unlocked"}
-                </div>
-                <p className="text-xs text-muted-foreground">Tracks the soonest capital release</p>
               </CardContent>
             </Card>
           </section>
@@ -172,9 +140,7 @@ export default async function WalletPage() {
                   minWithdraw={context.withdrawConfig.minWithdraw}
                   withdrawableBalance={context.stats.currentBalance}
                   pendingWithdraw={context.stats.pendingWithdraw}
-                  lockedBalance={context.stats.lockedBalance}
                   walletBalance={context.stats.walletBalance}
-                  nextUnlockAt={nextUnlockDate ? nextUnlockDate.toISOString() : null}
                 />
               </CardContent>
             </Card>

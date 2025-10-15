@@ -11,7 +11,6 @@ import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { depositSchema } from "@/lib/validations/wallet"
 import { applyDepositRewards } from "@/lib/utils/commission"
-import { resolveCapitalLockWindow } from "@/lib/utils/locked-capital"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
@@ -166,7 +165,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
 
 
   if (isFakeDeposit) {
-    const { lockStart, lockEnd } = resolveCapitalLockWindow(settings)
     const transaction = await Transaction.create({
       userId: input.userId,
       type: "deposit",
@@ -181,11 +179,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
         isFakeDeposit: true,
         exchangePlatform: parsed.data.exchangePlatform ?? null,
         ...(receiptResult ? { receipt: receiptResult.meta } : {}),
-        lock: {
-          amount: FAKE_DEPOSIT_AMOUNT,
-          lockStart,
-          lockEnd,
-        },
       },
     })
 
@@ -200,15 +193,6 @@ export async function submitDeposit(input: DepositSubmissionInput) {
           $inc: {
             current: FAKE_DEPOSIT_AMOUNT,
             totalBalance: FAKE_DEPOSIT_AMOUNT,
-            lockedCapital: FAKE_DEPOSIT_AMOUNT,
-          },
-          $push: {
-            lockedCapitalLots: {
-              amount: FAKE_DEPOSIT_AMOUNT,
-              lockStart,
-              lockEnd,
-              sourceTransactionId: transaction._id,
-            },
           },
           $setOnInsert: {
             totalEarning: 0,

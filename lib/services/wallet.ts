@@ -17,7 +17,6 @@ export interface WalletContext {
     totalEarning: number
     pendingWithdraw: number
     staked: number
-    lockedBalance: number
     walletBalance: number
   }
   minDeposit: number
@@ -26,11 +25,7 @@ export interface WalletContext {
   }
   withdrawable: {
     amount: number
-    lockedAmount: number
-    lockedAmountFromLots: number
-    lockedCapitalField: number
     pendingWithdraw: number
-    nextUnlockAt: Date | null
   }
 }
 
@@ -68,7 +63,6 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
     totalEarning: Number(balanceDoc?.totalEarning ?? 0),
     pendingWithdraw: withdrawableSnapshot.pendingWithdraw ?? Number(balanceDoc?.pendingWithdraw ?? 0),
     staked: Number(balanceDoc?.staked ?? 0),
-    lockedBalance: withdrawableSnapshot.lockedAmount ?? Number(balanceDoc?.lockedCapital ?? 0),
     walletBalance: withdrawableSnapshot.current ?? Number(balanceDoc?.current ?? 0),
   }
 
@@ -89,11 +83,7 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
     withdrawConfig,
     withdrawable: {
       amount: withdrawableSnapshot.withdrawable ?? 0,
-      lockedAmount: withdrawableSnapshot.lockedAmount ?? Number(balanceDoc?.lockedCapital ?? 0),
-      lockedAmountFromLots: withdrawableSnapshot.lockedAmountFromLots ?? Number(balanceDoc?.lockedCapital ?? 0),
-      lockedCapitalField: withdrawableSnapshot.lockedCapitalField ?? Number(balanceDoc?.lockedCapital ?? 0),
       pendingWithdraw: withdrawableSnapshot.pendingWithdraw ?? Number(balanceDoc?.pendingWithdraw ?? 0),
-      nextUnlockAt: withdrawableSnapshot.nextUnlockAt ?? null,
     },
   }
 }
