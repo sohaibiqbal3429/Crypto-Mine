@@ -986,15 +986,8 @@ function createBalances(users: InMemoryDocument[]): InMemoryDocument[] {
     current: Math.max(user.depositTotal - user.withdrawTotal + user.roiEarnedTotal - 200, 0),
     totalBalance: user.depositTotal,
     totalEarning: user.roiEarnedTotal,
-    lockedCapital: user.depositTotal * 0.4,
-    lockedCapitalLots: [
-      {
-        amount: user.depositTotal * 0.4,
-        lockStart: now,
-        lockEnd: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
-        released: false,
-      },
-    ],
+    lockedCapital: 0,
+    lockedCapitalLots: [],
     staked: user.depositTotal * 0.2,
     pendingWithdraw: 50,
     teamRewardsAvailable: 75,

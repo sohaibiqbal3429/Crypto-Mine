@@ -88,10 +88,6 @@ export async function POST(request: NextRequest) {
       const shortage = normaliseAmount(shortageCents / 100)
       const reasons: string[] = []
 
-      if (withdrawableSnapshot.lockedAmountCents > 0) {
-        reasons.push(`$${withdrawableSnapshot.lockedAmount.toFixed(2)} is still locked.`)
-      }
-
       if (withdrawableSnapshot.pendingWithdraw > 0) {
         reasons.push(`$${withdrawableSnapshot.pendingWithdraw.toFixed(2)} is already pending approval.`)
       }
@@ -102,10 +98,6 @@ export async function POST(request: NextRequest) {
 
       if (reasons.length) {
         messageParts.push(reasons.join(" "))
-      }
-
-      if (withdrawableSnapshot.nextUnlockAt) {
-        messageParts.push(`Next unlock: ${withdrawableSnapshot.nextUnlockAt.toISOString()}.`)
       }
 
       incrementCounter("wallet.withdraw.request_rejected", 1, {
@@ -119,7 +111,6 @@ export async function POST(request: NextRequest) {
         metadata: {
           requestedAmount: requestAmount,
           withdrawable: withdrawableSnapshot.withdrawable,
-          lockedAmount: withdrawableSnapshot.lockedAmount,
           pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
           shortage,
         },
@@ -132,10 +123,8 @@ export async function POST(request: NextRequest) {
           context: {
             requestedAmount: requestAmount,
             withdrawable: withdrawableSnapshot.withdrawable,
-            lockedAmount: withdrawableSnapshot.lockedAmount,
             pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
             shortage,
-            nextUnlockAt: withdrawableSnapshot.nextUnlockAt,
           },
         },
         { status: 400 },
@@ -166,7 +155,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const guardCurrent = normaliseAmount(requestAmount + withdrawableSnapshot.lockedAmount)
+    const guardCurrent = normaliseAmount(requestAmount)
 
     const updateResult = await Balance.updateOne(
       {
@@ -229,7 +218,6 @@ export async function POST(request: NextRequest) {
         requestedAt: now,
         userBalance: refreshedSnapshot.current,
         withdrawableAfterRequest: refreshedSnapshot.withdrawable,
-        lockedAmount: refreshedSnapshot.lockedAmount,
         withdrawalFee: 0,
       },
     })
@@ -267,7 +255,6 @@ export async function POST(request: NextRequest) {
       newBalance: refreshedSnapshot.current,
       pendingWithdraw: refreshedSnapshot.pendingWithdraw,
       withdrawableBalance: refreshedSnapshot.withdrawable,
-      lockedBalance: refreshedSnapshot.lockedAmount,
     })
   } catch (error: any) {
     console.error("Withdrawal error:", error)

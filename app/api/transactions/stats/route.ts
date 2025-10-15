@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
         currentBalance: balance.current,
         totalBalance: balance.totalBalance,
         totalEarning: balance.totalEarning,
-        lockedCapital: balance.lockedCapital,
+        lockedCapital: 0,
         pendingWithdraw: balance.pendingWithdraw,
       },
       periodStats,
