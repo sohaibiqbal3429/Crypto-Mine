@@ -126,7 +126,7 @@ const ECONOMICS_RULES = [
   },
   {
     label: "Daily Mining Yield",
-    value: "1.5% to 5%",
+    value: "Default 1.5%",
     scheduled: "Projected daily return once hashing begins.",
     live: "Compounded every cycle and streamed to balances.",
   },

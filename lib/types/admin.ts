@@ -59,9 +59,18 @@ export interface AdminStats {
   pendingLuckyDrawDeposits: number
 }
 
+export interface AdminPlatformSettings {
+  dailyProfitPercent: number
+  bounds: {
+    min: number
+    max: number
+  }
+}
+
 export interface AdminInitialData {
   adminUser: AdminSessionUser
   transactions: AdminTransactionRecord[]
   users: AdminUserRecord[]
   stats: AdminStats
+  settings: AdminPlatformSettings
 }

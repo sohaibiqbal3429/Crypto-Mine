@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { verifyToken } from "@/lib/auth"
 import { fetchWalletContext } from "@/lib/services/wallet"
 import { getMiningStatus } from "@/lib/services/mining"
+import { multiplyAmountByPercent } from "@/lib/utils/numeric"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
@@ -41,6 +42,9 @@ export default async function MiningPage() {
     rank: 0,
     totalMiners: 0,
   }
+
+  const dailyProfitPercent = miningStatus.miningSettings.dailyProfitPercent
+  const dailyProfitPreview = multiplyAmountByPercent(100, dailyProfitPercent)
 
   return (
     <div className="flex h-screen bg-background">
@@ -133,10 +137,8 @@ export default async function MiningPage() {
                   <div className="text-muted-foreground">Mining Uptime</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
-                  <div className="font-semibold text-lg">
-                    {miningStatus.miningSettings.minPct.toFixed(2)}%-{miningStatus.miningSettings.maxPct.toFixed(2)}%
-                  </div>
-                  <div className="text-muted-foreground">Daily range</div>
+                  <div className="font-semibold text-lg">{dailyProfitPercent.toFixed(2)}%</div>
+                  <div className="text-muted-foreground">Daily profit • $100 → ${dailyProfitPreview.toFixed(2)}</div>
                 </div>
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="font-semibold text-lg">

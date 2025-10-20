@@ -1,3 +1,7 @@
+import { fromScaledInteger, multiplyAmountByPercent, toScaledInteger } from "@/lib/utils/numeric"
+
+const DEFAULT_DAILY_MINING_PERCENT = 1.5
+
 export function generateReferralCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
   let result = ""
@@ -7,35 +11,40 @@ export function generateReferralCode(): string {
   return result
 }
 
-function resolveDailyMiningPct(minPct?: number, maxPct?: number): number {
-  if (typeof minPct === "number" && !Number.isNaN(minPct) && minPct > 0) {
-    return minPct
+function resolveDailyMiningPct(minPct?: unknown, maxPct?: unknown): number {
+  const minScaled = toScaledInteger(minPct, 2)
+  if (minScaled !== null && minScaled > 0) {
+    return fromScaledInteger(minScaled, 2)
   }
 
-  if (typeof maxPct === "number" && !Number.isNaN(maxPct) && maxPct > 0) {
-    return maxPct
+  const maxScaled = toScaledInteger(maxPct, 2)
+  if (maxScaled !== null && maxScaled > 0) {
+    return fromScaledInteger(maxScaled, 2)
   }
 
-  return 1.5
+  return DEFAULT_DAILY_MINING_PERCENT
 }
 
-export function calculateMiningProfit(baseAmount: number, minPct?: number, maxPct?: number): number {
-  if (baseAmount <= 0) return 0
+export function calculateMiningProfit(baseAmount: number, minPct?: unknown, maxPct?: unknown): number {
+  if (typeof baseAmount !== "number" || !Number.isFinite(baseAmount) || baseAmount <= 0) {
+    return 0
+  }
 
   const pct = resolveDailyMiningPct(minPct, maxPct)
-  const profit = (baseAmount * pct) / 100
-
-  return Math.round(profit * 100) / 100
+  return multiplyAmountByPercent(baseAmount, pct)
 }
 
 export function hasReachedROICap(earnedTotal: number, depositTotal: number, roiCap: number): boolean {
   return earnedTotal >= depositTotal * roiCap
 }
 
-export function calculateEstimatedDailyEarnings(baseAmount: number, minPct?: number, maxPct?: number): number {
-  if (baseAmount <= 0) return 0
+export function calculateEstimatedDailyEarnings(baseAmount: number, minPct?: unknown, maxPct?: unknown): number {
+  if (typeof baseAmount !== "number" || !Number.isFinite(baseAmount) || baseAmount <= 0) {
+    return 0
+  }
+
   const pct = resolveDailyMiningPct(minPct, maxPct)
-  return Math.round(((baseAmount * pct) / 100) * 100) / 100
+  return multiplyAmountByPercent(baseAmount, pct)
 }
 
 export function calculateROIProgress(earnedTotal: number, depositTotal: number, roiCap: number): number {

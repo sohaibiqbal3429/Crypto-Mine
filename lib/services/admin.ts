@@ -5,6 +5,7 @@ import LuckyDrawDeposit from "@/models/LuckyDrawDeposit"
 import User from "@/models/User"
 import Settings from "@/models/Settings"
 import type { AdminInitialData, AdminStats } from "@/lib/types/admin"
+import { getDailyProfitPercentBounds, resolveDailyProfitPercent } from "@/lib/services/settings"
 
 const toNumber = (value: unknown): number => {
   const num = Number(value)
@@ -20,8 +21,13 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     throw new Error("Admin access required")
   }
 
-  const settingsDoc = await Settings.findOne().select({ "gating.activeMinDeposit": 1 }).lean()
-  const activeDepositThreshold = settingsDoc?.gating?.activeMinDeposit ?? 80
+  const settingsDoc = await Settings.findOne()
+  const plainSettings = settingsDoc
+    ? (typeof settingsDoc.toObject === "function" ? settingsDoc.toObject() : (settingsDoc as any))
+    : null
+  const activeDepositThreshold = plainSettings?.gating?.activeMinDeposit ?? 80
+  const dailyProfitPercent = resolveDailyProfitPercent(plainSettings)
+  const dailyProfitBounds = getDailyProfitPercentBounds()
 
   const [
     totalUsersResult,
@@ -102,5 +108,9 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     transactions: [],
     users: [],
     stats,
+    settings: {
+      dailyProfitPercent,
+      bounds: dailyProfitBounds,
+    },
   }
 }

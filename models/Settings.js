@@ -4,9 +4,13 @@ import { createModelProxy } from "../lib/in-memory/model-factory"
 
 const SettingsSchema = new mongoose.Schema(
   {
+    dailyProfitPercent: {
+      type: mongoose.Schema.Types.Decimal128,
+      default: () => mongoose.Types.Decimal128.fromString("1.50"),
+    },
     mining: {
       minPct: { type: Number, default: 1.5 },
-      maxPct: { type: Number, default: 5.0 },
+      maxPct: { type: Number, default: 1.5 },
       roiCap: { type: Number, default: 3 },
     },
     gating: {
