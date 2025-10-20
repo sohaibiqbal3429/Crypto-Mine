@@ -101,7 +101,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
             )}
           </div>
           <div>
-            <div className="crypto-gradient-text text-xl font-bold">P-Coin Mining</div>
+            <div className="crypto-gradient-text text-xl font-bold">Mint-Coin Mining</div>
             <div className="text-sm text-muted-foreground">Decentralized Mining Protocol</div>
           </div>
         </CardTitle>
