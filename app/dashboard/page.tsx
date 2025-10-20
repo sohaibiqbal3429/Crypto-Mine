@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
 import { ImportantUpdateModal } from "@/components/dashboard/important-update-modal"
@@ -35,6 +36,7 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -42,6 +44,11 @@ export default function DashboardPage() {
   const fetchDashboardData = useCallback(async () => {
     try {
       const [dashboardRes, userRes] = await Promise.all([fetch("/api/dashboard"), fetch("/api/auth/me")])
+
+      if (dashboardRes.status === 403) {
+        router.replace("/auth/login?blocked=1")
+        return
+      }
 
       if (dashboardRes.ok && userRes.ok) {
         const dashboardData = await dashboardRes.json()

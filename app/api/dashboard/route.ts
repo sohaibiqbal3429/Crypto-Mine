@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    if (user.isBlocked) {
+      return NextResponse.json({ error: "Account blocked", blocked: true }, { status: 403 })
+    }
+
     let balance = await Balance.findOne({ userId: user._id })
     if (!balance) {
       balance = await Balance.create({

@@ -144,6 +144,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 })
     }
 
+    if (user.isBlocked) {
+      user.lastLoginAt = new Date()
+      await user.save()
+      return NextResponse.json(
+        {
+          error: "Your account has been blocked by an administrator.",
+          blocked: true,
+        },
+        { status: 403 },
+      )
+    }
+
+    user.lastLoginAt = new Date()
+    await user.save()
+
     const token = signToken({
       userId: user._id.toString(),
       email: user.email,
@@ -158,6 +173,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         role: user.role,
         referralCode: user.referralCode,
+        isBlocked: user.isBlocked,
       },
     })
 

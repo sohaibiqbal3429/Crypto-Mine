@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Loader2, CreditCard, Plus, Trash2, CheckCircle } from "lucide-react"
 
 interface WalletAddress {
@@ -17,7 +16,6 @@ interface WalletAddress {
   label: string
   chain: string
   address: string
-  verified: boolean
   createdAt: string
 }
 
@@ -238,13 +236,8 @@ export default function EWalletPage() {
                   <Card key={address._id}>
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold">{address.label}</h3>
-                            <Badge variant={address.verified ? "default" : "secondary"}>
-                              {address.verified ? "Verified" : "Unverified"}
-                            </Badge>
-                          </div>
+                        <div className="flex-1 space-y-2">
+                          <h3 className="font-semibold">{address.label}</h3>
                           <p className="text-sm text-muted-foreground">
                             <strong>Chain:</strong> {address.chain}
                           </p>

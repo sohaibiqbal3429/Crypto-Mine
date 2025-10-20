@@ -10,6 +10,7 @@ export interface WalletContext {
     email: string
     referralCode: string
     role: string
+    profileAvatar: string
   }
   stats: {
     currentBalance: number
@@ -77,6 +78,7 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
       email: userDoc.email,
       referralCode: userDoc.referralCode,
       role: userDoc.role,
+      profileAvatar: userDoc.profileAvatar ?? "avatar-01",
     },
     stats,
     minDeposit,

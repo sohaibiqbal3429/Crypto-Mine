@@ -12,6 +12,8 @@ export interface IUser extends Document {
   referredBy?: mongoose.Types.ObjectId
   status: "active" | "inactive" | "suspended"
   isActive: boolean
+  isBlocked: boolean
+  blockedAt?: Date | null
   emailVerified: boolean // Added email verification status
   phoneVerified: boolean // Added phone verification status
   depositTotal: number
@@ -23,12 +25,15 @@ export interface IUser extends Document {
   lastLevelUpAt?: Date | null
   qualified: boolean
   qualifiedAt?: Date | null
+  kycStatus: "unverified" | "pending" | "verified" | "rejected"
   groups: {
     A: mongoose.Types.ObjectId[]
     B: mongoose.Types.ObjectId[]
     C: mongoose.Types.ObjectId[]
     D: mongoose.Types.ObjectId[]
   }
+  profileAvatar: string
+  lastLoginAt?: Date | null
   createdAt: Date
   updatedAt: Date
 }
@@ -49,6 +54,8 @@ const UserSchema = new Schema<IUser>(
       index: true,
     },
     isActive: { type: Boolean, default: false },
+    isBlocked: { type: Boolean, default: false, index: true },
+    blockedAt: { type: Date, default: null },
     emailVerified: { type: Boolean, default: false }, // Added email verification tracking
     phoneVerified: { type: Boolean, default: false }, // Added phone verification tracking
     depositTotal: { type: Number, default: 0 },
@@ -60,12 +67,19 @@ const UserSchema = new Schema<IUser>(
     lastLevelUpAt: { type: Date, default: null },
     qualified: { type: Boolean, default: false },
     qualifiedAt: { type: Date, default: null },
+    kycStatus: {
+      type: String,
+      enum: ["unverified", "pending", "verified", "rejected"],
+      default: "unverified",
+    },
     groups: {
       A: [{ type: Schema.Types.ObjectId, ref: "User" }],
       B: [{ type: Schema.Types.ObjectId, ref: "User" }],
       C: [{ type: Schema.Types.ObjectId, ref: "User" }],
       D: [{ type: Schema.Types.ObjectId, ref: "User" }],
     },
+    profileAvatar: { type: String, default: "avatar-01" },
+    lastLoginAt: { type: Date, default: null },
   },
   {
     timestamps: true,

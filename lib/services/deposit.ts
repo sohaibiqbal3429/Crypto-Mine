@@ -133,6 +133,10 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     throw new DepositSubmissionError("User not found", 404)
   }
 
+  if (user.isBlocked) {
+    throw new DepositSubmissionError("Blocked accounts cannot submit deposits.", 403)
+  }
+
   const settings = await Settings.findOne()
   const minDeposit = settings?.gating?.minDeposit ?? FAKE_DEPOSIT_AMOUNT
 

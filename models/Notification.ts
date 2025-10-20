@@ -14,6 +14,7 @@ export interface INotification extends Document {
     | "cap-reached"
     | "team-reward-claimed"
     | "mining-reward"
+    | "admin-adjustment"
   title: string
   body: string
   metadata?: Record<string, any>
@@ -36,6 +37,7 @@ const NotificationSchema = new Schema<INotification>(
         "cap-reached",
         "team-reward-claimed",
         "mining-reward",
+        "admin-adjustment",
       ],
       required: true,
     },

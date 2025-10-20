@@ -1,8 +1,8 @@
 "use client"
 
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, UserRoundPlus } from "lucide-react"
 
 import { useTopLoader } from "@/components/top-loader"
@@ -10,6 +10,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
@@ -31,6 +39,7 @@ interface LoginFormData {
 
 export function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { startTask, stopTask } = useTopLoader()
   const [formData, setFormData] = useState<LoginFormData>({
     email: "",
@@ -41,6 +50,18 @@ export function LoginForm() {
   const [authMethod, setAuthMethod] = useState<"email" | "phone">("email")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [blockedModalOpen, setBlockedModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (searchParams?.get("blocked")) {
+      setBlockedModalOpen(true)
+    }
+  }, [searchParams])
+
+  const handleContactSupport = () => {
+    setBlockedModalOpen(false)
+    router.push("/support")
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -97,6 +118,12 @@ export function LoginForm() {
 
       const data = (parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null) ?? null
       const success = Boolean(data?.success)
+
+      if (response.status === 403 && data && typeof data === "object" && (data as any).blocked) {
+        setBlockedModalOpen(true)
+        setError("")
+        return
+      }
 
       if (!response.ok || !success) {
         const backendMessage =
@@ -269,6 +296,21 @@ export function LoginForm() {
           </div>
         </form>
       </div>
+      <Dialog open={blockedModalOpen} onOpenChange={setBlockedModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Account Blocked</DialogTitle>
+            <DialogDescription>
+              Your account has been blocked by an administrator. For more information, contact Support.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="sm:justify-start">
+            <Button onClick={handleContactSupport} className="w-full">
+              Contact Support
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

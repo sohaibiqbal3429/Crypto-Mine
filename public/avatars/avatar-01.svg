@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title>Visionary avatar</title>
+  <desc>A confident person with short hair in a blue gradient circle</desc>
+  <defs>
+    <linearGradient id="bgGradient01" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="64" fill="url(#bgGradient01)" />
+  <circle cx="64" cy="50" r="26" fill="#f8fafc" />
+  <path d="M64 72c-22 0-40 15-40 34v6h80v-6c0-19-18-34-40-34z" fill="#dbeafe" />
+  <path d="M64 28c-10 0-18 8-18 18 4 5 10 8 18 8s14-3 18-8c0-10-8-18-18-18z" fill="#1e40af" opacity="0.25" />
+</svg>

@@ -5,11 +5,19 @@ import { getUserFromRequest } from "@/lib/auth"
 import dbConnect from "@/lib/mongodb"
 import { serializeUser } from "@/lib/serializers/user"
 import { formatPhoneNumber, validatePhoneNumber } from "@/lib/utils/otp"
+import { PROFILE_AVATAR_VALUES } from "@/lib/constants/avatars"
 import User from "@/models/User"
 
 const profileUpdateSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
   phone: z.string().trim().min(1, "Phone number is required"),
+  avatar: z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || PROFILE_AVATAR_VALUES.includes(value), {
+      message: "Select a valid avatar option",
+    }),
 })
 
 export async function PATCH(request: NextRequest) {
@@ -47,6 +55,9 @@ export async function PATCH(request: NextRequest) {
 
     user.name = parsedBody.name
     user.phone = formattedPhone
+    if (parsedBody.avatar) {
+      user.profileAvatar = parsedBody.avatar
+    }
 
     if (phoneChanged) {
       user.phoneVerified = false

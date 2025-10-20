@@ -13,12 +13,15 @@ export type SerializableUser = {
   referralCode: string
   level: number
   isActive: boolean
+  isBlocked: boolean
   depositTotal: number
   withdrawTotal: number
   roiEarnedTotal: number
   createdAt: string
   updatedAt: string
-  profileStatus: "Verified" | "Unverified"
+  kycStatus: "unverified" | "pending" | "verified" | "rejected"
+  profileAvatar: string
+  lastLoginAt: string | null
 }
 
 type UserDocument = HydratedDocument<IUser>
@@ -39,11 +42,19 @@ export function serializeUser(user: UserDocument | (IUser & { _id: any })): Seri
     referralCode: user.referralCode,
     level: user.level ?? 0,
     isActive: Boolean(user.isActive),
+    isBlocked: Boolean(user.isBlocked),
     depositTotal: user.depositTotal ?? 0,
     withdrawTotal: user.withdrawTotal ?? 0,
     roiEarnedTotal: user.roiEarnedTotal ?? 0,
     createdAt: new Date(user.createdAt).toISOString(),
     updatedAt: new Date(user.updatedAt).toISOString(),
-    profileStatus: phoneVerified ? "Verified" : "Unverified",
+    kycStatus:
+      user.kycStatus === "pending" ||
+      user.kycStatus === "verified" ||
+      user.kycStatus === "rejected"
+        ? user.kycStatus
+        : "unverified",
+    profileAvatar: user.profileAvatar || "avatar-01",
+    lastLoginAt: user.lastLoginAt ? new Date(user.lastLoginAt).toISOString() : null,
   }
 }

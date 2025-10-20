@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(200, Math.max(1, Number.parseInt(searchParams.get("limit") || "100")))
     const cursorParam = searchParams.get("cursor")?.trim()
     const status = searchParams.get("status") || undefined
+    const blockedFilter = searchParams.get("blocked")
     const from = searchParams.get("from")
     const to = searchParams.get("to")
     const queryParam = searchParams.get("q")?.trim()
@@ -38,7 +39,17 @@ export async function GET(request: NextRequest) {
       filter._id = { $lt: new mongoose.Types.ObjectId(cursorParam) }
     }
     if (status && status !== "all") {
-      filter.status = status
+      if (status === "blocked") {
+        filter.isBlocked = true
+      } else {
+        filter.status = status
+        filter.isBlocked = { $ne: true }
+      }
+    }
+    if (blockedFilter === "true") {
+      filter.isBlocked = true
+    } else if (blockedFilter === "false") {
+      filter.isBlocked = { $ne: true }
     }
     if (from || to) {
       filter.createdAt = {
@@ -66,12 +77,19 @@ export async function GET(request: NextRequest) {
 
     const userIds = trimmedUsers
       .map((user) => {
-        try {
-          return new mongoose.Types.ObjectId(user._id)
-        } catch (error) {
-          console.warn("Skipping user with invalid id", user._id, error)
+        const rawId =
+          typeof user._id === "string"
+            ? user._id
+            : typeof (user._id as { toString?: () => string })?.toString === "function"
+              ? (user._id as { toString: () => string }).toString()
+              : null
+
+        if (!rawId || !mongoose.Types.ObjectId.isValid(rawId)) {
+          console.warn("Skipping user with invalid id", user._id)
           return null
         }
+
+        return new mongoose.Types.ObjectId(rawId)
       })
       .filter((id): id is mongoose.Types.ObjectId => id !== null)
 
@@ -108,7 +126,15 @@ export async function GET(request: NextRequest) {
     }
 
     const data = trimmedUsers.map((user) => {
-      const id = user._id.toString()
+      const id =
+        typeof user._id === "string"
+          ? user._id
+          : typeof (user._id as { toString?: () => string })?.toString === "function"
+            ? (user._id as { toString: () => string }).toString()
+            : ""
+      if (!id) {
+        return null
+      }
       const balance = balanceByUser.get(id) ?? {
         current: 0,
         totalBalance: 0,
@@ -132,10 +158,21 @@ export async function GET(request: NextRequest) {
         withdrawTotal: Number(user.withdrawTotal ?? 0),
         roiEarnedTotal: Number(user.roiEarnedTotal ?? 0),
         isActive: Boolean(user.isActive),
+        isBlocked: Boolean(user.isBlocked),
+        kycStatus:
+          user.kycStatus === "pending" || user.kycStatus === "verified" || user.kycStatus === "rejected"
+            ? user.kycStatus
+            : "unverified",
         createdAt:
           user.createdAt instanceof Date
             ? user.createdAt.toISOString()
             : new Date(user.createdAt ?? Date.now()).toISOString(),
+        lastLoginAt:
+          user.lastLoginAt instanceof Date
+            ? user.lastLoginAt.toISOString()
+            : user.lastLoginAt
+              ? new Date(user.lastLoginAt).toISOString()
+              : null,
         balance: {
           current: Number(balance.current ?? 0),
           totalBalance: Number(balance.totalBalance ?? 0),
@@ -146,10 +183,14 @@ export async function GET(request: NextRequest) {
         },
         levelHistory: historyByUser.get(id) ?? [],
         status: user.status ?? "inactive",
+        profileAvatar:
+          typeof user.profileAvatar === "string" && user.profileAvatar ? user.profileAvatar : "avatar-01",
       }
     })
 
-    return NextResponse.json({ data, nextCursor })
+    const sanitizedData = data.filter((entry): entry is (typeof data)[number] => entry !== null)
+
+    return NextResponse.json({ data: sanitizedData, nextCursor })
   } catch (error) {
     console.error("Admin users error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
