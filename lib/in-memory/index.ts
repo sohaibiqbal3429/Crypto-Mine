@@ -124,7 +124,7 @@ class InMemoryQuery<T extends InMemoryDocument> implements PromiseLike<T[]> {
         return clone as T
       }
 
-      return Object.assign(createModelInstance(clone), clone)
+      return createModelInstance(this.collection, clone)
     })
 
     return processed as T[]
@@ -161,7 +161,7 @@ class InMemoryCollection<T extends InMemoryDocument> {
 
   async findOne(filter: QueryFilter = {}): Promise<T | null> {
     const [result] = this.filterDocuments(filter)
-    return result ? (createModelInstance(result) as T) : null
+    return result ? (createModelInstance(this, result) as T) : null
   }
 
   async findById(id: string): Promise<T | null> {
@@ -214,7 +214,7 @@ class InMemoryCollection<T extends InMemoryDocument> {
       }
 
       this.documents.push(newDoc)
-      return createModelInstance(deepClone(newDoc)) as T
+      return createModelInstance(this, deepClone(newDoc)) as T
     }
 
     if (Array.isArray(doc)) {
@@ -289,6 +289,32 @@ class InMemoryCollection<T extends InMemoryDocument> {
     }
 
     return { acknowledged: true, deletedCount: deleted }
+  }
+
+  saveDocument(doc: Partial<T>): T {
+    const now = new Date()
+    const normalized = deepClone({ ...(doc as Record<string, any>) }) as unknown as T & Record<string, any>
+
+    if (!normalized._id) {
+      normalized._id = generateObjectId() as any
+    }
+
+    if (!normalized.createdAt) {
+      normalized.createdAt = now as any
+    }
+
+    normalized.updatedAt = now as any
+
+    const existingIndex = this.documents.findIndex((entry) => entry._id === normalized._id)
+    if (existingIndex === -1) {
+      this.documents.push(normalized as T)
+    } else {
+      const existing = this.documents[existingIndex] as Record<string, any>
+      normalized.createdAt = (existing.createdAt ?? normalized.createdAt ?? now) as any
+      this.documents[existingIndex] = normalized as T
+    }
+
+    return deepClone(normalized) as T
   }
 }
 
@@ -591,6 +617,8 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
             const regex = value instanceof RegExp ? value : new RegExp(String(value), (expected as any).$options || "")
             return typeof actual === "string" && regex.test(actual)
           }
+          case "$options":
+            return true
           case "$exists":
             return (actual !== undefined && actual !== null) === Boolean(value)
           default:
@@ -853,8 +881,41 @@ function generateObjectId(): string {
   return randomBytes(12).toString("hex")
 }
 
-function createModelInstance<T extends Record<string, any>>(doc: T): T {
-  return Object.assign(Object.create({}), doc)
+function createModelInstance<T extends Record<string, any>>(
+  collection: InMemoryCollection<any>,
+  doc: T,
+): T {
+  const instance = Object.assign(Object.create({}), doc) as T & {
+    save: () => Promise<T>
+    toObject: () => T
+    toJSON: () => T
+  }
+
+  Object.defineProperty(instance, "save", {
+    enumerable: false,
+    writable: false,
+    value: async function save() {
+      const saved = collection.saveDocument(instance as Record<string, any>)
+      Object.assign(instance, saved)
+      return instance
+    },
+  })
+
+  const toPlain = () => deepClone({ ...(instance as Record<string, any>) })
+
+  Object.defineProperty(instance, "toObject", {
+    enumerable: false,
+    writable: false,
+    value: () => toPlain(),
+  })
+
+  Object.defineProperty(instance, "toJSON", {
+    enumerable: false,
+    writable: false,
+    value: () => toPlain(),
+  })
+
+  return instance as T
 }
 
 function formatDate(date: Date, format: string): string {
@@ -884,7 +945,10 @@ function createUsers(): InMemoryDocument[] {
       role: "admin",
       referralCode: "ADMIN001",
       referredBy: null,
+      status: "active",
       isActive: true,
+      isBlocked: false,
+      blockedAt: null,
       emailVerified: true,
       phoneVerified: true,
       depositTotal: 1200,
@@ -896,7 +960,10 @@ function createUsers(): InMemoryDocument[] {
       lastLevelUpAt: now,
       qualified: true,
       qualifiedAt: now,
+      kycStatus: "verified",
       groups: { A: [userAId], B: [userBId], C: [userCId], D: [] },
+      profileAvatar: "avatar-01",
+      lastLoginAt: now,
       createdAt: now,
       updatedAt: now,
     },
@@ -909,7 +976,10 @@ function createUsers(): InMemoryDocument[] {
       role: "user",
       referralCode: "ALICE01",
       referredBy: adminId,
+      status: "active",
       isActive: true,
+      isBlocked: false,
+      blockedAt: null,
       emailVerified: true,
       phoneVerified: false,
       depositTotal: 600,
@@ -921,7 +991,10 @@ function createUsers(): InMemoryDocument[] {
       lastLevelUpAt: now,
       qualified: true,
       qualifiedAt: now,
+      kycStatus: "pending",
       groups: { A: [], B: [], C: [], D: [] },
+      profileAvatar: "avatar-02",
+      lastLoginAt: now,
       createdAt: now,
       updatedAt: now,
     },
@@ -934,7 +1007,10 @@ function createUsers(): InMemoryDocument[] {
       role: "user",
       referralCode: "BOB001",
       referredBy: adminId,
+      status: "active",
       isActive: true,
+      isBlocked: false,
+      blockedAt: null,
       emailVerified: false,
       phoneVerified: true,
       depositTotal: 350,
@@ -946,7 +1022,10 @@ function createUsers(): InMemoryDocument[] {
       lastLevelUpAt: now,
       qualified: true,
       qualifiedAt: now,
+      kycStatus: "unverified",
       groups: { A: [], B: [], C: [], D: [] },
+      profileAvatar: "avatar-03",
+      lastLoginAt: now,
       createdAt: now,
       updatedAt: now,
     },
@@ -959,7 +1038,10 @@ function createUsers(): InMemoryDocument[] {
       role: "user",
       referralCode: "CAROL1",
       referredBy: adminId,
+      status: "active",
       isActive: true,
+      isBlocked: false,
+      blockedAt: null,
       emailVerified: true,
       phoneVerified: true,
       depositTotal: 420,
@@ -971,7 +1053,10 @@ function createUsers(): InMemoryDocument[] {
       lastLevelUpAt: now,
       qualified: true,
       qualifiedAt: now,
+      kycStatus: "verified",
       groups: { A: [], B: [], C: [], D: [] },
+      profileAvatar: "avatar-04",
+      lastLoginAt: now,
       createdAt: now,
       updatedAt: now,
     },
@@ -1018,6 +1103,7 @@ function createSettings(): InMemoryDocument[] {
   return [
     {
       _id: generateObjectId(),
+      dailyProfitPercent: 1.5,
       mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80, capitalLockDays: 30 },
       joiningBonus: { threshold: 100, pct: 5 },
@@ -1366,7 +1452,7 @@ function createWalletAddresses(users: InMemoryDocument[]): InMemoryDocument[] {
     userId: user._id,
     label: index === 0 ? "Primary Wallet" : `Wallet ${index + 1}`,
     address: `TVxDemoAddress${1000 + index}`,
-    network: "TRC20",
+    chain: "TRC20",
     createdAt: now,
     updatedAt: now,
   }))

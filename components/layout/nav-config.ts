@@ -1,5 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
   BarChart3,
   Coins,
   CreditCard,
@@ -11,7 +13,6 @@ import {
   Settings,
   User,
   Users,
-  Wallet,
 } from "lucide-react"
 
 export type AppNavItem = {
@@ -23,7 +24,8 @@ export type AppNavItem = {
 export const PRIMARY_NAV_ITEMS: AppNavItem[] = [
   { name: "Home", href: "/dashboard", icon: Home },
   { name: "Mining", href: "/mining", icon: Pickaxe },
-  { name: "Wallet", href: "/wallet", icon: Wallet },
+  { name: "Deposit", href: "/deposit", icon: ArrowDownLeft },
+  { name: "Withdraw", href: "/withdraw", icon: ArrowUpRight },
   { name: "Task", href: "/tasks", icon: BarChart3 },
   { name: "Team", href: "/team", icon: Users },
   { name: "List Coin", href: "/coins", icon: Coins },
@@ -44,7 +46,8 @@ const PAGE_TITLE_RULES: Array<{ pattern: RegExp; title: string }> = [
   { pattern: /^\/$/, title: "Welcome" },
   { pattern: /^\/dashboard(?:\/.+)?$/, title: "Dashboard" },
   { pattern: /^\/mining(?:\/.+)?$/, title: "Mining" },
-  { pattern: /^\/wallet(?:\/.+)?$/, title: "Wallet" },
+  { pattern: /^\/deposit(?:\/.+)?$/, title: "Deposit" },
+  { pattern: /^\/withdraw(?:\/.+)?$/, title: "Withdraw" },
   { pattern: /^\/e-wallet(?:\/.+)?$/, title: "E-Wallet" },
   { pattern: /^\/transactions(?:\/.+)?$/, title: "History" },
   { pattern: /^\/tasks(?:\/.+)?$/, title: "Tasks" },

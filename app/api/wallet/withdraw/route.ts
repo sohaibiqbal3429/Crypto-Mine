@@ -45,6 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 })
     }
 
+    if (user.isBlocked) {
+      return NextResponse.json({ error: "Account blocked", blocked: true }, { status: 403 })
+    }
+
     if (!balanceDoc) {
       return NextResponse.json(
         {

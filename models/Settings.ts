@@ -3,6 +3,7 @@ import mongoose, { Schema, type Document } from "mongoose"
 import { createModelProxy } from "@/lib/in-memory/model-factory"
 
 export interface ISettings extends Document {
+  dailyProfitPercent?: mongoose.Types.Decimal128 | number
   mining: {
     minPct: number
     maxPct: number
@@ -29,6 +30,10 @@ export interface ISettings extends Document {
 
 const SettingsSchema = new Schema<ISettings>(
   {
+    dailyProfitPercent: {
+      type: Schema.Types.Decimal128,
+      default: () => mongoose.Types.Decimal128.fromString("1.50"),
+    },
     mining: {
       minPct: { type: Number, default: 1.5 },
       maxPct: { type: Number, default: 1.5 },

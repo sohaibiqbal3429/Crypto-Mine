@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { verifyToken } from "@/lib/auth"
 import { getAdminInitialData } from "@/lib/services/admin"
+import { getDailyProfitPercentBounds } from "@/lib/services/settings"
 import { AdminDashboard } from "@/components/admin/admin-dashboard"
 
 export const dynamic = "force-dynamic"
@@ -42,9 +43,14 @@ export default async function AdminPage() {
     pendingLuckyDrawDeposits: 0,
   }
 
+  const fallbackSettings = {
+    dailyProfitPercent: 1.5,
+    bounds: getDailyProfitPercentBounds(),
+  }
+
   try {
-    const { adminUser, stats } = await getAdminInitialData(session.userId)
-    return <AdminDashboard initialUser={adminUser} initialStats={stats} />
+    const { adminUser, stats, settings } = await getAdminInitialData(session.userId)
+    return <AdminDashboard initialUser={adminUser} initialStats={stats} initialSettings={settings} />
   } catch (error) {
     console.error("Failed to load admin panel:", error)
 
@@ -55,5 +61,12 @@ export default async function AdminPage() {
     initialError = "Unable to load admin data automatically. Use the refresh button to try again."
   }
 
-  return <AdminDashboard initialUser={fallbackUser} initialStats={fallbackStats} initialError={initialError} />
+  return (
+    <AdminDashboard
+      initialUser={fallbackUser}
+      initialStats={fallbackStats}
+      initialSettings={fallbackSettings}
+      initialError={initialError}
+    />
+  )
 }

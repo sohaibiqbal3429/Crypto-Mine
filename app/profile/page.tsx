@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   User,
@@ -26,6 +28,7 @@ import {
 
 import type { SerializableUser } from "@/lib/serializers/user"
 import { formatPhoneDisplay } from "@/lib/utils/formatting"
+import { PROFILE_AVATAR_OPTIONS } from "@/lib/constants/avatars"
 
 type StatusMessage = { success?: string; error?: string }
 
@@ -49,6 +52,7 @@ export default function ProfilePage() {
     name: "",
     email: "",
     phone: "",
+    avatar: PROFILE_AVATAR_OPTIONS[0]?.value ?? "avatar-01",
   })
 
   const [passwordData, setPasswordData] = useState({
@@ -64,8 +68,16 @@ export default function ProfilePage() {
       name: nextUser.name || "",
       email: nextUser.email || "",
       phone: nextUser.phone || "",
+      avatar: nextUser.profileAvatar || PROFILE_AVATAR_OPTIONS[0]?.value || "avatar-01",
     })
   }
+
+  const kycStatus = user?.kycStatus ?? "unverified"
+  const kycLabel = `${kycStatus.charAt(0).toUpperCase()}${kycStatus.slice(1)}`
+  const kycBadgeVariant =
+    kycStatus === "verified" ? "default" : kycStatus === "rejected" ? "destructive" : "secondary"
+  const selectedAvatar = user?.profileAvatar || PROFILE_AVATAR_OPTIONS[0]?.value || "avatar-01"
+  const isBlocked = Boolean(user?.isBlocked)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -113,6 +125,7 @@ export default function ProfilePage() {
         body: JSON.stringify({
           name: profileData.name,
           phone: profileData.phone,
+          avatar: profileData.avatar,
         }),
       })
 
@@ -322,11 +335,26 @@ export default function ProfilePage() {
             </Alert>
           )}
 
+          {isBlocked && (
+            <Alert className="mb-6 border-orange-200 bg-orange-50 text-orange-900">
+              <AlertDescription>
+                Your account is currently blocked. Contact support for assistance before requesting deposits or
+                withdrawals.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <Card className="lg:col-span-1">
               <CardHeader className="text-center">
-                <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600">
-                  <User className="h-10 w-10 text-white" />
+                <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center">
+                  <Image
+                    src={`/avatars/${selectedAvatar}.svg`}
+                    alt="Current profile avatar"
+                    width={96}
+                    height={96}
+                    className="h-24 w-24 rounded-full border-4 border-background shadow-lg"
+                  />
                 </div>
                 <CardTitle>{user?.name}</CardTitle>
                 <CardDescription>{user?.email}</CardDescription>
@@ -336,6 +364,10 @@ export default function ProfilePage() {
                   <Badge variant="secondary" className="mb-2">
                     Level {user?.level || 1}
                   </Badge>
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <Badge variant={kycBadgeVariant}>KYC: {kycLabel}</Badge>
+                    {isBlocked && <Badge variant="destructive">Blocked</Badge>}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     Member since {new Date(user?.createdAt || Date.now()).toLocaleDateString()}
                   </p>
@@ -389,8 +421,12 @@ export default function ProfilePage() {
                       </div>
                     ) : (
                       <div className="space-y-1 text-sm text-muted-foreground">
-                        <p className="font-medium">Profile Status: {user?.profileStatus ?? "Unverified"}</p>
-                        <p>{user?.phone ? "Verify your phone number to complete your profile." : "Add a phone number to verify your profile."}</p>
+                        <p className="font-medium">Phone verification pending</p>
+                        <p>
+                          {user?.phone
+                            ? "Verify your phone number to secure your account and complete profile verification."
+                            : "Add a phone number to enable verification and security alerts."}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -424,14 +460,28 @@ export default function ProfilePage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between rounded-lg border border-muted p-4">
-                          <div>
-                            <p className="text-sm font-semibold text-muted-foreground">Current Status</p>
-                            <p className="text-base font-semibold text-foreground">{user?.profileStatus ?? "Unverified"}</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-muted p-4">
+                            <p className="text-sm font-semibold text-muted-foreground">KYC Status</p>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-base font-semibold text-foreground">{kycLabel}</span>
+                              <Badge variant={kycBadgeVariant}>{kycLabel}</Badge>
+                            </div>
                           </div>
-                          <Badge variant={user?.phoneVerified ? "secondary" : "outline"} className={user?.phoneVerified ? "bg-green-100 text-green-800" : undefined}>
-                            {user?.phoneVerified ? "Verified" : "Unverified"}
-                          </Badge>
+                          <div className="rounded-lg border border-muted p-4">
+                            <p className="text-sm font-semibold text-muted-foreground">Phone</p>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-base font-semibold text-foreground">
+                                {user?.phoneVerified ? "Verified" : "Not verified"}
+                              </span>
+                              <Badge
+                                variant={user?.phoneVerified ? "secondary" : "outline"}
+                                className={user?.phoneVerified ? "bg-green-100 text-green-800" : undefined}
+                              >
+                                {user?.phoneVerified ? "Verified" : "Pending"}
+                              </Badge>
+                            </div>
+                          </div>
                         </div>
 
                         {verificationStatus.error && (
@@ -496,6 +546,38 @@ export default function ProfilePage() {
                               onChange={(event) => setProfileData((prev) => ({ ...prev, name: event.target.value }))}
                               required
                             />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Profile Avatar</Label>
+                            <RadioGroup
+                              value={profileData.avatar}
+                              onValueChange={(value) => setProfileData((prev) => ({ ...prev, avatar: value }))}
+                              className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+                            >
+                              {PROFILE_AVATAR_OPTIONS.map((option) => {
+                                const isSelected = profileData.avatar === option.value
+                                return (
+                                  <Label
+                                    key={option.value}
+                                    htmlFor={`avatar-${option.value}`}
+                                    className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border p-3 text-xs transition focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/40 ${
+                                      isSelected ? "border-primary ring-2 ring-primary/30" : "border-muted"
+                                    }`}
+                                  >
+                                    <RadioGroupItem id={`avatar-${option.value}`} value={option.value} className="sr-only" />
+                                    <Image
+                                      src={`/avatars/${option.value}.svg`}
+                                      alt={option.alt}
+                                      width={72}
+                                      height={72}
+                                      className="h-16 w-16 rounded-full border border-border bg-background"
+                                    />
+                                    <span className="font-medium text-foreground">{option.label}</span>
+                                  </Label>
+                                )
+                              })}
+                            </RadioGroup>
                           </div>
 
                           <div className="space-y-2">

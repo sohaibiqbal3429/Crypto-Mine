@@ -1,11 +1,19 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react"
 import { format } from "date-fns"
 import { Sidebar } from "@/components/layout/sidebar"
 import { TransactionTable, type TransactionFilters } from "@/components/admin/transaction-table"
 import { UserTable, type UserFilters } from "@/components/admin/user-table"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw } from "lucide-react"
 import { AdminDepositsTable } from "@/components/admin/deposit-reviews"
@@ -19,7 +27,10 @@ import type {
   AdminStats,
   AdminTransactionRecord,
   AdminUserRecord,
+  AdminPlatformSettings,
 } from "@/lib/types/admin"
+import { Input } from "@/components/ui/input"
+import { multiplyAmountByPercent } from "@/lib/utils/numeric"
 
 type JsonRecord = Record<string, unknown>
 
@@ -91,6 +102,7 @@ function normalizeAdminStats(stats: Partial<AdminStats> | null | undefined): Par
 interface AdminDashboardProps {
   initialUser: AdminSessionUser
   initialStats: AdminStats
+  initialSettings: AdminPlatformSettings
   initialError?: string | null
 }
 
@@ -103,10 +115,31 @@ interface PendingAnnouncement {
   prizeUsd: number
 }
 
-export function AdminDashboard({ initialUser, initialStats, initialError = null }: AdminDashboardProps) {
+export function AdminDashboard({ initialUser, initialStats, initialSettings, initialError = null }: AdminDashboardProps) {
   const [user, setUser] = useState(initialUser)
   const [stats, setStats] = useState(initialStats)
   const { toast } = useToast()
+
+  const [dailyProfitPercent, setDailyProfitPercent] = useState(initialSettings.dailyProfitPercent)
+  const [dailyProfitDraft, setDailyProfitDraft] = useState(() => initialSettings.dailyProfitPercent.toFixed(2))
+  const [dailyProfitBounds, setDailyProfitBounds] = useState(
+    initialSettings.bounds ?? { min: 0, max: 10 },
+  )
+  const [dailyProfitLoading, setDailyProfitLoading] = useState(false)
+  const [dailyProfitSaving, setDailyProfitSaving] = useState(false)
+  const [dailyProfitError, setDailyProfitError] = useState<string | null>(null)
+
+  const dailyProfitDraftExample = useMemo(
+    () => multiplyAmountByPercent(100, dailyProfitDraft),
+    [dailyProfitDraft],
+  )
+  const savedDailyProfitExample = useMemo(
+    () => multiplyAmountByPercent(100, dailyProfitPercent),
+    [dailyProfitPercent],
+  )
+
+  const dailyProfitDraftTrimmed = dailyProfitDraft.trim()
+  const disableDailyProfitSave = dailyProfitSaving || dailyProfitLoading || dailyProfitDraftTrimmed.length === 0
 
   const [transactions, setTransactions] = useState<AdminTransactionRecord[]>([])
   const [transactionCursor, setTransactionCursor] = useState<string | null>(null)
@@ -236,6 +269,125 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       }
     },
     [luckyDeposits, toast, updateDepositStatus],
+  )
+
+  const handleDailyProfitDraftChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setDailyProfitDraft(event.target.value)
+  }, [])
+
+  const fetchDailyProfitSettings = useCallback(async () => {
+    runIfMounted(() => {
+      setDailyProfitLoading(true)
+      setDailyProfitError(null)
+    })
+
+    try {
+      const response = await fetch("/api/admin/settings/daily-profit-percent", { cache: "no-store" })
+      const payload = await readJsonSafe<{
+        dailyProfitPercent?: number
+        bounds?: { min: number; max: number }
+        error?: unknown
+      }>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to load daily profit percent"
+        throw new Error(message)
+      }
+
+      const nextPercent =
+        typeof payload?.dailyProfitPercent === "number" && Number.isFinite(payload.dailyProfitPercent)
+          ? payload.dailyProfitPercent
+          : dailyProfitPercent
+
+      const nextBounds =
+        payload?.bounds && typeof payload.bounds.min === "number" && typeof payload.bounds.max === "number"
+          ? payload.bounds
+          : null
+
+      runIfMounted(() => {
+        setDailyProfitPercent(nextPercent)
+        setDailyProfitDraft(nextPercent.toFixed(2))
+        if (nextBounds) {
+          setDailyProfitBounds(nextBounds)
+        }
+      })
+    } catch (error) {
+      console.error(error)
+      runIfMounted(() =>
+        setDailyProfitError(
+          error instanceof Error ? error.message : "Unable to load daily profit percent",
+        ),
+      )
+    } finally {
+      runIfMounted(() => setDailyProfitLoading(false))
+    }
+  }, [dailyProfitPercent, runIfMounted])
+
+  const handleDailyProfitRefresh = useCallback(() => {
+    fetchDailyProfitSettings().catch(() => null)
+  }, [fetchDailyProfitSettings])
+
+  const handleSaveDailyProfitPercent = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+
+      runIfMounted(() => {
+        setDailyProfitSaving(true)
+        setDailyProfitError(null)
+      })
+
+      try {
+        const response = await fetch("/api/admin/settings/daily-profit-percent", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ percent: dailyProfitDraft }),
+        })
+
+        const payload = await readJsonSafe<{
+          dailyProfitPercent?: number
+          bounds?: { min: number; max: number }
+          error?: unknown
+        }>(response)
+
+        if (!response.ok) {
+          const message =
+            typeof payload?.error === "string" ? payload.error : "Unable to update daily profit percent"
+          throw new Error(message)
+        }
+
+        const parsedDraft = Number.parseFloat(dailyProfitDraft)
+        const updatedPercent =
+          typeof payload?.dailyProfitPercent === "number" && Number.isFinite(payload.dailyProfitPercent)
+            ? payload.dailyProfitPercent
+            : parsedDraft
+
+        const nextPercent = Number.isFinite(updatedPercent) ? updatedPercent : dailyProfitPercent
+        const nextBounds =
+          payload?.bounds && typeof payload.bounds.min === "number" && typeof payload.bounds.max === "number"
+            ? payload.bounds
+            : null
+
+        runIfMounted(() => {
+          setDailyProfitPercent(nextPercent)
+          setDailyProfitDraft(nextPercent.toFixed(2))
+          if (nextBounds) {
+            setDailyProfitBounds(nextBounds)
+          }
+        })
+
+        toast({ description: `Daily profit percent updated to ${nextPercent.toFixed(2)}%.` })
+      } catch (error) {
+        console.error(error)
+        runIfMounted(() =>
+          setDailyProfitError(
+            error instanceof Error ? error.message : "Unable to update daily profit percent",
+          ),
+        )
+      } finally {
+        runIfMounted(() => setDailyProfitSaving(false))
+      }
+    },
+    [dailyProfitDraft, dailyProfitPercent, runIfMounted, toast],
   )
 
   const fetchLuckyRound = useCallback(async () => {
@@ -597,8 +749,9 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
       fetchUsers({ reset: true }),
       fetchStats(),
       fetchLuckyRound(),
+      fetchDailyProfitSettings(),
     ])
-  }, [fetchLuckyRound, fetchStats, fetchTransactions, fetchUsers, runIfMounted])
+  }, [fetchDailyProfitSettings, fetchLuckyRound, fetchStats, fetchTransactions, fetchUsers, runIfMounted])
 
   useEffect(() => {
     fetchStats().catch(() => null)
@@ -671,6 +824,73 @@ export function AdminDashboard({ initialUser, initialStats, initialError = null 
             <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals} />
             <StatCard label="Lucky draw pending" value={stats.pendingLuckyDrawDeposits} />
           </div>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle>Daily profit rate</CardTitle>
+              <CardDescription>Adjust the platform-wide mining payout percentage.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveDailyProfitPercent} className="space-y-4">
+                <div className="grid gap-2">
+                  <label htmlFor="daily-profit-percent" className="text-sm font-medium">
+                    Daily profit percent
+                  </label>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Input
+                      id="daily-profit-percent"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min={dailyProfitBounds.min.toFixed(2)}
+                      max={dailyProfitBounds.max.toFixed(2)}
+                      value={dailyProfitDraft}
+                      onChange={handleDailyProfitDraftChange}
+                      aria-describedby="daily-profit-percent-help"
+                      className="sm:max-w-[180px]"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" disabled={disableDailyProfitSave} className="gap-2">
+                        {dailyProfitSaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving
+                          </>
+                        ) : (
+                          "Save"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={handleDailyProfitRefresh}
+                        disabled={dailyProfitLoading || dailyProfitSaving}
+                      >
+                        {dailyProfitLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div id="daily-profit-percent-help" className="space-y-1 text-sm text-muted-foreground">
+                  <p>
+                    Current rate: <span className="font-medium">{dailyProfitPercent.toFixed(2)}%</span> · Example: $100 →
+                    ${savedDailyProfitExample.toFixed(2)}
+                  </p>
+                  <p>
+                    Draft preview: $100 → ${dailyProfitDraftExample.toFixed(2)} (allowed range {dailyProfitBounds.min.toFixed(2)}%
+                    –{dailyProfitBounds.max.toFixed(2)}%)
+                  </p>
+                </div>
+                {dailyProfitError && <p className="text-sm text-destructive">{dailyProfitError}</p>}
+              </form>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="xl:col-span-2">

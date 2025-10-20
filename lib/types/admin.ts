@@ -44,9 +44,13 @@ export interface AdminUserRecord {
   withdrawTotal: number
   roiEarnedTotal: number
   isActive: boolean
+  isBlocked: boolean
+  kycStatus: "unverified" | "pending" | "verified" | "rejected"
   createdAt: string
+  lastLoginAt: string | null
   balance: AdminUserBalanceSnapshot
   levelHistory: Array<{ level: number; achievedAt: string }>
+  profileAvatar: string
 }
 
 export interface AdminStats {
@@ -59,9 +63,18 @@ export interface AdminStats {
   pendingLuckyDrawDeposits: number
 }
 
+export interface AdminPlatformSettings {
+  dailyProfitPercent: number
+  bounds: {
+    min: number
+    max: number
+  }
+}
+
 export interface AdminInitialData {
   adminUser: AdminSessionUser
   transactions: AdminTransactionRecord[]
   users: AdminUserRecord[]
   stats: AdminStats
+  settings: AdminPlatformSettings
 }

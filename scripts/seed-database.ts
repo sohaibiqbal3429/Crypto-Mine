@@ -11,6 +11,7 @@ import Settings from "../models/Settings"
 import User from "../models/User"
 
 type SettingsSeedDoc = {
+  dailyProfitPercent?: number | string
   mining: {
     minPct: number
     maxPct: number
@@ -67,6 +68,14 @@ type UserSeedDoc = {
   name: string
   role: "user" | "admin"
   referralCode: string
+  status?: "active" | "inactive" | "suspended"
+  isActive?: boolean
+  isBlocked?: boolean
+  profileAvatar?: string
+  kycStatus?: "unverified" | "pending" | "verified" | "rejected"
+  phoneVerified?: boolean
+  emailVerified?: boolean
+  lastLoginAt?: Date
 }
 
 type InMemoryModel<T extends Record<string, unknown>> = {
@@ -152,6 +161,7 @@ export async function seedDatabase(): Promise<SeedResult> {
   const existingSettings = await settingsModel.findOne()
   if (!existingSettings) {
     await settingsModel.create({
+      dailyProfitPercent: 1.5,
       mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80 },
       joiningBonus: { threshold: 100, pct: 5 },
@@ -415,6 +425,14 @@ export async function seedDatabase(): Promise<SeedResult> {
       name: "Admin User",
       role: "admin",
       referralCode: "ADMIN001",
+      status: "active",
+      isActive: true,
+      isBlocked: false,
+      profileAvatar: "avatar-01",
+      kycStatus: "verified",
+      phoneVerified: true,
+      emailVerified: true,
+      lastLoginAt: new Date(),
     })
     createdAdmin = true
     console.log("✓ Admin user created (admin@cryptomining.com / admin123)")

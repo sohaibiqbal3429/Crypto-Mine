@@ -14,6 +14,7 @@ interface SidebarProps {
     email: string
     referralCode: string
     role?: string
+    profileAvatar?: string
   }
 }
 
@@ -79,10 +80,19 @@ export function Sidebar({ user }: SidebarProps) {
       {/* User info and logout */}
       {user && (
         <div className="border-t border-sidebar-border p-4">
-          <div className="mb-3 text-xs text-sidebar-foreground/70">
-            <div className="font-medium">{user.name}</div>
-            <div className="truncate">{user.email}</div>
-            <div className="mt-1 font-mono text-xs">Code: {user.referralCode}</div>
+          <div className="mb-3 flex items-center gap-3">
+            <Image
+              src={`/avatars/${user.profileAvatar ?? "avatar-01"}.svg`}
+              alt={`${user.name}'s avatar`}
+              width={48}
+              height={48}
+              className="h-12 w-12 rounded-full border border-sidebar-border bg-sidebar"
+            />
+            <div className="text-xs text-sidebar-foreground/70">
+              <div className="font-medium text-sm text-sidebar-foreground">{user.name}</div>
+              <div className="truncate">{user.email}</div>
+              <div className="mt-1 font-mono text-xs">Code: {user.referralCode}</div>
+            </div>
           </div>
           <Button
             variant="ghost"

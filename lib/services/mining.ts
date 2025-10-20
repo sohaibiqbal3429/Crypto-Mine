@@ -1,5 +1,5 @@
-﻿import dbConnect from "@/lib/mongodb"
-import Settings from "@/models/Settings"
+import dbConnect from "@/lib/mongodb"
+import Settings, { type ISettings } from "@/models/Settings"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
@@ -7,10 +7,11 @@ import Notification from "@/models/Notification"
 import MiningSession from "@/models/MiningSession"
 import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
 import { applyTeamProfitOverrides } from "@/lib/utils/commission"
+import { resolveDailyProfitPercent } from "@/lib/services/settings"
+import { calculatePercentFromAmounts } from "@/lib/utils/numeric"
 
 const DEFAULT_MINING_SETTINGS = {
-  minPct: 1.5,
-  maxPct: 1.5,
+  dailyProfitPercent: 1.5,
   roiCap: 3,
 }
 
@@ -31,8 +32,7 @@ export interface MiningStatusResult {
   earnedInCycle: number
   baseAmount: number
   miningSettings: {
-    minPct: number
-    maxPct: number
+    dailyProfitPercent: number
     roiCap: number
   }
   userStats: {
@@ -77,12 +77,16 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
     miningSession = await MiningSession.create({ userId: user._id })
   }
 
+  const plainSettings = settingsDoc
+    ? ((typeof settingsDoc.toObject === "function" ? settingsDoc.toObject() : settingsDoc) as Partial<ISettings>)
+    : null
+
+  const dailyProfitPercent = resolveDailyProfitPercent(plainSettings)
   const settings = {
-    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
-    roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
+    dailyProfitPercent,
+    roiCap: plainSettings?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
-  const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
+  const requiredDeposit = plainSettings?.gating?.minDeposit ?? 30
   const hasMinimumDeposit = user.depositTotal >= requiredDeposit
 
   const totalMiningClicks = await Transaction.countDocuments({
@@ -149,13 +153,17 @@ export async function performMiningClick(userId: string) {
     })
   }
 
+  const plainSettings = settingsDoc
+    ? ((typeof settingsDoc.toObject === "function" ? settingsDoc.toObject() : settingsDoc) as Partial<ISettings>)
+    : null
+
+  const dailyProfitPercent = resolveDailyProfitPercent(plainSettings)
   const settings = {
-    minPct: settingsDoc?.mining?.minPct ?? DEFAULT_MINING_SETTINGS.minPct,
-    maxPct: settingsDoc?.mining?.maxPct ?? DEFAULT_MINING_SETTINGS.maxPct,
-    roiCap: settingsDoc?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
+    dailyProfitPercent,
+    roiCap: plainSettings?.mining?.roiCap ?? DEFAULT_MINING_SETTINGS.roiCap,
   }
 
-  const requiredDeposit = settingsDoc?.gating?.minDeposit ?? 30
+  const requiredDeposit = plainSettings?.gating?.minDeposit ?? 30
   if (user.depositTotal < requiredDeposit) {
     throw new MiningActionError(`Mining requires a minimum deposit of $${requiredDeposit} USDT`, 403)
   }
@@ -180,7 +188,7 @@ export async function performMiningClick(userId: string) {
   }
 
   const baseAmount = user.depositTotal
-  const profit = calculateMiningProfit(baseAmount, settings.minPct, settings.maxPct)
+  const profit = calculateMiningProfit(baseAmount, settings.dailyProfitPercent)
 
   const newRoiTotal = user.roiEarnedTotal + profit
   let finalProfit = profit
@@ -216,7 +224,7 @@ export async function performMiningClick(userId: string) {
     meta: {
       source: "mining",
       baseAmount,
-      profitPct: (finalProfit / baseAmount) * 100,
+      profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
       roiCapReached,
       originalProfit: profit,
     },
@@ -249,7 +257,7 @@ export async function performMiningClick(userId: string) {
   return {
     profit: finalProfit,
     baseAmount,
-    profitPct: (finalProfit / baseAmount) * 100,
+    profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
     roiCapReached,
     nextEligibleAt: nextEligible.toISOString(),
     newBalance: (balance.current ?? 0) + finalProfit,
