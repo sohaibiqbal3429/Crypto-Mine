@@ -53,7 +53,7 @@ export default async function MiningPage() {
       <main className="flex-1 md:ml-64 overflow-auto">
         <div className="p-6 space-y-8">
           <div className="space-y-2">
-            <h1 className="text-3xl font-bold text-balance">P-Coin Mining</h1>
+            <h1 className="text-3xl font-bold text-balance">Mint-Coin Mining</h1>
             <p className="text-muted-foreground">
               Mine rewards daily and track your performance.
             </p>
