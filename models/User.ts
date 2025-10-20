@@ -20,6 +20,8 @@ export interface IUser extends Document {
   withdrawTotal: number
   roiEarnedTotal: number
   level: number
+  levelCached?: number
+  levelEvaluatedAt?: Date | null
   directActiveCount: number
   totalActiveDirects: number
   lastLevelUpAt?: Date | null
@@ -62,6 +64,8 @@ const UserSchema = new Schema<IUser>(
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
     level: { type: Number, default: 0 },
+    levelCached: { type: Number, default: 0 },
+    levelEvaluatedAt: { type: Date, default: null },
     directActiveCount: { type: Number, default: 0 },
     totalActiveDirects: { type: Number, default: 0 },
     lastLevelUpAt: { type: Date, default: null },

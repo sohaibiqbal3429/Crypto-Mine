@@ -26,6 +26,10 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
+  payouts: {
+    userId: { collection: "users" },
+    sourceId: { collection: "transactions" },
+  },
   luckyDrawDeposits: {
     userId: { collection: "users" },
     decidedBy: { collection: "users" },
@@ -34,6 +38,13 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   luckyDrawRounds: {
     selectedDepositId: { collection: "luckyDrawDeposits" },
     selectedUserId: { collection: "users" },
+  },
+  teamDailyProfits: {
+    memberId: { collection: "users" },
+    "claimedBy.userId": { collection: "users" },
+  },
+  teamDailyClaims: {
+    userId: { collection: "users" },
   },
 }
 
@@ -341,6 +352,9 @@ class InMemoryDatabase {
     this.collections.set("luckyDrawDeposits", new InMemoryCollection("luckyDrawDeposits", []))
     this.collections.set("ledgerEntries", new InMemoryCollection("ledgerEntries", []))
     this.collections.set("luckyDrawRounds", new InMemoryCollection("luckyDrawRounds", createLuckyDrawRounds(users)))
+    this.collections.set("payouts", new InMemoryCollection("payouts", []))
+    this.collections.set("teamDailyProfits", new InMemoryCollection("teamDailyProfits", []))
+    this.collections.set("teamDailyClaims", new InMemoryCollection("teamDailyClaims", []))
 
     this.initialized = true
   }
@@ -383,6 +397,9 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "LuckyDrawDeposit", collection: db.getCollection("luckyDrawDeposits") },
     { name: "LedgerEntry", collection: db.getCollection("ledgerEntries") },
     { name: "LuckyDrawRound", collection: db.getCollection("luckyDrawRounds") },
+    { name: "Payout", collection: db.getCollection("payouts") },
+    { name: "TeamDailyProfit", collection: db.getCollection("teamDailyProfits") },
+    { name: "TeamDailyClaim", collection: db.getCollection("teamDailyClaims") },
   ] as const
 
   for (const { name, collection } of collections) {

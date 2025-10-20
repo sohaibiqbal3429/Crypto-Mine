@@ -10,7 +10,11 @@ const PROJECTION = {
   meta: 1,
   amount: 1,
   status: 1,
+  type: 1,
   userId: 1,
+  sourceId: 1,
+  date: 1,
+  uniqueKey: 1,
   createdAt: 1,
 }
 
