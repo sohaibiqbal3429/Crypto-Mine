@@ -67,7 +67,7 @@ export default function TermsPage() {
               <CardContent className="prose prose-sm max-w-none">
                 <p>Mintmine Pro is a cryptocurrency mining and investment platform that allows users to:</p>
                 <ul className="list-disc pl-6 space-y-1">
-                  <li>Participate in P-Coin mining activities</li>
+                  <li>Participate in Mint-Coin mining activities</li>
                   <li>Stake cryptocurrencies for rewards</li>
                   <li>Refer new users and earn commissions</li>
                   <li>Manage digital wallets and transactions</li>
@@ -102,7 +102,7 @@ export default function TermsPage() {
                   policies.
                 </p>
                 <p>
-                  Users can mine P-Coins once every 24 hours. The platform reserves the right to adjust mining rewards
+                  Users can mine Mint-Coins once every 24 hours. The platform reserves the right to adjust mining rewards
                   and cooldown periods as needed.
                 </p>
               </CardContent>
