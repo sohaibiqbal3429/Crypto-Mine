@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getUserFromRequest } from "@/lib/auth"
 import Balance from "@/models/Balance"
 import LevelHistory from "@/models/LevelHistory"
+import Settings from "@/models/Settings"
 import User from "@/models/User"
 import dbConnect from "@/lib/mongodb"
 
@@ -30,40 +31,77 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get("to")
     const queryParam = searchParams.get("q")?.trim()
 
-    const filter: Record<string, unknown> = {}
+    const settingsDoc = await Settings.findOne().catch(() => null)
+    const settingsObject =
+      settingsDoc && typeof (settingsDoc as { toObject?: () => unknown }).toObject === "function"
+        ? ((settingsDoc as { toObject: () => unknown }).toObject() as { gating?: { activeMinDeposit?: unknown } })
+        : ((settingsDoc as { gating?: { activeMinDeposit?: unknown } } | null | undefined) ?? null)
+    const configuredActiveMinDeposit = Number(
+      settingsObject?.gating?.activeMinDeposit ?? 0,
+    )
+    const activeDepositThreshold =
+      Number.isFinite(configuredActiveMinDeposit) && configuredActiveMinDeposit > 0
+        ? Math.max(configuredActiveMinDeposit, 80)
+        : 80
+
+    const conditions: Record<string, unknown>[] = []
 
     if (cursorParam) {
       if (!mongoose.Types.ObjectId.isValid(cursorParam)) {
         return NextResponse.json({ error: "Invalid cursor" }, { status: 400 })
       }
-      filter._id = { $lt: new mongoose.Types.ObjectId(cursorParam) }
+      conditions.push({ _id: { $lt: new mongoose.Types.ObjectId(cursorParam) } })
     }
-    if (status && status !== "all") {
-      if (status === "blocked") {
-        filter.isBlocked = true
-      } else {
-        filter.status = status
-        filter.isBlocked = { $ne: true }
-      }
+
+    const statusFilter = status && status !== "all" ? status : undefined
+
+    if (statusFilter === "blocked") {
+      conditions.push({ isBlocked: true })
+    } else if (statusFilter === "active") {
+      conditions.push({ isBlocked: { $ne: true } })
+      conditions.push({ depositTotal: { $gte: activeDepositThreshold } })
+    } else if (statusFilter === "inactive") {
+      conditions.push({ isBlocked: { $ne: true } })
+      conditions.push({
+        $or: [
+          { depositTotal: { $lt: activeDepositThreshold } },
+          { depositTotal: { $exists: false } },
+          { depositTotal: null },
+        ],
+      })
     }
+
     if (blockedFilter === "true") {
-      filter.isBlocked = true
+      conditions.push({ isBlocked: true })
     } else if (blockedFilter === "false") {
-      filter.isBlocked = { $ne: true }
+      conditions.push({ isBlocked: { $ne: true } })
     }
+
     if (from || to) {
-      filter.createdAt = {
-        ...(from ? { $gte: new Date(from) } : {}),
-        ...(to ? { $lte: new Date(to) } : {}),
-      }
+      conditions.push({
+        createdAt: {
+          ...(from ? { $gte: new Date(from) } : {}),
+          ...(to ? { $lte: new Date(to) } : {}),
+        },
+      })
     }
+
     if (queryParam) {
-      filter.$or = [
-        { email: { $regex: `^${queryParam}`, $options: "i" } },
-        { name: { $regex: queryParam, $options: "i" } },
-        { referralCode: { $regex: `^${queryParam}`, $options: "i" } },
-      ]
+      conditions.push({
+        $or: [
+          { email: { $regex: `^${queryParam}`, $options: "i" } },
+          { name: { $regex: queryParam, $options: "i" } },
+          { referralCode: { $regex: `^${queryParam}`, $options: "i" } },
+        ],
+      })
     }
+
+    const filter =
+      conditions.length === 0
+        ? {}
+        : conditions.length === 1
+          ? conditions[0]
+          : { $and: conditions }
 
     const users = await User.find(filter)
       .select({ passwordHash: 0 })
@@ -135,6 +173,11 @@ export async function GET(request: NextRequest) {
       if (!id) {
         return null
       }
+      const rawDepositTotal = Number(user.depositTotal ?? 0)
+      const depositTotal = Number.isFinite(rawDepositTotal) ? rawDepositTotal : 0
+      const isBlocked = Boolean(user.isBlocked)
+      const isActive = !isBlocked && depositTotal >= activeDepositThreshold
+
       const balance = balanceByUser.get(id) ?? {
         current: 0,
         totalBalance: 0,
@@ -154,11 +197,11 @@ export async function GET(request: NextRequest) {
         directActiveCount: Number(user.directActiveCount ?? 0),
         totalActiveDirects: Number(user.totalActiveDirects ?? 0),
         lastLevelUpAt: user.lastLevelUpAt ? new Date(user.lastLevelUpAt).toISOString() : null,
-        depositTotal: Number(user.depositTotal ?? 0),
+        depositTotal,
         withdrawTotal: Number(user.withdrawTotal ?? 0),
         roiEarnedTotal: Number(user.roiEarnedTotal ?? 0),
-        isActive: Boolean(user.isActive),
-        isBlocked: Boolean(user.isBlocked),
+        isActive,
+        isBlocked,
         kycStatus:
           user.kycStatus === "pending" || user.kycStatus === "verified" || user.kycStatus === "rejected"
             ? user.kycStatus
@@ -182,7 +225,7 @@ export async function GET(request: NextRequest) {
           pendingWithdraw: Number(balance.pendingWithdraw ?? 0),
         },
         levelHistory: historyByUser.get(id) ?? [],
-        status: user.status ?? "inactive",
+        status: isBlocked ? "blocked" : isActive ? "active" : "inactive",
         profileAvatar:
           typeof user.profileAvatar === "string" && user.profileAvatar ? user.profileAvatar : "avatar-01",
       }
