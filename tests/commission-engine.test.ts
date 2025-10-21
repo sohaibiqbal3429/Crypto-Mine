@@ -101,15 +101,19 @@ test("L1 direct commission and team profit payouts are applied once", { concurre
   assert.equal(sponsorResult?.amount, 0.1)
   assert.equal(sponsorResult?.totalTeamProfit, 10)
 
-  const payout = await Payout.findOne({ uniqueKey: "TDP:2025-10-11:" + toId(sponsor._id) })
+  const payout = await Payout.findOne({
+    uniqueKey: `DTE:2025-10-11:${toId(directUsers[0]._id)}:${toId(sponsor._id)}:A`,
+  })
   assert.ok(payout)
   assert.equal(payout?.amount, 0.1)
-  assert.equal(payout?.type, "team_profit")
+  assert.equal(payout?.type, "daily_team_earning")
+  assert.equal(payout?.meta?.team, "A")
 
   sponsorBalance = await Balance.findOne({ userId: sponsor._id })
   assert.ok(sponsorBalance)
-  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0.1)
-  assert.equal(Number(sponsorBalance?.current ?? 0), 7)
+  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0)
+  assert.equal(Number(sponsorBalance?.teamRewardsClaimed ?? 0), 0.1)
+  assert.equal(Number(sponsorBalance?.current ?? 0), 7.1)
 })
 
 test("L2 team profit payout covers generations A-C", { concurrency: false }, async () => {

@@ -78,6 +78,7 @@ export interface RewardHistoryEntry {
   sourceUserId: string | null
   sourceUserName: string | null
   transactionType: ITransaction["type"]
+  baseAmount: number | null
 }
 
 async function resolveRewardProfile(level: number): Promise<RewardProfile> {
@@ -364,17 +365,26 @@ function toHistoryEntry(tx: any): RewardHistoryEntry {
           ? tx.meta.teamProfitPct
           : null
 
+  const baseAmount =
+    typeof tx.meta?.baseProfit === "number"
+      ? tx.meta.baseProfit
+      : typeof tx.meta?.teamProfit === "number"
+        ? tx.meta.teamProfit
+        : null
+
   const teamsList = Array.isArray(tx.meta?.teams)
     ? (tx.meta.teams.filter((team: unknown): team is CommissionTeamCode =>
         typeof team === "string" && ["A", "B", "C", "D"].includes(team),
       ) as CommissionTeamCode[])
     : []
 
+  const status = category === "daily_team_earning" ? "posted" : tx.status ?? "approved"
+
   const entry: RewardHistoryEntry = {
     id: tx._id.toString(),
     occurredAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
     amount: Number(tx.amount ?? 0),
-    status: tx.status ?? "approved",
+    status,
     category,
     description: "",
     team: (tx.meta?.team as CommissionTeamCode | undefined) ?? null,
@@ -399,6 +409,7 @@ function toHistoryEntry(tx: any): RewardHistoryEntry {
           ? tx.meta.referredUserName
           : tx.meta?.label ?? tx.meta?.month ?? null,
     transactionType: tx.type,
+    baseAmount: baseAmount !== null ? Number(baseAmount) : null,
   }
 
   entry.description = describeHistoryEntry(entry)

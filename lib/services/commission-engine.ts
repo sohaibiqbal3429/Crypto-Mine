@@ -134,6 +134,20 @@ function roundAmount(amount: number): number {
   return Math.round(amount * 100) / 100
 }
 
+// Daily team earnings are rounded down to four decimals to avoid overstating payouts.
+function roundDown(amount: number, decimals = 4): number {
+  if (!Number.isFinite(amount)) {
+    return 0
+  }
+
+  const factor = 10 ** decimals
+  if (amount <= 0) {
+    return Math.ceil(amount * factor) / factor
+  }
+
+  return Math.floor(amount * factor) / factor
+}
+
 function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
 }
@@ -263,7 +277,7 @@ async function applyPayout({
   meta,
 }: {
   userId: string
-  type: "direct_deposit" | "team_deposit" | "team_profit" | "monthly_bonus"
+  type: "direct_deposit" | "team_deposit" | "team_profit" | "monthly_bonus" | "daily_team_earning"
   sourceId?: string
   amount: number
   date: Date
@@ -287,7 +301,8 @@ async function applyPayout({
   }
 
   try {
-    const roundedAmount = roundAmount(amount)
+    const roundedAmount =
+      type === "daily_team_earning" ? roundDown(amount, 4) : roundAmount(amount)
     const payout = await Payout.create({
       userId: ensureObjectId(userId),
       type,
@@ -302,18 +317,30 @@ async function applyPayout({
     const balanceUpdate =
       type === "team_profit"
         ? { $inc: { teamRewardsAvailable: roundedAmount } }
-        : {
-            $inc: {
-              current: roundedAmount,
-              totalBalance: roundedAmount,
-              totalEarning: roundedAmount,
-            },
-          }
+        : type === "daily_team_earning"
+          ? {
+              $inc: {
+                current: roundedAmount,
+                totalBalance: roundedAmount,
+                totalEarning: roundedAmount,
+                teamRewardsClaimed: roundedAmount,
+              },
+              $set: {
+                teamRewardsLastClaimedAt: date,
+              },
+            }
+          : {
+              $inc: {
+                current: roundedAmount,
+                totalBalance: roundedAmount,
+                totalEarning: roundedAmount,
+              },
+            }
 
     await Balance.updateOne({ userId: ensureObjectId(userId) }, balanceUpdate, { upsert: true })
 
     const transactionType: ITransaction["type"] =
-      type === "team_profit"
+      type === "team_profit" || type === "daily_team_earning"
         ? "teamReward"
         : type === "monthly_bonus"
           ? "bonus"
@@ -468,75 +495,128 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const windowEnd = endOfPreviousUtcDay(date)
   const windowStart = startOfPreviousUtcDay(date)
 
-  const userDocs = await User.find().select("_id")
   const profitMap = await loadDailyProfits(windowStart, windowEnd)
-  const results: DailyTeamProfitResult[] = []
+  const dayKey = windowStart.toISOString().slice(0, 10)
+  const userCache = new Map<string, Awaited<ReturnType<typeof loadUser>> | null>()
+  const levelCache = new Map<string, LevelComputationResult>()
+  const summary = new Map<
+    string,
+    { amount: number; level: number; totalTeamProfit: number; teams: Set<TeamCode> }
+  >()
+  const teamCodes: TeamCode[] = ["A", "B", "C", "D"]
+  let createdEntries = 0
 
-  for (const userDoc of userDocs) {
-    const user = toPlain(userDoc)
-    if (!user?._id) continue
-    const userId = normalizeId(user._id)
-    const levelInfo = await persistLevel(userId, windowEnd)
-    const levelDefinition = LEVELS_BY_ID.get(levelInfo.level)
-    if (!levelDefinition || !levelDefinition.team_profit_rate || !levelDefinition.teams_profit) {
+  const getUserCached = async (userId: string) => {
+    if (!userCache.has(userId)) {
+      userCache.set(userId, await loadUser(userId))
+    }
+
+    return userCache.get(userId)
+  }
+
+  const getLevelCached = async (userId: string) => {
+    if (!levelCache.has(userId)) {
+      levelCache.set(userId, await persistLevel(userId, windowEnd))
+    }
+
+    return levelCache.get(userId)!
+  }
+
+  for (const [memberId, rawProfit] of profitMap.entries()) {
+    const baseProfit = roundDown(rawProfit, 4)
+    if (baseProfit <= 0) {
       continue
     }
 
-    const generations = await getReferralGenerations(userId, 4)
-    let totalTeamProfit = 0
+    const member = await getUserCached(memberId)
+    if (!member) {
+      continue
+    }
 
-    for (const team of levelDefinition.teams_profit) {
-      const depth = TEAM_DEPTH[team]
-      const members = generations[depth] ?? []
-      for (const memberId of members) {
-        totalTeamProfit += profitMap.get(memberId) ?? 0
+    let currentSponsorId = member.referredBy ? normalizeId(member.referredBy) : null
+    let depthIndex = 0
+
+    while (currentSponsorId && depthIndex < teamCodes.length) {
+      const teamCode = teamCodes[depthIndex]!
+      const levelInfo = await getLevelCached(currentSponsorId)
+      const levelDefinition = LEVELS_BY_ID.get(levelInfo.level)
+      const eligibleTeams = levelDefinition?.teams_profit ?? []
+      const rate =
+        eligibleTeams.includes(teamCode) && typeof levelDefinition?.team_profit_rate === "number"
+          ? levelDefinition.team_profit_rate
+          : 0
+
+      if (rate > 0) {
+        const amount = roundDown(baseProfit * rate, 4)
+        if (amount > 0) {
+          const uniqueKey = `DTE:${dayKey}:${memberId}:${currentSponsorId}:${teamCode}`
+          const outcome = await applyPayout({
+            userId: currentSponsorId,
+            type: "daily_team_earning",
+            sourceId: memberId,
+            amount,
+            date: windowEnd,
+            uniqueKey,
+            meta: {
+              level: levelInfo.level,
+              levelAtPosting: levelInfo.level,
+              rate,
+              ratePct: Number((rate * 100).toFixed(2)),
+              teamProfitPct: Number((rate * 100).toFixed(2)),
+              day: dayKey,
+              team: teamCode,
+              teams: [teamCode],
+              teamDepth: TEAM_DEPTH[teamCode],
+              generation: TEAM_DEPTH[teamCode],
+              baseProfit,
+              baseProfitRounded: baseProfit,
+              teamProfit: baseProfit,
+              memberId,
+              memberName: typeof member.name === "string" ? member.name : undefined,
+              fromUserId: memberId,
+              fromUserName: typeof member.name === "string" ? member.name : undefined,
+              source: "daily_team_earning",
+              postingStatus: "posted",
+            },
+          })
+
+          if (outcome.created) {
+            createdEntries += 1
+            const summaryEntry = summary.get(currentSponsorId) ?? {
+              amount: 0,
+              level: levelInfo.level,
+              totalTeamProfit: 0,
+              teams: new Set<TeamCode>(),
+            }
+
+            summaryEntry.amount = roundDown(summaryEntry.amount + outcome.amount, 4)
+            summaryEntry.level = levelInfo.level
+            summaryEntry.totalTeamProfit = roundDown(summaryEntry.totalTeamProfit + baseProfit, 4)
+            summaryEntry.teams.add(teamCode)
+            summary.set(currentSponsorId, summaryEntry)
+          }
+        }
       }
-    }
 
-    if (totalTeamProfit <= 0) {
-      continue
-    }
-
-    const amount = roundAmount(totalTeamProfit * levelDefinition.team_profit_rate)
-    if (amount <= 0) {
-      continue
-    }
-
-    const dayKey = windowStart.toISOString().slice(0, 10)
-    const uniqueKey = `TDP:${dayKey}:${userId}`
-
-    const outcome = await applyPayout({
-      userId,
-      type: "team_profit",
-      amount,
-      date: windowEnd,
-      uniqueKey,
-      meta: {
-        level: levelInfo.level,
-        rate: levelDefinition.team_profit_rate,
-        teams: levelDefinition.teams_profit,
-        teamProfit: roundAmount(totalTeamProfit),
-        day: dayKey,
-        teamProfitPct: Number((levelDefinition.team_profit_rate * 100).toFixed(2)),
-        source: "daily_team_earning",
-      },
-    })
-
-    if (outcome.created) {
-      results.push({
-        userId,
-        amount: outcome.amount,
-        level: levelInfo.level,
-        totalTeamProfit: roundAmount(totalTeamProfit),
-        teams: levelDefinition.teams_profit,
-      })
+      const sponsor = await getUserCached(currentSponsorId)
+      currentSponsorId = sponsor?.referredBy ? normalizeId(sponsor.referredBy) : null
+      depthIndex += 1
     }
   }
 
-  const summaryTotal = roundAmount(results.reduce((sum, entry) => sum + entry.amount, 0))
+  const results: DailyTeamProfitResult[] = Array.from(summary.entries()).map(([userId, entry]) => ({
+    userId,
+    amount: roundDown(entry.amount, 4),
+    level: entry.level,
+    totalTeamProfit: roundDown(entry.totalTeamProfit, 4),
+    teams: Array.from(entry.teams).sort((a, b) => TEAM_DEPTH[a] - TEAM_DEPTH[b]),
+  }))
+
+  const summaryTotal = roundDown(results.reduce((sum, entry) => sum + entry.amount, 0), 4)
   console.info("[commission-engine] Daily team earnings posted", {
-    day: windowStart.toISOString().slice(0, 10),
-    payouts: results.length,
+    day: dayKey,
+    payouts: createdEntries,
+    uniqueReceivers: results.length,
     totalAmount: summaryTotal,
   })
 

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
+import { formatDate, formatTime } from "@/lib/utils/formatting"
 
 export type TeamRewardHistoryCategory =
   | "claim"
@@ -33,6 +33,7 @@ export interface TeamRewardHistoryEntry {
   sourceUserId: string | null
   sourceUserName: string | null
   transactionType: string
+  baseAmount: number | null
 }
 
 interface TeamRewardsHistoryProps {
@@ -55,31 +56,44 @@ const CATEGORY_BADGE: Record<
   other: { label: "Team activity", variant: "outline" },
 }
 
-function formatDetail(entry: TeamRewardHistoryEntry) {
-  const detailParts: string[] = []
-  if (entry.team) {
-    detailParts.push(`Team ${entry.team}`)
-  }
-  if (entry.teams && entry.teams.length > 0) {
-    detailParts.push(`Teams ${entry.teams.join(", ")}`)
-  }
-  if (typeof entry.rate === "number") {
-    const rateValue = Number.isInteger(entry.rate) ? entry.rate.toString() : entry.rate.toFixed(2)
-    detailParts.push(`${rateValue}%`)
-  }
-  if (typeof entry.level === "number" && entry.level > 0) {
-    detailParts.push(`Level ${entry.level}`)
-  }
-
-  return detailParts.length > 0 ? detailParts.join(" • ") : "—"
-}
-
 function formatSource(entry: TeamRewardHistoryEntry) {
   if (entry.sourceUserName) {
     return entry.sourceUserName
   }
   if (entry.sourceUserId) {
     return `User ${entry.sourceUserId.slice(-6)}`
+  }
+  return "—"
+}
+
+function formatTeam(entry: TeamRewardHistoryEntry) {
+  if (entry.team) {
+    return entry.team
+  }
+  if (entry.teams && entry.teams.length > 0) {
+    return entry.teams.join(", ")
+  }
+  return "—"
+}
+
+function formatLevel(entry: TeamRewardHistoryEntry) {
+  if (typeof entry.level === "number" && entry.level > 0) {
+    return `L${entry.level}`
+  }
+  return "—"
+}
+
+function formatRate(entry: TeamRewardHistoryEntry) {
+  if (typeof entry.rate === "number") {
+    const rateValue = Number.isInteger(entry.rate) ? entry.rate : Number(entry.rate.toFixed(2))
+    return `${rateValue}%`
+  }
+  return "—"
+}
+
+function formatBaseAmount(entry: TeamRewardHistoryEntry) {
+  if (typeof entry.baseAmount === "number") {
+    return `$${entry.baseAmount.toFixed(4)}`
   }
   return "—"
 }
@@ -98,16 +112,25 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
                 </div>
               </TableCell>
               <TableCell>
-                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-5 w-28" />
               </TableCell>
               <TableCell>
-                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-10" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-12" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-20" />
               </TableCell>
               <TableCell>
                 <Skeleton className="h-4 w-16" />
               </TableCell>
               <TableCell>
                 <Skeleton className="h-5 w-16" />
+              </TableCell>
+              <TableCell>
+                <Skeleton className="h-4 w-16" />
               </TableCell>
             </TableRow>
           ))}
@@ -119,7 +142,7 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
       return (
         <TableBody>
           <TableRow>
-            <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+            <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
               No reward activity recorded yet. Grow your team to start earning rewards.
             </TableCell>
           </TableRow>
@@ -136,7 +159,7 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
 
           return (
             <TableRow key={entry.id}>
-              <TableCell className="py-4">
+              <TableCell className="py-4 align-top">
                 <div className="flex flex-col">
                   <span className="font-medium">{date}</span>
                   <span className="text-xs text-muted-foreground">{time}</span>
@@ -144,19 +167,22 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
               </TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1">
-                  <Badge variant={badge.variant}>{badge.label}</Badge>
-                  <span className="text-sm text-muted-foreground">{entry.description}</span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col">
                   <span className="font-medium text-sm">{formatSource(entry)}</span>
-                  <span className="text-xs text-muted-foreground">{formatDetail(entry)}</span>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant={badge.variant}>{badge.label}</Badge>
+                    <span>{entry.description}</span>
+                  </div>
                 </div>
               </TableCell>
-              <TableCell className="font-semibold">{formatCurrency(entry.amount)}</TableCell>
+              <TableCell>{formatTeam(entry)}</TableCell>
+              <TableCell>{formatLevel(entry)}</TableCell>
+              <TableCell className="font-mono text-sm">{formatBaseAmount(entry)}</TableCell>
+              <TableCell>{formatRate(entry)}</TableCell>
+              <TableCell className="font-semibold text-right">{`$${entry.amount.toFixed(4)}`}</TableCell>
               <TableCell>
-                <Badge variant={entry.status === "approved" ? "secondary" : "outline"}>{entry.status}</Badge>
+                <Badge variant={entry.status === "approved" || entry.status === "posted" ? "secondary" : "outline"}>
+                  {entry.status}
+                </Badge>
               </TableCell>
             </TableRow>
           )
@@ -178,8 +204,11 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
           <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Source &amp; details</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Team</TableHead>
+              <TableHead>Level</TableHead>
+              <TableHead>Base profit</TableHead>
+              <TableHead>Rate</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
