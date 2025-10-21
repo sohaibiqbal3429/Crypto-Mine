@@ -58,6 +58,7 @@ export type RewardHistoryCategory =
   | "team_reward"
   | "team_commission"
   | "daily_profit"
+  | "daily_team_earning"
   | "deposit_commission"
   | "bonus"
   | "salary"
@@ -71,6 +72,7 @@ export interface RewardHistoryEntry {
   category: RewardHistoryCategory
   description: string
   team: CommissionTeamCode | null
+  teams: CommissionTeamCode[] | null
   rate: number | null
   level: number | null
   sourceUserId: string | null
@@ -287,6 +289,15 @@ function describeHistoryEntry(entry: RewardHistoryEntry): string {
         : entry.team
           ? `Team commission from Team ${entry.team}`
           : "Team commission"
+    case "daily_team_earning": {
+      const teamSummary =
+        entry.teams && entry.teams.length > 0
+          ? entry.teams.map((team) => `Team ${team}`).join(", ")
+          : entry.team
+            ? `Team ${entry.team}`
+            : null
+      return teamSummary ? `Daily team earning from ${teamSummary}` : "Daily team earning"
+    }
     case "daily_profit":
       return entry.sourceUserName
         ? `Daily profit override from ${entry.sourceUserName}`
@@ -335,6 +346,10 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
     return "deposit_commission"
   }
 
+  if (tx.type === "teamReward" && source === "daily_team_earning") {
+    return "daily_team_earning"
+  }
+
   return "other"
 }
 
@@ -345,7 +360,15 @@ function toHistoryEntry(tx: any): RewardHistoryEntry {
       ? tx.meta.overridePct
       : typeof tx.meta?.commissionPct === "number"
         ? tx.meta.commissionPct
-        : null
+        : typeof tx.meta?.teamProfitPct === "number"
+          ? tx.meta.teamProfitPct
+          : null
+
+  const teamsList = Array.isArray(tx.meta?.teams)
+    ? (tx.meta.teams.filter((team: unknown): team is CommissionTeamCode =>
+        typeof team === "string" && ["A", "B", "C", "D"].includes(team),
+      ) as CommissionTeamCode[])
+    : []
 
   const entry: RewardHistoryEntry = {
     id: tx._id.toString(),
@@ -355,6 +378,7 @@ function toHistoryEntry(tx: any): RewardHistoryEntry {
     category,
     description: "",
     team: (tx.meta?.team as CommissionTeamCode | undefined) ?? null,
+    teams: teamsList.length > 0 ? teamsList : null,
     rate,
     level:
       typeof tx.meta?.level === "number"

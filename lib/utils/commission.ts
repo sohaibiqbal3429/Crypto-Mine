@@ -19,7 +19,7 @@ import {
 } from "@/lib/utils/leveling"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
-const DEPOSIT_COMMISSION_PCT = 0.02
+const FIRST_DEPOSIT_COMMISSION_AMOUNT = 2
 const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
 
 const LEVEL_THRESHOLDS = LEVEL_PROGRESS_REQUIREMENTS
@@ -488,34 +488,6 @@ export async function processReferralCommission(
     title: "Referral Commission Earned",
     body: `You earned $${payout.amount.toFixed(2)} commission from ${referredUser.name}'s deposit`,
   })
-
-  if (resolvedSettings && depositAmount >= resolvedSettings.joiningBonus.threshold) {
-    const bonusAmount = roundCurrency((depositAmount * resolvedSettings.joiningBonus.pct) / 100)
-    if (bonusAmount > 0) {
-      await Balance.updateOne(
-        { userId: referredUserId },
-        {
-          $inc: {
-            current: bonusAmount,
-            totalBalance: bonusAmount,
-            totalEarning: bonusAmount,
-          },
-        },
-        { upsert: true },
-      )
-
-      await Transaction.create({
-        userId: referredUserId,
-        type: "bonus",
-        amount: bonusAmount,
-        meta: {
-          source: "joining_bonus",
-          depositAmount,
-          bonusPct: resolvedSettings.joiningBonus.pct,
-        },
-      })
-    }
-  }
 
   return payout
 }
@@ -1131,35 +1103,45 @@ export async function applyDepositRewards(
   }
 
   if (qualifiesForRewards) {
-    const depositCommission = roundCurrency(depositAmount * DEPOSIT_COMMISSION_PCT)
-    results.depositCommission = depositCommission
+    const existingDepositCredit = await Transaction.findOne({
+      userId,
+      type: "commission",
+      "meta.source": "deposit_commission",
+    })
 
-    if (depositCommission > 0 && !options.dryRun) {
-      await Balance.updateOne(
-        { userId },
-        {
-          $inc: {
-            current: depositCommission,
-            totalBalance: depositCommission,
-            totalEarning: depositCommission,
+    if (!existingDepositCredit) {
+      const depositCommission = roundCurrency(FIRST_DEPOSIT_COMMISSION_AMOUNT)
+      results.depositCommission = depositCommission
+
+      if (depositCommission > 0 && !options.dryRun) {
+        await Balance.updateOne(
+          { userId },
+          {
+            $inc: {
+              current: depositCommission,
+              totalBalance: depositCommission,
+              totalEarning: depositCommission,
+            },
           },
-        },
-        { upsert: true },
-      )
+          { upsert: true },
+        )
 
-      await Transaction.create({
-        userId,
-        type: "commission",
-        amount: depositCommission,
-        meta: {
-          source: "deposit_commission",
-          depositAmount,
-          commissionPct: DEPOSIT_COMMISSION_PCT * 100,
-          policyVersion: POLICY_ADJUSTMENT_REASON,
-          ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
-          depositTransactionId: options.depositTransactionId ?? null,
-        },
-      })
+        await Transaction.create({
+          userId,
+          type: "commission",
+          amount: depositCommission,
+          meta: {
+            source: "deposit_commission",
+            depositAmount,
+            fixedAmount: depositCommission,
+            policyVersion: POLICY_ADJUSTMENT_REASON,
+            ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+            depositTransactionId: options.depositTransactionId ?? null,
+          },
+        })
+      }
+    } else {
+      results.depositCommission = 0
     }
   }
 

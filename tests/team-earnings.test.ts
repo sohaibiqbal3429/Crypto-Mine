@@ -144,6 +144,18 @@ test("listTeamRewardHistory categorises transactions", async () => {
     {
       userId: user._id,
       type: "teamReward",
+      amount: 3.5,
+      status: "approved",
+      meta: {
+        source: "daily_team_earning",
+        teams: ["A", "B"],
+        teamProfitPct: 2,
+        level: 3,
+      },
+    },
+    {
+      userId: user._id,
+      type: "teamReward",
       amount: 10,
       status: "approved",
       meta: {
@@ -157,6 +169,7 @@ test("listTeamRewardHistory categorises transactions", async () => {
   assert.ok(categories.includes("deposit_commission"))
   assert.ok(categories.includes("team_reward"))
   assert.ok(categories.includes("claim"))
+  assert.ok(categories.includes("daily_team_earning"))
 
   const depositEntry = history.find((entry) => entry.category === "deposit_commission")
   assert.equal(depositEntry?.sourceUserName, "Alice")
@@ -165,5 +178,10 @@ test("listTeamRewardHistory categorises transactions", async () => {
   const rewardEntry = history.find((entry) => entry.category === "team_reward")
   assert.equal(rewardEntry?.team, "A")
   assert.equal(rewardEntry?.rate, 2)
+
+  const dailyTeamEntry = history.find((entry) => entry.category === "daily_team_earning")
+  assert.deepEqual(dailyTeamEntry?.teams, ["A", "B"])
+  assert.equal(dailyTeamEntry?.rate, 2)
+  assert.equal(dailyTeamEntry?.level, 3)
 })
 

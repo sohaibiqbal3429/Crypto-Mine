@@ -13,6 +13,7 @@ export type TeamRewardHistoryCategory =
   | "team_reward"
   | "team_commission"
   | "daily_profit"
+  | "daily_team_earning"
   | "deposit_commission"
   | "bonus"
   | "salary"
@@ -26,6 +27,7 @@ export interface TeamRewardHistoryEntry {
   category: TeamRewardHistoryCategory
   description: string
   team: string | null
+  teams: string[] | null
   rate: number | null
   level: number | null
   sourceUserId: string | null
@@ -46,6 +48,7 @@ const CATEGORY_BADGE: Record<
   team_reward: { label: "Team reward", variant: "secondary" },
   team_commission: { label: "Team commission", variant: "secondary" },
   daily_profit: { label: "Daily profit", variant: "secondary" },
+  daily_team_earning: { label: "Daily team earning", variant: "secondary" },
   deposit_commission: { label: "Deposit commission", variant: "outline" },
   bonus: { label: "Monthly bonus", variant: "outline" },
   salary: { label: "Monthly salary", variant: "outline" },
@@ -56,6 +59,9 @@ function formatDetail(entry: TeamRewardHistoryEntry) {
   const detailParts: string[] = []
   if (entry.team) {
     detailParts.push(`Team ${entry.team}`)
+  }
+  if (entry.teams && entry.teams.length > 0) {
+    detailParts.push(`Teams ${entry.teams.join(", ")}`)
   }
   if (typeof entry.rate === "number") {
     const rateValue = Number.isInteger(entry.rate) ? entry.rate.toString() : entry.rate.toFixed(2)
