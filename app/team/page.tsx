@@ -7,6 +7,10 @@ import { LevelProgress } from "@/components/team/level-progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2 } from "lucide-react"
 import { TeamRewardsCard } from "@/components/team/team-rewards-card"
+import {
+  TeamRewardsHistory,
+  type TeamRewardHistoryEntry,
+} from "@/components/team/team-rewards-history"
 import { useToast } from "@/components/ui/use-toast"
 import { formatCurrency } from "@/lib/utils/formatting"
 
@@ -38,6 +42,8 @@ export default function TeamPage() {
     claimedTotal: number
     lastClaimedAt: string | null
   } | null>(null)
+  const [rewardHistory, setRewardHistory] = useState<TeamRewardHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
   const [isClaiming, setIsClaiming] = useState(false)
   const { toast } = useToast()
 
@@ -45,13 +51,41 @@ export default function TeamPage() {
     fetchData()
   }, [])
 
+  const refreshRewards = async () => {
+    try {
+      setHistoryLoading(true)
+
+      const [rewardsRes, historyRes] = await Promise.all([
+        fetch("/api/team/rewards"),
+        fetch("/api/team/rewards/history"),
+      ])
+
+      if (rewardsRes.ok) {
+        const rewardsData = await rewardsRes.json()
+        setTeamRewards({
+          available: rewardsData.available ?? 0,
+          claimedTotal: rewardsData.claimedTotal ?? 0,
+          lastClaimedAt: rewardsData.lastClaimedAt ?? null,
+        })
+      }
+
+      if (historyRes.ok) {
+        const historyData = await historyRes.json()
+        setRewardHistory(historyData.entries ?? [])
+      }
+    } catch (error) {
+      console.error("Failed to refresh team rewards:", error)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   const fetchData = async () => {
     try {
-      const [userRes, teamRes, levelRes, rewardsRes] = await Promise.all([
+      const [userRes, teamRes, levelRes] = await Promise.all([
         fetch("/api/auth/me"),
         fetch("/api/team/structure"),
         fetch("/api/levels/eligibility"),
-        fetch("/api/team/rewards"),
       ])
 
       if (userRes.ok && teamRes.ok && levelRes.ok) {
@@ -63,17 +97,10 @@ export default function TeamPage() {
         setTeamData(teamData)
         setLevelData(levelData)
       }
-
-      if (rewardsRes.ok) {
-        const rewardsData = await rewardsRes.json()
-        setTeamRewards({
-          available: rewardsData.available ?? 0,
-          claimedTotal: rewardsData.claimedTotal ?? 0,
-          lastClaimedAt: rewardsData.lastClaimedAt ?? null,
-        })
-      }
+      await refreshRewards()
     } catch (error) {
       console.error("Failed to fetch team data:", error)
+      await refreshRewards()
     } finally {
       setLoading(false)
     }
@@ -106,6 +133,8 @@ export default function TeamPage() {
         title: "Rewards added to balance",
         description: `Successfully claimed ${formatCurrency(data.creditedAmount || 0)}.`,
       })
+
+      await refreshRewards()
     } catch (error) {
       console.error("Claim rewards error:", error)
       toast({
@@ -153,6 +182,8 @@ export default function TeamPage() {
                   onClaim={handleClaimRewards}
                 />
               )}
+
+              <TeamRewardsHistory entries={rewardHistory} isLoading={historyLoading} />
 
               {teamData?.teamTree ? (
                 <div className="space-y-6">
