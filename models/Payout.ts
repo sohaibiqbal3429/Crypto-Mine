@@ -2,7 +2,12 @@ import mongoose, { Schema, type Document } from "mongoose"
 
 import { createModelProxy } from "@/lib/in-memory/model-factory"
 
-export type PayoutType = "direct_deposit" | "team_deposit" | "team_profit" | "monthly_bonus"
+export type PayoutType =
+  | "direct_deposit"
+  | "team_deposit"
+  | "team_profit"
+  | "monthly_bonus"
+  | "daily_team_earning"
 
 export interface IPayout extends Document {
   userId: mongoose.Types.ObjectId
@@ -22,7 +27,7 @@ const PayoutSchema = new Schema<IPayout>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     type: {
       type: String,
-      enum: ["direct_deposit", "team_deposit", "team_profit", "monthly_bonus"],
+      enum: ["direct_deposit", "team_deposit", "team_profit", "monthly_bonus", "daily_team_earning"],
       required: true,
       index: true,
     },
