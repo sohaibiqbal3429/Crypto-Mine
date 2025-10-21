@@ -315,27 +315,17 @@ async function applyPayout({
     })
 
     const balanceUpdate =
-      type === "team_profit"
-        ? { $inc: { teamRewardsAvailable: roundedAmount } }
-        : type === "daily_team_earning"
-          ? {
-              $inc: {
-                current: roundedAmount,
-                totalBalance: roundedAmount,
-                totalEarning: roundedAmount,
-                teamRewardsClaimed: roundedAmount,
-              },
-              $set: {
-                teamRewardsLastClaimedAt: date,
-              },
-            }
-          : {
-              $inc: {
-                current: roundedAmount,
-                totalBalance: roundedAmount,
-                totalEarning: roundedAmount,
-              },
-            }
+      type === "team_profit" || type === "daily_team_earning"
+        ? {
+            $inc: { teamRewardsAvailable: roundedAmount },
+          }
+        : {
+            $inc: {
+              current: roundedAmount,
+              totalBalance: roundedAmount,
+              totalEarning: roundedAmount,
+            },
+          }
 
     await Balance.updateOne({ userId: ensureObjectId(userId) }, balanceUpdate, { upsert: true })
 

@@ -29,12 +29,12 @@ export function TeamRewardsCard({ available, claimedTotal, lastClaimedAt, isClai
           <div>
             <CardTitle className="text-lg">Team Rewards Wallet</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Daily team earnings are credited to your main balance automatically. Track lifetime totals here.
+              Daily team earnings accumulate here. Claim to credit them to your main balance.
             </p>
           </div>
         </div>
         <Badge variant={available > 0 ? "default" : "secondary"} className="w-fit">
-          {available > 0 ? "Rewards available" : "Auto-credited"}
+          {available > 0 ? "Rewards available" : "No rewards available"}
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
