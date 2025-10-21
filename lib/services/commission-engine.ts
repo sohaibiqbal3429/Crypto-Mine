@@ -287,28 +287,30 @@ async function applyPayout({
   }
 
   try {
+    const roundedAmount = roundAmount(amount)
     const payout = await Payout.create({
       userId: ensureObjectId(userId),
       type,
       sourceId: sourceId ? ensureObjectId(sourceId) : undefined,
-      amount: roundAmount(amount),
+      amount: roundedAmount,
       status: "completed",
       date,
       uniqueKey,
       meta,
     })
 
-    await Balance.updateOne(
-      { userId: ensureObjectId(userId) },
-      {
-        $inc: {
-          current: roundAmount(amount),
-          totalBalance: roundAmount(amount),
-          totalEarning: roundAmount(amount),
-        },
-      },
-      { upsert: true },
-    )
+    const balanceUpdate =
+      type === "team_profit"
+        ? { $inc: { teamRewardsAvailable: roundedAmount } }
+        : {
+            $inc: {
+              current: roundedAmount,
+              totalBalance: roundedAmount,
+              totalEarning: roundedAmount,
+            },
+          }
+
+    await Balance.updateOne({ userId: ensureObjectId(userId) }, balanceUpdate, { upsert: true })
 
     const transactionType: ITransaction["type"] =
       type === "team_profit"
@@ -320,12 +322,12 @@ async function applyPayout({
     await Transaction.create({
       userId: ensureObjectId(userId),
       type: transactionType,
-      amount: roundAmount(amount),
+      amount: roundedAmount,
       status: "approved",
-      meta: { ...meta, uniqueKey, source: type },
+      meta: { ...meta, uniqueKey, source: (meta?.source as string | undefined) ?? type },
     } as any)
 
-    return { payoutId: normalizeId(payout._id), amount: roundAmount(amount), created: true, level: (meta?.level as number) ?? 0, uniqueKey }
+    return { payoutId: normalizeId(payout._id), amount: roundedAmount, created: true, level: (meta?.level as number) ?? 0, uniqueKey }
   } catch (error: unknown) {
     if (error && typeof error === "object" && "code" in error && (error as { code?: number }).code === 11000) {
       const existingDoc = await Payout.findOne({ uniqueKey })
@@ -515,6 +517,8 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
         teams: levelDefinition.teams_profit,
         teamProfit: roundAmount(totalTeamProfit),
         day: dayKey,
+        teamProfitPct: Number((levelDefinition.team_profit_rate * 100).toFixed(2)),
+        source: "daily_team_earning",
       },
     })
 
@@ -528,6 +532,13 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       })
     }
   }
+
+  const summaryTotal = roundAmount(results.reduce((sum, entry) => sum + entry.amount, 0))
+  console.info("[commission-engine] Daily team earnings posted", {
+    day: windowStart.toISOString().slice(0, 10),
+    payouts: results.length,
+    totalAmount: summaryTotal,
+  })
 
   return results
 }

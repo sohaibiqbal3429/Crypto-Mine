@@ -47,8 +47,8 @@ const SettingsSchema = new Schema<ISettings>(
       capitalLockDays: { type: Number, default: 30 },
     },
     joiningBonus: {
-      threshold: { type: Number, default: 100 },
-      pct: { type: Number, default: 5 },
+      threshold: { type: Number, default: 0 },
+      pct: { type: Number, default: 0 },
     },
     commission: {
       baseDirectPct: { type: Number, default: 7 },

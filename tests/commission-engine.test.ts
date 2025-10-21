@@ -12,6 +12,8 @@ import {
   payTeamDepositCommissions,
   refreshAllUserLevels,
 } from "@/lib/services/commission-engine"
+import { applyDepositRewards } from "@/lib/utils/commission"
+import Balance from "@/models/Balance"
 import Payout from "@/models/Payout"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
@@ -52,6 +54,15 @@ test("L1 direct commission and team profit payouts are applied once", { concurre
     ),
   )
 
+  await Balance.create({
+    userId: sponsor._id,
+    current: 0,
+    totalBalance: 0,
+    totalEarning: 0,
+    teamRewardsAvailable: 0,
+    teamRewardsClaimed: 0,
+  } as any)
+
   await refreshAllUserLevels(new Date("2025-10-10T00:00:00Z"))
 
   const deposit = await Transaction.create({
@@ -72,6 +83,11 @@ test("L1 direct commission and team profit payouts are applied once", { concurre
   assert.ok(duplicate)
   assert.equal(duplicate?.created, false)
 
+  let sponsorBalance = await Balance.findOne({ userId: sponsor._id })
+  assert.ok(sponsorBalance)
+  assert.equal(Number(sponsorBalance?.current ?? 0), 7)
+  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0)
+
   await TeamDailyProfit.create({
     memberId: directUsers[0]._id,
     profitDate: new Date("2025-10-11T12:00:00Z"),
@@ -89,6 +105,11 @@ test("L1 direct commission and team profit payouts are applied once", { concurre
   assert.ok(payout)
   assert.equal(payout?.amount, 0.1)
   assert.equal(payout?.type, "team_profit")
+
+  sponsorBalance = await Balance.findOne({ userId: sponsor._id })
+  assert.ok(sponsorBalance)
+  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0.1)
+  assert.equal(Number(sponsorBalance?.current ?? 0), 7)
 })
 
 test("L2 team profit payout covers generations A-C", { concurrency: false }, async () => {
@@ -192,6 +213,54 @@ test("L3 sponsors receive team deposit commission from depth A-D", { concurrency
   assert.equal(outcomes.length, 1)
   assert.equal(outcomes[0]?.amount, 40)
   assert.equal(outcomes[0]?.created, true)
+})
+
+test("first qualifying deposit awards a single $2 credit", { concurrency: false }, async () => {
+  const user = await createUser()
+  const userId = toId(user._id)
+
+  await Balance.create({
+    userId: user._id,
+    current: 0,
+    totalBalance: 0,
+    totalEarning: 0,
+    teamRewardsAvailable: 0,
+    teamRewardsClaimed: 0,
+  } as any)
+
+  const firstResult = await applyDepositRewards(userId, 100)
+  assert.equal(firstResult.depositCommission, 2)
+
+  let balance = await Balance.findOne({ userId: user._id })
+  assert.ok(balance)
+  assert.equal(Number(balance?.current ?? 0), 2)
+  assert.equal(Number(balance?.totalBalance ?? 0), 2)
+  assert.equal(Number(balance?.totalEarning ?? 0), 2)
+
+  let commissionTxs = await Transaction.find({
+    userId: user._id,
+    type: "commission",
+    "meta.source": "deposit_commission",
+  })
+  assert.equal(commissionTxs.length, 1)
+  assert.equal(Number(commissionTxs[0]?.amount ?? 0), 2)
+  assert.equal(commissionTxs[0]?.meta?.fixedAmount, 2)
+
+  const secondResult = await applyDepositRewards(userId, 150)
+  assert.equal(secondResult.depositCommission, 0)
+
+  balance = await Balance.findOne({ userId: user._id })
+  assert.ok(balance)
+  assert.equal(Number(balance?.current ?? 0), 2)
+  assert.equal(Number(balance?.totalBalance ?? 0), 2)
+  assert.equal(Number(balance?.totalEarning ?? 0), 2)
+
+  commissionTxs = await Transaction.find({
+    userId: user._id,
+    type: "commission",
+    "meta.source": "deposit_commission",
+  })
+  assert.equal(commissionTxs.length, 1)
 })
 
 test("Monthly bonuses pay out for L4 and L5 when thresholds met", { concurrency: false }, async () => {
