@@ -321,10 +321,21 @@ async function applyPayout({
       meta,
     })
 
-    const balanceUpdate =
-      type === "team_profit" || type === "daily_team_earning"
+    const isDailyTeamEarning = type === "daily_team_earning"
+    const isTeamProfitAccrual = type === "team_profit"
+
+    const balanceUpdate = isTeamProfitAccrual
+      ? {
+          $inc: { teamRewardsAvailable: roundedAmount },
+        }
+      : isDailyTeamEarning
         ? {
-            $inc: { teamRewardsAvailable: roundedAmount },
+            $inc: {
+              current: roundedAmount,
+              totalBalance: roundedAmount,
+              totalEarning: roundedAmount,
+              teamRewardsClaimed: roundedAmount,
+            },
           }
         : {
             $inc: {
@@ -539,12 +550,18 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       const levelInfo = await getLevelCached(currentSponsorId)
       const levelDefinition = LEVELS_BY_ID.get(levelInfo.level)
       const eligibleTeams = levelDefinition?.teams_profit ?? []
-      const levelDefault = defaultTeamRateForLevel(levelInfo.level)
-      const fallbackRate = eligibleTeams.includes(teamCode) ? levelDefault : 0
-      const rate =
-        typeof overrideTeamDailyPct === "number" && overrideTeamDailyPct > 0
+      const baseRate = (() => {
+        if (typeof levelDefinition?.team_profit_rate === "number" && levelDefinition.team_profit_rate > 0) {
+          return levelDefinition.team_profit_rate
+        }
+
+        return defaultTeamRateForLevel(levelInfo.level)
+      })()
+      const rate = eligibleTeams.includes(teamCode)
+        ? typeof overrideTeamDailyPct === "number" && overrideTeamDailyPct > 0
           ? overrideTeamDailyPct / 100
-          : fallbackRate
+          : baseRate
+        : 0
 
       if (rate > 0) {
         const amount = roundDown(baseProfit * rate, 4)

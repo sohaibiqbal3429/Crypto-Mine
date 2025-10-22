@@ -1,3 +1,5 @@
+import mongoose from "mongoose"
+
 import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
@@ -7,6 +9,63 @@ import Settings from "@/models/Settings"
 import Payout from "@/models/Payout"
 import { getUserFromRequest } from "@/lib/auth"
 import { hasQualifiedDeposit } from "@/lib/utils/leveling"
+
+function ensureObjectId(value: mongoose.Types.ObjectId | string) {
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value
+  }
+
+  if (typeof value === "string" && mongoose.Types.ObjectId.isValid(value)) {
+    return new mongoose.Types.ObjectId(value)
+  }
+
+  throw new Error("Invalid ObjectId value")
+}
+
+function resolvePreviousUtcDayWindow(reference: Date) {
+  const start = new Date(
+    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate() - 1, 0, 0, 0, 0),
+  )
+  const end = new Date(
+    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate() - 1, 23, 59, 59, 999),
+  )
+
+  return { start, end, dayKey: start.toISOString().slice(0, 10) }
+}
+
+export async function getDailyTeamRewardTotal(
+  userId: mongoose.Types.ObjectId | string,
+  now: Date,
+): Promise<number> {
+  const { start, end, dayKey } = resolvePreviousUtcDayWindow(now)
+  const objectId = ensureObjectId(userId)
+
+  const results = await Payout.aggregate([
+    {
+      $match: {
+        userId: objectId,
+        type: "daily_team_earning",
+        $or: [
+          { "meta.day": dayKey },
+          {
+            date: {
+              $gte: start,
+              $lte: end,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$amount" },
+      },
+    },
+  ])
+
+  return Number(results?.[0]?.total ?? 0)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -60,14 +119,7 @@ export async function GET(request: NextRequest) {
     const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
     const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
-    // Sum of last posted daily team earnings (previous UTC day)
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0, 0))
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 23, 59, 59, 999))
-    const dailyTeamPayouts = await Payout.aggregate([
-      { $match: { userId: user._id, type: "daily_team_earning", date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ])
-    const teamRewardToday = Number(dailyTeamPayouts?.[0]?.total ?? 0)
+    const teamRewardToday = await getDailyTeamRewardTotal(user._id as mongoose.Types.ObjectId, now)
     const totalEarning = balance.totalEarning ?? 0
     const totalBalance = balance.totalBalance ?? 0
     const currentBalance = balance.current ?? 0
