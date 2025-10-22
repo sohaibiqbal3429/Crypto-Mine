@@ -12,6 +12,7 @@ interface KPICardsProps {
     totalWithdraw: number
     pendingWithdraw: number
     teamReward: number
+    teamRewardToday?: number
   }
 }
 
@@ -56,7 +57,7 @@ export function KPICards({ kpis }: KPICardsProps) {
     },
     {
       title: "Daily Team Reward",
-      value: formatCurrency(kpis.teamReward),
+      value: formatCurrency(kpis.teamRewardToday ?? kpis.teamReward),
       icon: Trophy,
       color: "text-indigo-600",
       bgColor: "bg-indigo-50",

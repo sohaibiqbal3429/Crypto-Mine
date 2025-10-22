@@ -21,6 +21,7 @@ interface DashboardData {
     totalWithdraw: number
     pendingWithdraw: number
     teamReward: number
+    teamRewardToday?: number
   }
   mining: {
     canMine: boolean

@@ -4,6 +4,7 @@ import User from "@/models/User"
 import Balance from "@/models/Balance"
 import MiningSession from "@/models/MiningSession"
 import Settings from "@/models/Settings"
+import Payout from "@/models/Payout"
 import { getUserFromRequest } from "@/lib/auth"
 import { hasQualifiedDeposit } from "@/lib/utils/leveling"
 
@@ -59,6 +60,15 @@ export async function GET(request: NextRequest) {
     const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
     const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
+    // Sum of last posted daily team earnings (previous UTC day)
+    const now = new Date()
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0, 0))
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 23, 59, 59, 999))
+    const dailyTeamPayouts = await Payout.aggregate([
+      { $match: { userId: user._id, type: "daily_team_earning", date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ])
+    const teamRewardToday = Number(dailyTeamPayouts?.[0]?.total ?? 0)
     const totalEarning = balance.totalEarning ?? 0
     const totalBalance = balance.totalBalance ?? 0
     const currentBalance = balance.current ?? 0
@@ -72,6 +82,7 @@ export async function GET(request: NextRequest) {
         totalWithdraw: user.withdrawTotal ?? 0,
         pendingWithdraw: balance.pendingWithdraw ?? 0,
         teamReward: teamRewardsAvailable,
+        teamRewardToday,
       },
       mining: {
         canMine,
