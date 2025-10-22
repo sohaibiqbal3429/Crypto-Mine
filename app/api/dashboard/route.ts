@@ -61,7 +61,6 @@ export async function GET(request: NextRequest) {
 
     const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
     // Sum of last posted daily team earnings (previous UTC day)
-    const now = new Date()
     const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 0, 0, 0, 0))
     const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1, 23, 59, 59, 999))
     const dailyTeamPayouts = await Payout.aggregate([
