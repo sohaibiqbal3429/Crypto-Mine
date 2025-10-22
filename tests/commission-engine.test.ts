@@ -144,7 +144,6 @@ test("L2 team profit payout covers generations A-C", { concurrency: false }, asy
   })
 
   await refreshAllUserLevels(new Date("2025-10-11T00:00:00Z"))
-
   await Promise.all([
     ...teamA.slice(0, 4).map((member) =>
       TeamDailyProfit.create({
@@ -173,6 +172,118 @@ test("L2 team profit payout covers generations A-C", { concurrency: false }, asy
   assert.ok(sponsorResult)
   assert.equal(sponsorResult?.amount, 0.7)
   assert.equal(sponsorResult?.totalTeamProfit, 70)
+})
+
+test("L3 daily team earnings pay 2% across teams A-D and credit balances", { concurrency: false }, async () => {
+  const sponsor = await createUser()
+  const directMembers = await Promise.all(
+    Array.from({ length: 15 }, async (_, index) =>
+      createUser({
+        referredBy: sponsor._id,
+        depositTotal: 100 + index,
+        qualified: true,
+        qualifiedAt: new Date(`2025-09-${String(index + 1).padStart(2, "0")}T00:00:00Z`),
+      }),
+    ),
+  )
+
+  const teamA = directMembers[0]
+  const teamB = await createUser({
+    referredBy: teamA._id,
+    depositTotal: 150,
+    qualified: true,
+    qualifiedAt: new Date("2025-09-20T00:00:00Z"),
+  })
+  const teamC = await createUser({
+    referredBy: teamB._id,
+    depositTotal: 180,
+    qualified: true,
+    qualifiedAt: new Date("2025-09-21T00:00:00Z"),
+  })
+  const teamD = await createUser({
+    referredBy: teamC._id,
+    depositTotal: 200,
+    qualified: true,
+    qualifiedAt: new Date("2025-09-22T00:00:00Z"),
+  })
+
+  await Balance.create({
+    userId: sponsor._id,
+    current: 0,
+    totalBalance: 0,
+    totalEarning: 0,
+    teamRewardsAvailable: 0,
+    teamRewardsClaimed: 0,
+  } as any)
+
+  await refreshAllUserLevels(new Date("2025-10-11T00:00:00Z"))
+
+  await Promise.all([
+    TeamDailyProfit.create({
+      memberId: teamA._id,
+      profitDate: new Date("2025-10-11T08:00:00Z"),
+      profitAmount: 10,
+      activeOnDate: true,
+    }),
+    TeamDailyProfit.create({
+      memberId: teamB._id,
+      profitDate: new Date("2025-10-11T08:00:00Z"),
+      profitAmount: 10,
+      activeOnDate: true,
+    }),
+    TeamDailyProfit.create({
+      memberId: teamC._id,
+      profitDate: new Date("2025-10-11T08:00:00Z"),
+      profitAmount: 10,
+      activeOnDate: true,
+    }),
+    TeamDailyProfit.create({
+      memberId: teamD._id,
+      profitDate: new Date("2025-10-11T08:00:00Z"),
+      profitAmount: 10,
+      activeOnDate: true,
+    }),
+  ])
+
+  const results = await payDailyTeamProfit(new Date("2025-10-12T00:00:00Z"))
+  const sponsorResult = results.find((entry) => entry.userId === toId(sponsor._id))
+  assert.ok(sponsorResult)
+  assert.equal(sponsorResult?.amount, 0.8)
+  assert.equal(sponsorResult?.totalTeamProfit, 40)
+  assert.deepEqual(sponsorResult?.teams, ["A", "B", "C", "D"])
+
+  const sponsorBalance = await Balance.findOne({ userId: sponsor._id })
+  assert.ok(sponsorBalance)
+  assert.equal(Number(sponsorBalance?.current ?? 0), 0.8)
+  assert.equal(Number(sponsorBalance?.totalBalance ?? 0), 0.8)
+  assert.equal(Number(sponsorBalance?.teamRewardsClaimed ?? 0), 0.8)
+
+  const dayKey = "2025-10-11"
+  const sponsorId = toId(sponsor._id)
+  const memberIds = [teamA, teamB, teamC, teamD].map((member) => toId(member._id))
+  const teamCodes: Array<"A" | "B" | "C" | "D"> = ["A", "B", "C", "D"]
+
+  for (const [index, team] of teamCodes.entries()) {
+    const memberId = memberIds[index]
+    const uniqueKey = `DTE:${dayKey}:${memberId}:${sponsorId}:${team}`
+
+    const payoutDoc = await Payout.findOne({ uniqueKey })
+    assert.ok(payoutDoc, `expected payout for ${team}`)
+    const payout = payoutDoc && typeof payoutDoc.toObject === "function" ? payoutDoc.toObject() : payoutDoc
+    assert.equal(Number((payout as any)?.amount ?? 0), 0.2)
+    assert.equal((payout as any)?.meta?.team, team)
+    assert.equal((payout as any)?.meta?.levelAtPosting, 3)
+    assert.equal((payout as any)?.meta?.teamProfitPct, 2)
+
+    const transactionDoc = await Transaction.findOne({ "meta.uniqueKey": uniqueKey })
+    assert.ok(transactionDoc, `expected transaction for ${team}`)
+    const transaction =
+      transactionDoc && typeof transactionDoc.toObject === "function" ? transactionDoc.toObject() : transactionDoc
+    assert.equal(Number((transaction as any)?.amount ?? 0), 0.2)
+    assert.equal((transaction as any)?.meta?.team, team)
+    assert.equal((transaction as any)?.meta?.level, 3)
+    assert.equal((transaction as any)?.meta?.teamProfitPct, 2)
+  }
 })
 
 test("L3 sponsors receive team deposit commission from depth A-D", { concurrency: false }, async () => {
