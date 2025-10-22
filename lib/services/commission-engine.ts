@@ -95,6 +95,12 @@ const LEVELS_BY_ID = new Map(LEVELS.map((definition) => [definition.id, definiti
 
 const TEAM_DEPTH: Record<TeamCode, number> = { A: 1, B: 2, C: 3, D: 4 }
 
+function defaultTeamRateForLevel(level: number): number {
+  if (level >= 3) return 0.02
+  if (level >= 1) return 0.01
+  return 0
+}
+
 function ensureObjectId(value: mongoose.Types.ObjectId | string): mongoose.Types.ObjectId {
   if (value instanceof mongoose.Types.ObjectId) {
     return value
@@ -533,10 +539,8 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       const levelInfo = await getLevelCached(currentSponsorId)
       const levelDefinition = LEVELS_BY_ID.get(levelInfo.level)
       const eligibleTeams = levelDefinition?.teams_profit ?? []
-      const fallbackRate =
-        eligibleTeams.includes(teamCode) && typeof levelDefinition?.team_profit_rate === "number"
-          ? levelDefinition.team_profit_rate
-          : 0
+      const levelDefault = defaultTeamRateForLevel(levelInfo.level)
+      const fallbackRate = eligibleTeams.includes(teamCode) ? levelDefault : 0
       const rate =
         typeof overrideTeamDailyPct === "number" && overrideTeamDailyPct > 0
           ? overrideTeamDailyPct / 100
