@@ -3,6 +3,7 @@ import mongoose from "mongoose"
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
 import Payout from "@/models/Payout"
+import { getTeamDailyProfitPercent } from "@/lib/services/settings"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction, { type ITransaction } from "@/models/Transaction"
 import User from "@/models/User"
@@ -486,6 +487,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const windowStart = startOfPreviousUtcDay(date)
 
   const profitMap = await loadDailyProfits(windowStart, windowEnd)
+  const overrideTeamDailyPct = await getTeamDailyProfitPercent()
   const dayKey = windowStart.toISOString().slice(0, 10)
   const userCache = new Map<string, Awaited<ReturnType<typeof loadUser>> | null>()
   const levelCache = new Map<string, LevelComputationResult>()
@@ -531,10 +533,14 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       const levelInfo = await getLevelCached(currentSponsorId)
       const levelDefinition = LEVELS_BY_ID.get(levelInfo.level)
       const eligibleTeams = levelDefinition?.teams_profit ?? []
-      const rate =
+      const fallbackRate =
         eligibleTeams.includes(teamCode) && typeof levelDefinition?.team_profit_rate === "number"
           ? levelDefinition.team_profit_rate
           : 0
+      const rate =
+        typeof overrideTeamDailyPct === "number" && overrideTeamDailyPct > 0
+          ? overrideTeamDailyPct / 100
+          : fallbackRate
 
       if (rate > 0) {
         const amount = roundDown(baseProfit * rate, 4)

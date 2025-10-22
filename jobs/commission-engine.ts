@@ -1,6 +1,7 @@
 import "dotenv/config"
 
 import { runDailyCommissionEngine, runMonthlyBonusCycle } from "@/lib/services/commission-engine"
+import { runDailyMiningProfit } from "@/lib/services/daily-mining"
 
 async function main() {
   const [, , mode] = process.argv
@@ -12,6 +13,9 @@ async function main() {
     return
   }
 
+  // First, post daily mining profits based on current balances
+  await runDailyMiningProfit(now)
+  // Then, compute team earnings from the posted daily profits
   await runDailyCommissionEngine(now)
   console.log(`[commission-engine] Daily commission cycle completed for ${now.toISOString()}`)
 }

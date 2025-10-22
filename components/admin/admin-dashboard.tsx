@@ -129,6 +129,14 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
   const [dailyProfitSaving, setDailyProfitSaving] = useState(false)
   const [dailyProfitError, setDailyProfitError] = useState<string | null>(null)
 
+  // Team daily profit override (optional, when null use level defaults)
+  const [teamDailyProfitPercent, setTeamDailyProfitPercent] = useState<number | null>(null)
+  const [teamDailyDraft, setTeamDailyDraft] = useState<string>("")
+  const [teamDailyBounds, setTeamDailyBounds] = useState<{ min: number; max: number }>({ min: 0, max: 10 })
+  const [teamDailyLoading, setTeamDailyLoading] = useState(false)
+  const [teamDailySaving, setTeamDailySaving] = useState(false)
+  const [teamDailyError, setTeamDailyError] = useState<string | null>(null)
+
   const dailyProfitDraftExample = useMemo(
     () => multiplyAmountByPercent(100, dailyProfitDraft),
     [dailyProfitDraft],
@@ -388,6 +396,125 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
       }
     },
     [dailyProfitDraft, dailyProfitPercent, runIfMounted, toast],
+  )
+
+  // Team daily profit percent (override) handlers
+  const handleTeamDailyDraftChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setTeamDailyDraft(event.target.value)
+  }, [])
+
+  const fetchTeamDailyProfitSettings = useCallback(async () => {
+    runIfMounted(() => {
+      setTeamDailyLoading(true)
+      setTeamDailyError(null)
+    })
+
+    try {
+      const response = await fetch("/api/admin/settings/team-daily-profit-percent", { cache: "no-store" })
+      const payload = await readJsonSafe<{
+        teamDailyProfitPercent?: number | null
+        bounds?: { min: number; max: number }
+        error?: unknown
+      }>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to load team daily profit percent"
+        throw new Error(message)
+      }
+
+      const nextPercent =
+        typeof payload?.teamDailyProfitPercent === "number" && Number.isFinite(payload.teamDailyProfitPercent)
+          ? payload.teamDailyProfitPercent
+          : null
+
+      const nextBounds =
+        payload?.bounds && typeof payload.bounds.min === "number" && typeof payload.bounds.max === "number"
+          ? payload.bounds
+          : null
+
+      runIfMounted(() => {
+        setTeamDailyProfitPercent(nextPercent)
+        setTeamDailyDraft(nextPercent !== null ? nextPercent.toFixed(2) : "")
+        if (nextBounds) {
+          setTeamDailyBounds(nextBounds)
+        }
+      })
+    } catch (error) {
+      console.error(error)
+      runIfMounted(() =>
+        setTeamDailyError(
+          error instanceof Error ? error.message : "Unable to load team daily profit percent",
+        ),
+      )
+    } finally {
+      runIfMounted(() => setTeamDailyLoading(false))
+    }
+  }, [runIfMounted])
+
+  const handleTeamDailyProfitRefresh = useCallback(() => {
+    fetchTeamDailyProfitSettings().catch(() => null)
+  }, [fetchTeamDailyProfitSettings])
+
+  const handleSaveTeamDailyProfitPercent = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+
+      runIfMounted(() => {
+        setTeamDailySaving(true)
+        setTeamDailyError(null)
+      })
+
+      try {
+        const body = teamDailyDraft.trim() === "" ? { percent: null } : { percent: teamDailyDraft }
+        const response = await fetch("/api/admin/settings/team-daily-profit-percent", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+
+        const payload = await readJsonSafe<{
+          teamDailyProfitPercent?: number | null
+          bounds?: { min: number; max: number }
+          error?: unknown
+        }>(response)
+
+        if (!response.ok) {
+          const message =
+            typeof payload?.error === "string" ? payload.error : "Unable to update team daily profit percent"
+          throw new Error(message)
+        }
+
+        const updatedPercent =
+          typeof payload?.teamDailyProfitPercent === "number" && Number.isFinite(payload.teamDailyProfitPercent)
+            ? payload.teamDailyProfitPercent
+            : null
+
+        const nextBounds =
+          payload?.bounds && typeof payload.bounds.min === "number" && typeof payload.bounds.max === "number"
+            ? payload.bounds
+            : null
+
+        runIfMounted(() => {
+          setTeamDailyProfitPercent(updatedPercent)
+          setTeamDailyDraft(updatedPercent !== null ? updatedPercent.toFixed(2) : "")
+          if (nextBounds) {
+            setTeamDailyBounds(nextBounds)
+          }
+        })
+
+        toast({ description: updatedPercent === null ? "Team daily profit override disabled (using level defaults)." : `Team daily profit percent set to ${updatedPercent.toFixed(2)}%.` })
+      } catch (error) {
+        console.error(error)
+        runIfMounted(() =>
+          setTeamDailyError(
+            error instanceof Error ? error.message : "Unable to update team daily profit percent",
+          ),
+        )
+      } finally {
+        runIfMounted(() => setTeamDailySaving(false))
+      }
+    },
+    [runIfMounted, teamDailyDraft, toast],
   )
 
   const fetchLuckyRound = useCallback(async () => {
@@ -889,8 +1016,77 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
                 </div>
                 {dailyProfitError && <p className="text-sm text-destructive">{dailyProfitError}</p>}
               </form>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle>Team daily profit rate</CardTitle>
+            <CardDescription>
+              Optional override for daily team mining rewards. Leave empty to use level defaults (L1: 1%, L2: 1%, L3–5: 2%).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveTeamDailyProfitPercent} className="space-y-4">
+              <div className="grid gap-2">
+                <label htmlFor="team-daily-profit-percent" className="text-sm font-medium">
+                  Team daily profit percent
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Input
+                    id="team-daily-profit-percent"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min={teamDailyBounds.min.toFixed(2)}
+                    max={teamDailyBounds.max.toFixed(2)}
+                    value={teamDailyDraft}
+                    onChange={handleTeamDailyDraftChange}
+                    placeholder="e.g. 1.00"
+                    aria-describedby="team-daily-profit-percent-help"
+                    className="sm:max-w-[180px]"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={teamDailySaving} className="gap-2">
+                      {teamDailySaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving
+                        </>
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-2"
+                      onClick={handleTeamDailyProfitRefresh}
+                      disabled={teamDailyLoading || teamDailySaving}
+                    >
+                      {teamDailyLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div id="team-daily-profit-percent-help" className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Current override: {teamDailyProfitPercent === null ? <span className="font-medium">Disabled</span> : <span className="font-medium">{teamDailyProfitPercent.toFixed(2)}%</span>}
+                </p>
+                <p>
+                  Draft preview: {teamDailyDraft ? `$100 → ${multiplyAmountByPercent(100, Number.parseFloat(teamDailyDraft)).toFixed(2)}` : "—"} (allowed range {teamDailyBounds.min.toFixed(2)}%–{teamDailyBounds.max.toFixed(2)}%)
+                </p>
+                <p>Clear the input to remove the override and fall back to level defaults.</p>
+              </div>
+              {teamDailyError && <p className="text-sm text-destructive">{teamDailyError}</p>}
+            </form>
+          </CardContent>
+        </Card>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <div className="xl:col-span-2">

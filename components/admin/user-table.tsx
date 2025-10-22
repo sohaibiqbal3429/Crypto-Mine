@@ -68,6 +68,11 @@ export function UserTable({
   const [blockLoading, setBlockLoading] = useState(false)
   const [blockError, setBlockError] = useState<string | null>(null)
   const [searchValue, setSearchValue] = useState(filters.q ?? "")
+  // Per-user daily mining rate override state
+  const [rateDraft, setRateDraft] = useState<string>("")
+  const [rateCurrent, setRateCurrent] = useState<number | null>(null)
+  const [rateLoading, setRateLoading] = useState(false)
+  const [rateError, setRateError] = useState<string | null>(null)
 
   useEffect(() => {
     setSearchValue(filters.q ?? "")
@@ -90,6 +95,20 @@ export function UserTable({
       setAdjustError(null)
       setBlockError(null)
       setShowSettings(true)
+      // load rate override lazily
+      setRateDraft("")
+      setRateCurrent(null)
+      setRateError(null)
+      setRateLoading(true)
+      fetch(`/api/admin/users/${user._id}/mining-rate`)
+        .then((res) => res.json())
+        .then((data) => {
+          const o = typeof data?.override === "number" ? data.override : null
+          setRateCurrent(o)
+          setRateDraft(o !== null ? o.toFixed(2) : "")
+        })
+        .catch((err) => setRateError(err instanceof Error ? err.message : "Failed to load rate"))
+        .finally(() => setRateLoading(false))
     },
     [],
   )
@@ -97,6 +116,9 @@ export function UserTable({
   const closeSettings = useCallback(() => {
     setShowSettings(false)
     setSelectedUser(null)
+    setRateDraft("")
+    setRateCurrent(null)
+    setRateError(null)
   }, [])
 
   const submitAdjustBalance = useCallback(async () => {
@@ -346,6 +368,69 @@ export function UserTable({
                       <AlertDescription>{blockError}</AlertDescription>
                     </Alert>
                   )}
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground">Daily mining rate</h3>
+                <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                  <div>
+                    <Label htmlFor="mining-rate">User override (%)</Label>
+                    <Input
+                      id="mining-rate"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      placeholder="e.g. 1.50"
+                      value={rateDraft}
+                      onChange={(e) => setRateDraft(e.target.value)}
+                      disabled={rateLoading}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Clear to remove override and use global default.
+                    </p>
+                    {rateError && <p className="text-xs text-destructive">{rateError}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        if (!selectedUser) return
+                        setRateLoading(true)
+                        setRateError(null)
+                        try {
+                          const body = rateDraft.trim() === "" ? { percent: null } : { percent: Number.parseFloat(rateDraft) }
+                          const res = await fetch(`/api/admin/users/${selectedUser._id}/mining-rate`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(body),
+                          })
+                          const data = await res.json()
+                          if (!res.ok) {
+                            throw new Error(data?.error || "Failed to save override")
+                          }
+                          const o = typeof data?.override === "number" ? data.override : null
+                          setRateCurrent(o)
+                          setRateDraft(o !== null ? o.toFixed(2) : "")
+                        } catch (e: any) {
+                          setRateError(e?.message || "Failed to save override")
+                        } finally {
+                          setRateLoading(false)
+                        }
+                      }}
+                      disabled={rateLoading}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setRateDraft(rateCurrent !== null ? rateCurrent.toFixed(2) : "")}
+                      disabled={rateLoading}
+                    >
+                      Reset
+                    </Button>
+                  </div>
                 </div>
               </div>
 

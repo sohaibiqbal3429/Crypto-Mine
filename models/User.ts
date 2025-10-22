@@ -19,6 +19,8 @@ export interface IUser extends Document {
   depositTotal: number
   withdrawTotal: number
   roiEarnedTotal: number
+  // Optional per-user mining rate override (percent, e.g., 1.5)
+  miningDailyRateOverridePct?: number
   level: number
   levelCached?: number
   levelEvaluatedAt?: Date | null
@@ -63,6 +65,7 @@ const UserSchema = new Schema<IUser>(
     depositTotal: { type: Number, default: 0 },
     withdrawTotal: { type: Number, default: 0 },
     roiEarnedTotal: { type: Number, default: 0 },
+    miningDailyRateOverridePct: { type: Number, required: false },
     level: { type: Number, default: 0 },
     levelCached: { type: Number, default: 0 },
     levelEvaluatedAt: { type: Date, default: null },
