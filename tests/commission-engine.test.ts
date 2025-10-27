@@ -269,21 +269,29 @@ test("daily overrides pay 1% to level 1 and level 2 uplines", async () => {
   const balances = (await Balance.find()).map((doc) => toPlain<any>(doc))
   const leaderBalance = balances.find((doc) => toId(doc.userId) === toId(leader._id))
   assert.ok(leaderBalance)
-  assert.equal(Number(leaderBalance?.totalBalance ?? 0), 0.2)
+  assert.equal(Number(leaderBalance?.teamRewardsAvailable ?? 0), 0.2)
+  assert.equal(Number(leaderBalance?.current ?? 0), 0)
+  assert.equal(Number(leaderBalance?.totalBalance ?? 0), 0)
 
   const leaderLeaderBalance = balances.find((doc) => toId(doc.userId) === toId(leaderLeader._id))
   assert.ok(leaderLeaderBalance)
-  assert.equal(Number(leaderLeaderBalance?.totalBalance ?? 0), 0.2)
+  assert.equal(Number(leaderLeaderBalance?.teamRewardsAvailable ?? 0), 0.2)
+  assert.equal(Number(leaderLeaderBalance?.current ?? 0), 0)
+  assert.equal(Number(leaderLeaderBalance?.totalBalance ?? 0), 0)
 
   // Running the payout again should be idempotent
   const repeat = await payDailyTeamProfit(new Date("2025-01-03T00:00:00Z"))
   assert.equal(repeat.length, 0)
 
   const overrideTransactions = await Transaction.find({
-    type: "bonus",
-    "meta.source": "daily_override",
+    type: "teamReward",
+    "meta.source": "daily_team_reward",
   })
   assert.equal(overrideTransactions.length, 2)
+  overrideTransactions.forEach((tx) => {
+    assert.equal(tx.claimable, true)
+    assert.equal(Number(tx.amount ?? 0), 0.2)
+  })
 })
 
 test("daily mining uses current balance and feeds overrides", async () => {
@@ -316,6 +324,14 @@ test("daily mining uses current balance and feeds overrides", async () => {
   assert.equal(Number(baseTx?.amount ?? 0), Number((30 * 0.015).toFixed(4)))
   assert.equal(Number(baseTx?.meta?.baseAmount ?? 0), 30)
 
+  const updatedBalanceDoc = await Balance.findOne({ userId: member._id })
+  const updatedBalance = toPlain<any>(updatedBalanceDoc)
+  assert.ok(updatedBalance)
+  const expectedProfit = Number((30 * 0.015).toFixed(4))
+  assert.equal(Number(updatedBalance?.current ?? 0), 30 + expectedProfit)
+  assert.equal(Number(updatedBalance?.totalBalance ?? 0), 500)
+  assert.equal(Number(updatedBalance?.totalEarning ?? 0), 100 + expectedProfit)
+
   const memberDoc = toPlain<any>(await User.findById(member._id))
   const leaderDoc = toPlain<any>(await User.findById(leader._id))
 
@@ -332,6 +348,16 @@ test("daily mining uses current balance and feeds overrides", async () => {
   assert.ok(l2)
   assert.equal(Number(l1?.amount ?? 0), Number(((30 * 0.015) * 0.01).toFixed(4)))
   assert.equal(Number(l2?.amount ?? 0), Number(((30 * 0.015) * 0.01).toFixed(4)))
+
+  const claimableOverrides = await Transaction.find({
+    type: "teamReward",
+    "meta.source": "daily_team_reward",
+  })
+  assert.equal(claimableOverrides.length, 2)
+  claimableOverrides.forEach((tx) => {
+    assert.equal(tx.claimable, true)
+    assert.ok(tx.meta?.uniqueKey)
+  })
 })
 
 test("missing uplines are skipped without errors", async () => {

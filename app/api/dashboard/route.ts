@@ -9,6 +9,7 @@ import Settings from "@/models/Settings"
 import Payout from "@/models/Payout"
 import { getUserFromRequest } from "@/lib/auth"
 import { hasQualifiedDeposit } from "@/lib/utils/leveling"
+import { getClaimableTeamRewardTotal } from "@/lib/services/team-earnings"
 
 function ensureObjectId(value: mongoose.Types.ObjectId | string) {
   if (value instanceof mongoose.Types.ObjectId) {
@@ -90,10 +91,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Account blocked", blocked: true }, { status: 403 })
     }
 
-    let balance = await Balance.findOne({ userId: user._id })
+    const userObjectId = ensureObjectId(user._id as any)
+
+    let balance = await Balance.findOne({ userId: userObjectId })
     if (!balance) {
       balance = await Balance.create({
-        userId: user._id,
+        userId: userObjectId,
         current: 0,
         totalBalance: 0,
         totalEarning: 0,
@@ -105,16 +108,17 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    let miningSession = await MiningSession.findOne({ userId: user._id })
+    let miningSession = await MiningSession.findOne({ userId: userObjectId })
     if (!miningSession) {
-      miningSession = await MiningSession.create({ userId: user._id })
+      miningSession = await MiningSession.create({ userId: userObjectId })
     }
 
     const settings = await Settings.findOne()
 
-    const directReferrals = await User.find({ referredBy: user._id })
-      .select("qualified depositTotal")
-      .lean()
+    const [directReferrals, claimableTeamRewards] = await Promise.all([
+      User.find({ referredBy: userObjectId }).select("qualified depositTotal").lean(),
+      getClaimableTeamRewardTotal(userObjectId.toString()),
+    ])
     const activeMembers = directReferrals.filter((referral) => hasQualifiedDeposit(referral)).length
 
     const now = new Date()
@@ -123,8 +127,8 @@ export async function GET(request: NextRequest) {
     const hasMinimumDeposit = (user.depositTotal ?? 0) >= minDeposit
     const canMine = hasMinimumDeposit && now >= nextEligibleAt
 
-    const teamRewardsAvailable = balance.teamRewardsAvailable ?? 0
-    const teamRewardToday = await getDailyTeamRewardTotal(user._id as mongoose.Types.ObjectId, now)
+    const teamRewardsAvailable = claimableTeamRewards
+    const teamRewardToday = await getDailyTeamRewardTotal(userObjectId, now)
     const totalEarning = balance.totalEarning ?? 0
     const totalBalance = balance.totalBalance ?? 0
     const currentBalance = balance.current ?? 0
