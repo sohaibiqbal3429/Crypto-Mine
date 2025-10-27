@@ -103,8 +103,6 @@ async function creditDailyOverride(options: {
     return null
   }
 
-  const eventType = level === 1 ? "daily_override_l1" : "daily_override_l2"
-
   const amount = roundPlatform(baseAmount * 0.01)
   if (amount <= 0) {
     return null
@@ -114,7 +112,7 @@ async function creditDailyOverride(options: {
     return null
   }
 
-  const uniqueKey = `${eventType}:${recipientId}:${dayKey}`
+  const uniqueKey = `${recipientId}|${dayKey}|${level === 1 ? "ovrL1" : "ovrL2"}|${memberId}`
   const userObjectId = new mongoose.Types.ObjectId(recipientId)
 
   const existing = await Transaction.findOne({
@@ -131,27 +129,51 @@ async function creditDailyOverride(options: {
     return null
   }
 
-  await Balance.findOneAndUpdate(
-    { userId: userObjectId },
-    {
-      $inc: {
-        current: amount,
-        totalBalance: amount,
-        totalEarning: amount,
+  let balanceUpdated = false
+
+  const attemptUpdate = async (filter: Record<string, unknown>) => {
+    if (balanceUpdated) return
+    const result = await Balance.updateOne(
+      filter,
+      {
+        $inc: {
+          teamRewardsAvailable: amount,
+        },
       },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  )
+    )
+
+    if ((result as any)?.modifiedCount > 0 || (result as any)?.matchedCount > 0) {
+      balanceUpdated = true
+    }
+  }
+
+  await attemptUpdate({ userId: recipientId })
+  if (!balanceUpdated) {
+    await attemptUpdate({ userId: userObjectId })
+  }
+
+  if (!balanceUpdated) {
+    await Balance.create({
+      userId: userObjectId,
+      current: 0,
+      totalBalance: 0,
+      totalEarning: 0,
+      teamRewardsClaimed: 0,
+      teamRewardsAvailable: amount,
+    } as any)
+  }
 
   await Transaction.create({
     userId: userObjectId,
-    type: "bonus",
+    type: "teamReward",
     amount,
     status: "approved",
+    claimable: true,
     meta: {
-      source: "daily_override",
+      source: "daily_team_reward",
+      overrideKind: level === 1 ? "DAILY_OVERRIDE_L1" : "DAILY_OVERRIDE_L2",
+      overridePct: 1,
       level,
-      ratePct: 1,
       baseProfit: roundPlatform(baseAmount),
       memberId,
       memberName: memberName ?? null,

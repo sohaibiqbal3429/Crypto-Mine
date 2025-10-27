@@ -929,6 +929,23 @@ function createModelInstance<T extends Record<string, any>>(
     toJSON: () => T
   }
 
+  Object.defineProperty(instance, "id", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const rawId = (instance as unknown as { _id?: string | mongoose.Types.ObjectId })._id
+      return typeof rawId === "string" ? rawId : rawId ? rawId.toString() : undefined
+    },
+    set(value: string | mongoose.Types.ObjectId | undefined) {
+      if (value == null) {
+        return
+      }
+
+      const normalized = typeof value === "string" ? value : value.toString()
+      ;(instance as unknown as { _id?: string })._id = normalized
+    },
+  })
+
   Object.defineProperty(instance, "save", {
     enumerable: false,
     writable: false,

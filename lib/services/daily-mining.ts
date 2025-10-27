@@ -107,7 +107,7 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
       continue
     }
 
-    const uniqueKey = `daily_mining:${uid}:${dayKey}`
+    const uniqueKey = `${uid}|${dayKey}|mining`
     const existingDoc = await Transaction.findOne({
       userId: new mongoose.Types.ObjectId(uid),
       "meta.uniqueKey": uniqueKey,
@@ -118,13 +118,33 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
       continue
     }
 
-    await Balance.updateOne(
-      { userId: new mongoose.Types.ObjectId(uid) },
-      {
-        $inc: { current: amount, totalBalance: amount, totalEarning: amount },
-      },
-      { upsert: true },
-    )
+    const userObjectId = mongoose.Types.ObjectId.isValid(uid) ? new mongoose.Types.ObjectId(uid) : null
+    let updated = false
+
+    const applyIncrement = async (filter: Record<string, unknown>) => {
+      if (updated) return
+      const result = await Balance.updateOne(
+        filter,
+        { $inc: { current: amount, totalEarning: amount } },
+      )
+      if ((result as any)?.modifiedCount > 0 || (result as any)?.matchedCount > 0) {
+        updated = true
+      }
+    }
+
+    await applyIncrement({ userId: uid })
+    if (!updated && userObjectId) {
+      await applyIncrement({ userId: userObjectId })
+    }
+
+    if (!updated) {
+      await Balance.create({
+        userId: userObjectId ?? new mongoose.Types.ObjectId(uid),
+        current: amount,
+        totalBalance: 0,
+        totalEarning: amount,
+      } as any)
+    }
 
     await Transaction.create({
       userId: new mongoose.Types.ObjectId(uid),
