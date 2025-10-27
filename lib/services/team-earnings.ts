@@ -6,7 +6,11 @@ import Transaction, { type ITransaction } from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { calculateUserLevel } from "@/lib/utils/commission"
 
-function ensureObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
+function normalizeUserId(id: string | mongoose.Types.ObjectId): string {
+  return typeof id === "string" ? id : id.toString()
+}
+
+function toObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
   if (id instanceof mongoose.Types.ObjectId) {
     return id
   }
@@ -114,7 +118,7 @@ async function resolveRewardProfile(level: number): Promise<RewardProfile> {
 }
 
 async function loadBalance(userId: string, session?: mongoose.ClientSession) {
-  const query = Balance.findOne({ userId: ensureObjectId(userId) })
+  const query = Balance.findOne({ userId: normalizeUserId(userId) })
   if (session && typeof (query as any).session === "function") {
     query.session(session)
   }
@@ -128,7 +132,7 @@ async function loadBalance(userId: string, session?: mongoose.ClientSession) {
 export async function previewTeamEarnings(userId: string, now = new Date()): Promise<TeamRewardsPreview> {
   const [level, balance] = await Promise.all([
     calculateUserLevel(userId, { persist: false, notify: false }),
-    Balance.findOne({ userId: ensureObjectId(userId) }),
+    Balance.findOne({ userId: normalizeUserId(userId) }),
   ])
 
   const rewardProfile = await resolveRewardProfile(level)
@@ -192,7 +196,7 @@ export async function claimTeamEarnings(userId: string, now = new Date()): Promi
     balance.teamRewardsLastClaimedAt = now
     await balance.save(activeSession ? { session: activeSession } : undefined)
 
-    const userObjectId = ensureObjectId(userId)
+    const userObjectId = toObjectId(userId)
     const createOptions = activeSession ? { session: activeSession } : undefined
 
     const transactionDoc = {
@@ -341,10 +345,18 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
     if (source === "monthly_policy_bonus") {
       return tx.meta?.bonusType === "salary" ? "salary" : "bonus"
     }
+
+    if (source === "daily_override") {
+      return "daily_profit"
+    }
   }
 
   if (tx.type === "commission" && source === "direct_referral") {
     return "deposit_commission"
+  }
+
+  if (tx.type === "commission" && source === "activation_override") {
+    return "team_commission"
   }
 
   if (tx.type === "teamReward" && source === "daily_team_earning") {
@@ -426,10 +438,10 @@ export async function listTeamRewardHistory(
   options: ListHistoryOptions = {},
 ): Promise<RewardHistoryEntry[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 100, 200))
-  const userObjectId = ensureObjectId(userId)
+  const userIdString = normalizeUserId(userId)
 
   const transactions = await Transaction.find({
-    userId: userObjectId,
+    userId: userIdString,
     $or: [
       { type: "teamReward" },
       { type: "bonus", "meta.source": { $in: ["team_override", "monthly_policy_bonus"] } },
