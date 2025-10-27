@@ -5,6 +5,7 @@ import Balance from "@/models/Balance"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import { getPolicyEffectiveAt, isPolicyEffectiveFor } from "@/lib/utils/policy"
 
 interface DailyOverrideResult {
   userId: string
@@ -30,6 +31,8 @@ function endOfPreviousUtcDay(date: Date): Date {
   return end
 }
 
+const PLATFORM_DECIMALS = 4
+
 function roundTo(amount: number, decimals: number): number {
   if (!Number.isFinite(amount)) {
     return 0
@@ -39,8 +42,51 @@ function roundTo(amount: number, decimals: number): number {
   return Math.round(amount * factor) / factor
 }
 
-function toObjectIdString(value: mongoose.Types.ObjectId | string): string {
-  return typeof value === "string" ? value : value.toString()
+function roundPlatform(amount: number): number {
+  return roundTo(amount, PLATFORM_DECIMALS)
+}
+
+function normaliseObjectId(value: mongoose.Types.ObjectId | string | null | undefined): string | null {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === "string") {
+    return value
+  }
+
+  if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
+    return (value as { toHexString: () => string }).toHexString()
+  }
+
+  if (typeof (value as { toString?: () => string }).toString === "function") {
+    const str = (value as { toString: () => string }).toString()
+    if (str && str !== "[object Object]") {
+      return str
+    }
+  }
+
+  if (typeof (value as { buffer?: ArrayLike<number> }).buffer === "object") {
+    const bufferLike = (value as { buffer?: ArrayLike<number> }).buffer
+    const bytes = Array.from(bufferLike ?? [])
+    if (bytes.length > 0) {
+      return Buffer.from(bytes).toString("hex")
+    }
+  }
+
+  return null
+}
+
+function toObjectIdString(value: mongoose.Types.ObjectId | string | null | undefined): string | null {
+  return normaliseObjectId(value)
+}
+
+function toObjectId(value: string): mongoose.Types.ObjectId | null {
+  if (!mongoose.isValidObjectId(value)) {
+    return null
+  }
+
+  return new mongoose.Types.ObjectId(value)
 }
 
 async function creditDailyOverride(options: {
@@ -57,24 +103,36 @@ async function creditDailyOverride(options: {
     return null
   }
 
-  const amount = roundTo(baseAmount * 0.01, 4)
+  const eventType = level === 1 ? "daily_override_l1" : "daily_override_l2"
+
+  const amount = roundPlatform(baseAmount * 0.01)
   if (amount <= 0) {
     return null
   }
 
-  const uniqueKey = `DOV:${dayKey}:${memberId}:L${level}`
+  if (!isPolicyEffectiveFor(postedAt)) {
+    return null
+  }
+
+  const uniqueKey = `${eventType}:${recipientId}:${dayKey}`
+  const userObjectId = new mongoose.Types.ObjectId(recipientId)
 
   const existing = await Transaction.findOne({
-    userId: recipientId,
+    userId: userObjectId,
     "meta.uniqueKey": uniqueKey,
   })
 
   if (existing) {
+    console.info("[commission-engine] duplicate_prevented", {
+      event_id: uniqueKey,
+      level: level === 1 ? "L1" : "L2",
+      source: "daily",
+    })
     return null
   }
 
   await Balance.findOneAndUpdate(
-    { userId: recipientId },
+    { userId: userObjectId },
     {
       $inc: {
         current: amount,
@@ -86,7 +144,7 @@ async function creditDailyOverride(options: {
   )
 
   await Transaction.create({
-    userId: recipientId,
+    userId: userObjectId,
     type: "bonus",
     amount,
     status: "approved",
@@ -94,15 +152,24 @@ async function creditDailyOverride(options: {
       source: "daily_override",
       level,
       ratePct: 1,
-      baseProfit: roundTo(baseAmount, 4),
+      baseProfit: roundPlatform(baseAmount),
       memberId,
       memberName: memberName ?? null,
       uniqueKey,
       day: dayKey,
+      eventId: uniqueKey,
     },
     createdAt: postedAt,
     updatedAt: postedAt,
   } as any)
+
+  console.info("[commission-engine] credit", {
+    event_id: uniqueKey,
+    level: level === 1 ? "L1" : "L2",
+    percentage: 1,
+    base_amount: roundPlatform(baseAmount),
+    source: "daily",
+  })
 
   return { userId: recipientId, level, amount, memberId }
 }
@@ -113,6 +180,15 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const windowStart = startOfPreviousUtcDay(date)
   const windowEnd = endOfPreviousUtcDay(date)
   const dayKey = windowStart.toISOString().slice(0, 10)
+
+  if (!isPolicyEffectiveFor(windowEnd)) {
+    console.info("[commission-engine] daily_override_skipped", {
+      day: dayKey,
+      reason: "before_policy_effective",
+      effectiveFrom: getPolicyEffectiveAt().toISOString(),
+    })
+    return []
+  }
 
   const profitDocs = await TeamDailyProfit.find({
     profitDate: { $gte: windowStart, $lte: windowEnd },
@@ -127,13 +203,17 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const memberIds = Array.from(
     new Set(
       profitDocs
-        .map((doc) => (doc.memberId ? toObjectIdString(doc.memberId as any) : null))
+        .map((doc) => toObjectIdString(doc.memberId as any))
         .filter((value): value is string => Boolean(value)),
     ),
   )
 
-  const members = memberIds.length
-    ? await User.find({ _id: { $in: memberIds } })
+  const memberObjectIds = memberIds
+    .map((id) => toObjectId(id))
+    .filter((value): value is mongoose.Types.ObjectId => value !== null)
+
+  const members = memberObjectIds.length
+    ? await User.find({ _id: { $in: memberObjectIds } })
         .select({ _id: 1, referredBy: 1, name: 1 })
         .lean()
     : []
@@ -143,15 +223,23 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
 
   for (const member of members) {
     const id = toObjectIdString(member._id as any)
-    const referredBy = member.referredBy ? toObjectIdString(member.referredBy as any) : null
+    const referredBy = toObjectIdString(member.referredBy as any)
+    if (!id) {
+      continue
+    }
+
     memberMap.set(id, { referredBy, name: (member as any).name ?? null })
     if (referredBy) {
       sponsorIds.add(referredBy)
     }
   }
 
-  const sponsors = sponsorIds.size
-    ? await User.find({ _id: { $in: Array.from(sponsorIds) } })
+  const sponsorObjectIds = Array.from(sponsorIds)
+    .map((id) => toObjectId(id))
+    .filter((value): value is mongoose.Types.ObjectId => value !== null)
+
+  const sponsors = sponsorObjectIds.length
+    ? await User.find({ _id: { $in: sponsorObjectIds } })
         .select({ _id: 1, referredBy: 1 })
         .lean()
     : []
@@ -159,23 +247,34 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const sponsorMap = new Map<string, string | null>()
   for (const sponsor of sponsors) {
     const id = toObjectIdString(sponsor._id as any)
-    const sponsorSponsorId = sponsor.referredBy ? toObjectIdString(sponsor.referredBy as any) : null
+    if (!id) {
+      continue
+    }
+
+    const sponsorSponsorId = toObjectIdString(sponsor.referredBy as any)
     sponsorMap.set(id, sponsorSponsorId)
   }
 
   const outcomes: DailyOverrideResult[] = []
+  let skippedMissingUpline = 0
 
   for (const doc of profitDocs) {
-    const memberId = doc.memberId ? toObjectIdString(doc.memberId as any) : null
+    const memberId = toObjectIdString(doc.memberId as any)
     if (!memberId) continue
 
-    const baseProfit = Number(doc.profitAmount ?? 0)
+    const baseProfitRaw = Number(doc.profitAmount ?? 0)
+    const baseProfit = roundPlatform(baseProfitRaw)
     if (!Number.isFinite(baseProfit) || baseProfit <= 0) {
       continue
     }
 
     const memberInfo = memberMap.get(memberId)
-    const leaderId = memberInfo?.referredBy ?? null
+    if (!memberInfo) {
+      skippedMissingUpline += 2
+      continue
+    }
+
+    const leaderId = memberInfo.referredBy ?? null
     const memberName = memberInfo?.name ?? null
     const leaderLeaderId = leaderId ? sponsorMap.get(leaderId) ?? null : null
 
@@ -191,6 +290,8 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
 
     if (leaderOutcome) {
       outcomes.push(leaderOutcome)
+    } else if (!leaderId) {
+      skippedMissingUpline += 1
     }
 
     const leader2Outcome = await creditDailyOverride({
@@ -205,7 +306,16 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
 
     if (leader2Outcome) {
       outcomes.push(leader2Outcome)
+    } else if (!leaderLeaderId) {
+      skippedMissingUpline += 1
     }
+  }
+
+  if (skippedMissingUpline > 0) {
+    console.info("[commission-engine] daily_override_skipped_upline", {
+      day: dayKey,
+      skippedMissingUpline,
+    })
   }
 
   return outcomes

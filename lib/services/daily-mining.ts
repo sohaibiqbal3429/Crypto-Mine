@@ -6,6 +6,7 @@ import Balance from "@/models/Balance"
 import User from "@/models/User"
 import Transaction from "@/models/Transaction"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
+import { getPolicyEffectiveAt, isPolicyEffectiveFor } from "@/lib/utils/policy"
 
 function startOfUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
@@ -24,7 +25,9 @@ function startOfPreviousUtcDay(d: Date): Date {
   return start
 }
 
-function round(amount: number, decimals = 2): number {
+const PLATFORM_DECIMALS = 4
+
+function round(amount: number, decimals = PLATFORM_DECIMALS): number {
   const f = 10 ** decimals
   return Math.round(amount * f) / f
 }
@@ -78,6 +81,9 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
   let created = 0
   let skipped = 0
   let totalAmount = 0
+  let duplicatesPrevented = 0
+
+  const effectiveAt = getPolicyEffectiveAt()
 
   for (const b of balances) {
     const uid = isValidObjectId(b.userId) ? (b.userId as any).toString() : null
@@ -90,16 +96,25 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
 
     const overrideRate = rateByUser.get(uid)
     const rate = typeof overrideRate === "number" && overrideRate > 0 ? overrideRate : defaultRate
-    const amount = round((base * rate) / 100, 2)
+    const amount = round((base * rate) / 100)
     if (amount <= 0) {
       skipped += 1
       continue
     }
 
-    const uniqueKey = `DMP:${dayKey}:${uid}`
-    const existing = await Transaction.findOne({ userId: new mongoose.Types.ObjectId(uid), "meta.uniqueKey": uniqueKey }).select({ _id: 1 }).lean()
-    if (existing) {
+    if (!isPolicyEffectiveFor(windowEnd)) {
       skipped += 1
+      continue
+    }
+
+    const uniqueKey = `daily_mining:${uid}:${dayKey}`
+    const existingDoc = await Transaction.findOne({
+      userId: new mongoose.Types.ObjectId(uid),
+      "meta.uniqueKey": uniqueKey,
+    })
+    if (existingDoc) {
+      skipped += 1
+      duplicatesPrevented += 1
       continue
     }
 
@@ -120,8 +135,9 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
         source: "daily_mining_profit",
         uniqueKey,
         day: dayKey,
-        baseAmount: round(base, 2),
+        baseAmount: round(base),
         ratePct: rate,
+        eventId: uniqueKey,
       },
       createdAt: windowEnd,
       updatedAt: windowEnd,
@@ -131,7 +147,7 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
     const existingDgp = await TeamDailyProfit.findOne({
       memberId: new mongoose.Types.ObjectId(uid),
       profitDate: { $gte: windowStart, $lte: windowEnd },
-    }).select({ _id: 1 })
+    })
 
     if (!existingDgp) {
       await TeamDailyProfit.create({
@@ -142,11 +158,27 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
       } as any)
     }
 
+    console.info("[daily-mining] credit", {
+      event_id: uniqueKey,
+      level: "base",
+      percentage: rate,
+      base_amount: round(base),
+      source: "daily",
+    })
+
     created += 1
-    totalAmount = round(totalAmount + amount, 2)
+    totalAmount = round(totalAmount + amount)
   }
 
-  console.info("[daily-mining] cycle completed", { day: dayKey, created, skipped, totalAmount, defaultRate })
+  console.info("[daily-mining] cycle completed", {
+    day: dayKey,
+    created,
+    skipped,
+    totalAmount: round(totalAmount),
+    defaultRate,
+    duplicatesPrevented,
+    effectiveFrom: effectiveAt.toISOString(),
+  })
 
   return { day: dayKey, created, skipped, totalAmount, defaultRate }
 }

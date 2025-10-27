@@ -210,9 +210,11 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       ),
     ])
 
+    const activationId = transaction._id.toString()
     const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
-      depositTransactionId: transaction._id.toString(),
+      depositTransactionId: activationId,
       depositAt: transaction.createdAt,
+      activationId,
     })
 
     if (rewardOutcome.activated) {

@@ -42,6 +42,49 @@ export interface IUser extends Document {
   updatedAt: Date
 }
 
+type LeanReferral = { referredBy?: mongoose.Types.ObjectId | string | null }
+
+async function assertNoReferralCycle(
+  model: mongoose.Model<IUser>,
+  userId: mongoose.Types.ObjectId,
+  sponsorId: mongoose.Types.ObjectId,
+) {
+  if (userId.equals(sponsorId)) {
+    throw new Error("Users cannot refer themselves")
+  }
+
+  const visited = new Set<string>()
+  let current: mongoose.Types.ObjectId | null = sponsorId
+  const self = userId.toString()
+
+  while (current) {
+    const currentStr = current.toString()
+    if (currentStr === self) {
+      throw new Error("Referral relationship would create a cycle")
+    }
+
+    if (visited.has(currentStr)) {
+      break
+    }
+    visited.add(currentStr)
+
+    const ancestor = (await model
+      .findById(current)
+      .select({ referredBy: 1 })
+      .lean()) as LeanReferral | null
+
+    if (!ancestor?.referredBy) {
+      break
+    }
+
+    current = ancestor.referredBy instanceof mongoose.Types.ObjectId
+      ? ancestor.referredBy
+      : mongoose.Types.ObjectId.isValid(ancestor.referredBy)
+        ? new mongoose.Types.ObjectId(String(ancestor.referredBy))
+        : null
+  }
+}
+
 const UserSchema = new Schema<IUser>(
   {
     email: { type: String, required: true, unique: true, lowercase: true },
@@ -98,20 +141,75 @@ UserSchema.index({ email: 1 }, { unique: true })
 UserSchema.index({ status: 1, createdAt: -1 })
 UserSchema.index({ referredBy: 1 })
 
-UserSchema.pre("save", function (next) {
-  if (this.isModified("isActive") && !this.isModified("status")) {
-    this.status = this.isActive ? "active" : "inactive"
-  }
-
-  if (this.isModified("status")) {
-    if (this.status === "active") {
-      this.isActive = true
-    } else if (this.status === "inactive") {
-      this.isActive = false
+UserSchema.pre("save", async function (next) {
+  try {
+    if (this.isModified("isActive") && !this.isModified("status")) {
+      this.status = this.isActive ? "active" : "inactive"
     }
-  }
 
-  next()
+    if (this.isModified("status")) {
+      if (this.status === "active") {
+        this.isActive = true
+      } else if (this.status === "inactive") {
+        this.isActive = false
+      }
+    }
+
+    if (this.isModified("referredBy") && this.referredBy) {
+      const model = this.model("User") as mongoose.Model<IUser>
+      const userId = this._id instanceof mongoose.Types.ObjectId ? this._id : new mongoose.Types.ObjectId(String(this._id))
+      const sponsorId =
+        this.referredBy instanceof mongoose.Types.ObjectId
+          ? this.referredBy
+          : new mongoose.Types.ObjectId(String(this.referredBy))
+
+      await assertNoReferralCycle(model, userId, sponsorId)
+    }
+
+    next()
+  } catch (error) {
+    next(error as Error)
+  }
+})
+
+UserSchema.pre("findOneAndUpdate", async function (next) {
+  try {
+    const model = (this as any).model as mongoose.Model<IUser>
+    const updateDoc = (this.getUpdate() ?? {}) as Record<string, any>
+    const referredBy =
+      updateDoc.referredBy ??
+      updateDoc.$set?.referredBy ??
+      updateDoc.$setOnInsert?.referredBy
+
+    if (typeof referredBy === "undefined") {
+      return next()
+    }
+
+    if (!referredBy) {
+      return next()
+    }
+
+    const existing = await model
+      .findOne(this.getQuery())
+      .select({ _id: 1 })
+      .lean<{ _id: mongoose.Types.ObjectId | string }>()
+
+    if (!existing?._id) {
+      return next()
+    }
+
+    const userId = existing._id instanceof mongoose.Types.ObjectId ? existing._id : new mongoose.Types.ObjectId(String(existing._id))
+    const sponsorId =
+      referredBy instanceof mongoose.Types.ObjectId
+        ? referredBy
+        : new mongoose.Types.ObjectId(String(referredBy))
+
+    await assertNoReferralCycle(model, userId, sponsorId)
+
+    next()
+  } catch (error) {
+    next(error as Error)
+  }
 })
 
 export default createModelProxy<IUser>("User", UserSchema)
