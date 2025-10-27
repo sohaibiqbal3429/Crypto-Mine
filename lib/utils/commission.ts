@@ -333,6 +333,7 @@ interface ReferralCommissionOptions {
   dryRun?: boolean
   qualifiesForActivation?: boolean
   activationId?: string
+  forceActivation?: boolean
 }
 
 export async function processReferralCommission(
@@ -354,11 +355,16 @@ export async function processReferralCommission(
   }
 
   const activationAmount = roundCurrency(depositAmount)
+  const isActivationEvent = Boolean(options.qualifiesForActivation || options.forceActivation)
 
-  const qualifiesForRewards =
-    activationAmount >= requiredDeposit || Boolean(options.qualifiesForActivation)
-
-  if (!qualifiesForRewards) return null
+  if (!isActivationEvent) {
+    console.info("[commission] activation_skipped", {
+      event_id: `activation:${options.activationId ?? options.depositTransactionId ?? "manual"}`,
+      reason: "not_activation_event",
+      activationAmount,
+    })
+    return null
+  }
 
   const payout = await resolveDirectCommission(referredUser, activationAmount)
   if (!payout) return null
@@ -372,7 +378,7 @@ export async function processReferralCommission(
   const result: DirectCommissionResult = { ...payout }
 
   const overrideDetail: OverrideCommissionDetail | null = await (async () => {
-    if (!options.qualifiesForActivation) {
+    if (!options.qualifiesForActivation && !options.forceActivation) {
       return null
     }
 
@@ -765,6 +771,7 @@ interface DepositRewardOptions {
   adjustmentReason?: string
   dryRun?: boolean
   activationId?: string
+  forceActivation?: boolean
 }
 
 export async function applyDepositRewards(
@@ -780,7 +787,7 @@ export async function applyDepositRewards(
   const qualifiesForActivation = Boolean(
     userDoc && !userDoc.isActive && userDoc.depositTotal >= requiredDeposit,
   )
-  const qualifiesForRewards = depositAmount >= requiredDeposit || qualifiesForActivation
+  const isActivationEvent = Boolean(qualifiesForActivation || options.forceActivation)
 
   const updatedDepositTotal = Number(userDoc?.depositTotal ?? 0)
   const qualifiesForDirectActivation = updatedDepositTotal >= QUALIFYING_DIRECT_DEPOSIT
@@ -822,7 +829,7 @@ export async function applyDepositRewards(
     activated: boolean
     activationThreshold: number
   } = {
-    activated: qualifiesForActivation,
+    activated: isActivationEvent,
     activationThreshold: requiredDeposit,
     directCommission: null,
     overrideCommission: null,
@@ -837,7 +844,7 @@ export async function applyDepositRewards(
     await User.updateOne({ _id: userId }, { $set: { isActive: true } })
   }
 
-  if (qualifiesForRewards) {
+  if (isActivationEvent) {
     const existingDepositCredit = await Transaction.findOne({
       userId,
       type: "commission",
@@ -891,8 +898,9 @@ export async function applyDepositRewards(
       depositAt: options.depositAt,
       adjustmentReason: options.adjustmentReason,
       dryRun: options.dryRun,
-      qualifiesForActivation,
+      qualifiesForActivation: isActivationEvent,
       activationId,
+      forceActivation: options.forceActivation,
     },
   )
 

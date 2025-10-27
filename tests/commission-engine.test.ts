@@ -132,6 +132,66 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
   assert.equal(duplicateOverride.length, 1)
 })
 
+test("top-ups do not trigger additional activation commissions", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
+
+  const activationDeposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: 120,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: 120 } })
+
+  const activationId = toId(activationDeposit._id)
+  const activationOutcome = await applyDepositRewards(toId(member._id), 120, {
+    depositTransactionId: activationId,
+    depositAt: activationDeposit.createdAt,
+    activationId,
+  })
+
+  assert.equal(Number(activationOutcome.directCommission?.amount ?? 0), Number((120 * 0.15).toFixed(4)))
+  assert.equal(Number(activationOutcome.overrideCommission?.amount ?? 0), Number((120 * 0.03).toFixed(4)))
+
+  const topUpDeposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: 150,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: 150 } })
+
+  const topUpId = toId(topUpDeposit._id)
+  const topUpOutcome = await applyDepositRewards(toId(member._id), 150, {
+    depositTransactionId: topUpId,
+    depositAt: topUpDeposit.createdAt,
+    activationId: topUpId,
+  })
+
+  assert.equal(topUpOutcome.directCommission, null)
+  assert.equal(topUpOutcome.overrideCommission, null)
+  assert.equal(topUpOutcome.activated, false)
+
+  const allCommissionTx = (await Transaction.find({ type: "commission" })).map((tx) => toPlain<any>(tx))
+  const leaderDirects = allCommissionTx.filter(
+    (tx) => tx.meta?.source === "direct_referral" && toId(tx.userId) === toId(leader._id),
+  )
+
+  assert.equal(leaderDirects.length, 1)
+  assert.equal(Number(leaderDirects[0]?.meta?.commissionBase ?? 0), 120)
+
+  const level2Overrides = allCommissionTx.filter(
+    (tx) => tx.meta?.source === "activation_override" && toId(tx.userId) === toId(leaderLeader._id),
+  )
+
+  assert.equal(level2Overrides.length, 1)
+  assert.equal(Number(level2Overrides[0]?.meta?.commissionBase ?? 0), 120)
+})
+
 test("level-2 override requires activation threshold", async () => {
   const leaderLeader = await createUser()
   const leader = await createUser({ referredBy: leaderLeader._id })
