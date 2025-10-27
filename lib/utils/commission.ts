@@ -20,6 +20,9 @@ import {
 import { getPolicyEffectiveAt, isPolicyEffectiveFor } from "@/lib/utils/policy"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
+const SELF_BONUS_PCT = 5
+const DIRECT_REFERRAL_PCT = 15
+const LEVEL2_OVERRIDE_PCT = 3
 const FIRST_DEPOSIT_COMMISSION_AMOUNT = 2
 const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
 const PLATFORM_DECIMALS = 4
@@ -51,6 +54,109 @@ function resolveMinRewardDeposit(settings?: ISettings | null): number {
 function roundCurrency(amount: number, decimals = PLATFORM_DECIMALS): number {
   const factor = 10 ** decimals
   return Math.round(amount * factor) / factor
+}
+
+function toObjectId(value: unknown): mongoose.Types.ObjectId {
+  const idString = toObjectIdString(value)
+  if (!mongoose.isValidObjectId(idString)) {
+    throw new Error(`Invalid ObjectId value: ${idString}`)
+  }
+  return new mongoose.Types.ObjectId(idString)
+}
+
+interface TeamRewardCreditOptions {
+  userId: mongoose.Types.ObjectId | string
+  amount: number
+  occurredAt: Date
+  uniqueKey: string
+  source: string
+  meta?: Record<string, unknown>
+  logContext?: Record<string, unknown>
+}
+
+async function creditTeamReward({
+  userId,
+  amount,
+  occurredAt,
+  uniqueKey,
+  source,
+  meta = {},
+  logContext = {},
+}: TeamRewardCreditOptions): Promise<"posted" | "duplicate" | "skipped"> {
+  const roundedAmount = roundCurrency(amount)
+  if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+    console.info("[commission] credit_skipped", {
+      event_id: uniqueKey,
+      source,
+      amount: Number.isFinite(roundedAmount) ? roundedAmount : amount,
+      ...logContext,
+    })
+    return "skipped"
+  }
+
+  const userObjectId = toObjectId(userId)
+
+  const existing = await Transaction.findOne({
+    userId: userObjectId,
+    "meta.uniqueEventId": uniqueKey,
+  })
+
+  if (existing) {
+    console.info("[commission] duplicate_prevented", {
+      event_id: uniqueKey,
+      source,
+      amount: roundedAmount,
+      ...logContext,
+    })
+    return "duplicate"
+  }
+
+  await Balance.findOneAndUpdate(
+    { userId: userObjectId },
+    {
+      $inc: {
+        teamRewardsAvailable: roundedAmount,
+      },
+      $setOnInsert: {
+        current: 0,
+        totalBalance: 0,
+        totalEarning: 0,
+        lockedCapital: 0,
+        lockedCapitalLots: [],
+        staked: 0,
+        pendingWithdraw: 0,
+        teamRewardsClaimed: 0,
+        luckyDrawCredits: 0,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  )
+
+  await Transaction.create({
+    userId: userObjectId,
+    type: "teamReward",
+    amount: roundedAmount,
+    status: "approved",
+    claimable: true,
+    meta: {
+      source,
+      uniqueEventId: uniqueKey,
+      uniqueKey,
+      eventId: uniqueKey,
+      ...meta,
+    },
+    createdAt: occurredAt,
+    updatedAt: occurredAt,
+  })
+
+  console.info("[commission] credit", {
+    event_id: uniqueKey,
+    source,
+    amount: roundedAmount,
+    ...logContext,
+  })
+
+  return "posted"
 }
 
 function toPlainObject<T = any>(doc: any): T {
@@ -218,12 +324,12 @@ async function resolveDirectCommission(
     return null
   }
 
-  const amount = roundCurrency(depositAmount * 0.15)
+  const amount = roundCurrency(depositAmount * (DIRECT_REFERRAL_PCT / 100))
   if (amount <= 0) {
     return null
   }
 
-  return { sponsor, sponsorLevel: 1, amount, commissionPct: 15 }
+  return { sponsor, sponsorLevel: 1, amount, commissionPct: DIRECT_REFERRAL_PCT }
 }
 
 interface TeamOverridePayout {
@@ -373,7 +479,8 @@ export async function processReferralCommission(
     options.activationId ??
     options.depositTransactionId ??
     `manual:${referredUserId}:${occurredAt.toISOString()}`
-  const directUniqueKey = `activation:${activationId}:l1:${toObjectIdString(payout.sponsor._id)}`
+  const sponsorIdString = toObjectIdString(payout.sponsor._id)
+  const directUniqueKey = `${sponsorIdString}|${activationId}|L1_15`
 
   const result: DirectCommissionResult = { ...payout }
 
@@ -409,12 +516,17 @@ export async function processReferralCommission(
       return null
     }
 
-    const overrideAmount = roundCurrency(activationAmount * 0.03)
+    const overrideAmount = roundCurrency(activationAmount * (LEVEL2_OVERRIDE_PCT / 100))
     if (overrideAmount <= 0) {
       return null
     }
 
-    return { sponsor: leaderSponsor, amount: overrideAmount, commissionPct: 3, level: 2 }
+    return {
+      sponsor: leaderSponsor,
+      amount: overrideAmount,
+      commissionPct: LEVEL2_OVERRIDE_PCT,
+      level: 2,
+    }
   })()
 
   result.override = overrideDetail
@@ -423,34 +535,14 @@ export async function processReferralCommission(
     return result
   }
 
-  const sponsorId = toObjectIdString(payout.sponsor._id)
-  const sponsorObjectId = new mongoose.Types.ObjectId(sponsorId)
-
-  const existingDirect = await Transaction.findOne({
-    userId: sponsorObjectId,
-    "meta.uniqueEventId": directUniqueKey,
-  })
-
-  if (!existingDirect) {
-    await Balance.findOneAndUpdate(
-      { userId: sponsorObjectId },
-      {
-        $inc: {
-          current: payout.amount,
-          totalBalance: payout.amount,
-          totalEarning: payout.amount,
-        },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    )
-
-    await Transaction.create({
-      userId: sponsorObjectId,
-      type: "commission",
+  if (!options.dryRun) {
+    const creditResult = await creditTeamReward({
+      userId: sponsorIdString,
       amount: payout.amount,
-      status: "approved",
+      occurredAt,
+      uniqueKey: directUniqueKey,
+      source: "activation_direct",
       meta: {
-        source: "direct_referral",
         referredUserId,
         referredUserName: referredUser.name ?? null,
         depositAmount: activationAmount,
@@ -459,64 +551,38 @@ export async function processReferralCommission(
         sponsorLevel: payout.sponsorLevel,
         depositTransactionId: options.depositTransactionId ?? null,
         policyVersion: POLICY_ADJUSTMENT_REASON,
-        uniqueEventId: directUniqueKey,
         activationId,
-        eventId: directUniqueKey,
         ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+      },
+      logContext: {
+        level: "L1",
+        percentage: payout.commissionPct,
+        base_amount: activationAmount,
       },
     })
 
-    await Notification.create({
-      userId: sponsorObjectId,
-      kind: "referral-joined",
-      title: "Referral Commission Earned",
-      body: `You earned $${payout.amount.toFixed(4)} commission from ${referredUser.name}'s activation`,
-    })
-    console.info("[commission] credit", {
-      event_id: directUniqueKey,
-      level: "L1",
-      percentage: payout.commissionPct,
-      base_amount: activationAmount,
-      source: "activation",
-    })
-  } else {
-    console.info("[commission] duplicate_prevented", {
-      event_id: directUniqueKey,
-      level: "L1",
-      source: "activation",
-    })
+    if (creditResult === "posted") {
+      await Notification.create({
+        userId: toObjectId(sponsorIdString),
+        kind: "referral-joined",
+        title: "Referral Commission Earned",
+        body: `You earned $${payout.amount.toFixed(4)} commission from ${referredUser.name}'s activation`,
+      })
+    }
   }
 
   if (overrideDetail) {
     const overrideSponsorId = toObjectIdString(overrideDetail.sponsor._id)
-    const overrideUniqueKey = `activation:${activationId}:l2:${overrideSponsorId}`
-    const overrideSponsorObjectId = new mongoose.Types.ObjectId(overrideSponsorId)
+    const overrideUniqueKey = `${overrideSponsorId}|${activationId}|L2_3`
 
-    const existingOverride = await Transaction.findOne({
-      userId: overrideSponsorObjectId,
-      "meta.uniqueEventId": overrideUniqueKey,
-    })
-
-    if (!existingOverride) {
-      await Balance.findOneAndUpdate(
-        { userId: overrideSponsorObjectId },
-        {
-          $inc: {
-            current: overrideDetail.amount,
-            totalBalance: overrideDetail.amount,
-            totalEarning: overrideDetail.amount,
-          },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
-      )
-
-      await Transaction.create({
-        userId: overrideSponsorObjectId,
-        type: "commission",
+    if (!options.dryRun) {
+      await creditTeamReward({
+        userId: overrideSponsorId,
         amount: overrideDetail.amount,
-        status: "approved",
+        occurredAt,
+        uniqueKey: overrideUniqueKey,
+        source: "activation_level2_override",
         meta: {
-          source: "activation_override",
           referredUserId,
           referredUserName: referredUser.name ?? null,
           depositAmount: activationAmount,
@@ -525,24 +591,14 @@ export async function processReferralCommission(
           sponsorLevel: overrideDetail.level,
           depositTransactionId: options.depositTransactionId ?? null,
           policyVersion: POLICY_ADJUSTMENT_REASON,
-          uniqueEventId: overrideUniqueKey,
           activationId,
-          eventId: overrideUniqueKey,
           ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
         },
-      })
-      console.info("[commission] credit", {
-        event_id: overrideUniqueKey,
-        level: "L2",
-        percentage: overrideDetail.commissionPct,
-        base_amount: activationAmount,
-        source: "activation",
-      })
-    } else {
-      console.info("[commission] duplicate_prevented", {
-        event_id: overrideUniqueKey,
-        level: "L2",
-        source: "activation",
+        logContext: {
+          level: "L2",
+          percentage: overrideDetail.commissionPct,
+          base_amount: activationAmount,
+        },
       })
     }
   }
@@ -828,17 +884,52 @@ export async function applyDepositRewards(
     overrideCommission?: OverrideCommissionDetail | null
     activated: boolean
     activationThreshold: number
+    selfBonus?: number
   } = {
     activated: isActivationEvent,
     activationThreshold: requiredDeposit,
     directCommission: null,
     overrideCommission: null,
+    selfBonus: 0,
   }
 
   const activationId =
     options.activationId ??
     options.depositTransactionId ??
     `manual:${userId}:${(options.depositAt ?? new Date()).toISOString()}`
+
+  const depositOccurredAt = options.depositAt ?? new Date()
+  const depositReferenceId = options.depositTransactionId ?? activationId
+
+  if (!options.dryRun) {
+    const selfBonusAmount = roundCurrency(depositAmount * (SELF_BONUS_PCT / 100))
+    const selfUniqueKey = `${toObjectIdString(userId)}|${depositReferenceId}|self5`
+
+    const posted = await creditTeamReward({
+      userId,
+      amount: selfBonusAmount,
+      occurredAt: depositOccurredAt,
+      uniqueKey: selfUniqueKey,
+      source: "self_deposit_bonus",
+      meta: {
+        depositAmount: roundCurrency(depositAmount),
+        rewardPct: SELF_BONUS_PCT,
+        depositTransactionId: options.depositTransactionId ?? null,
+        activationId,
+        qualifiesForActivation: isActivationEvent,
+        label: "Self deposit bonus",
+      },
+      logContext: {
+        level: "SELF",
+        percentage: SELF_BONUS_PCT,
+        base_amount: roundCurrency(depositAmount),
+      },
+    })
+
+    if (posted === "posted") {
+      results.selfBonus = selfBonusAmount
+    }
+  }
 
   if (qualifiesForActivation && !options.dryRun) {
     await User.updateOne({ _id: userId }, { $set: { isActive: true } })
