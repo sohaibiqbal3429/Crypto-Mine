@@ -352,7 +352,7 @@ function describeHistoryEntry(entry: RewardHistoryEntry): string {
     case "salary":
       return entry.sourceUserName ? `Monthly salary (${entry.sourceUserName})` : "Monthly salary"
     default:
-      return "Team activity"
+      return entry.sourceUserName ?? "Team activity"
   }
 }
 
@@ -399,6 +399,20 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
 
   if (tx.type === "teamReward" && source === "daily_team_reward") {
     return "daily_profit"
+  }
+
+  if (tx.type === "teamReward") {
+    if (source === "activation_direct") {
+      return "deposit_commission"
+    }
+
+    if (source === "activation_level2_override") {
+      return "team_commission"
+    }
+
+    if (source === "self_deposit_bonus") {
+      return "other"
+    }
   }
 
   return "other"
