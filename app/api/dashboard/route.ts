@@ -38,12 +38,17 @@ export async function getDailyTeamRewardTotal(
   now: Date,
 ): Promise<number> {
   const { start, end, dayKey } = resolvePreviousUtcDayWindow(now)
-  const objectId = ensureObjectId(userId)
+  const userIdString = typeof userId === "string" ? userId : userId.toString()
+  const idCandidates: (string | mongoose.Types.ObjectId)[] = [userIdString]
+
+  if (mongoose.Types.ObjectId.isValid(userIdString)) {
+    idCandidates.push(new mongoose.Types.ObjectId(userIdString))
+  }
 
   const results = await Payout.aggregate([
     {
       $match: {
-        userId: objectId,
+        userId: { $in: idCandidates },
         type: "daily_team_earning",
         $or: [
           { "meta.day": dayKey },
