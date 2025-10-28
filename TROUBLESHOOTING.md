@@ -106,12 +106,24 @@ git stash pop
 
 ### 3. Discard the local changes
 
-If the edits were unintentional, reset the files to the last committed state:
+If the edits were unintentional, reset the files to the last committed state.
+You can do this manually or by using the helper script described below.
 
 ```bash
-git checkout -- package.json package-lock.json
+git restore --staged --worktree package.json package-lock.json
 git pull
 ```
+
+If you run into the problem regularly, use the provided script so you don't
+have to remember the exact Git plumbing:
+
+```bash
+scripts/reset-package-files.sh
+git pull
+```
+
+The script clears any lingering `skip-worktree` flags and restores both files
+to their committed versions before you retry the pull.
 
 If the files are marked with the `skip-worktree` flag (visible as an `H` in
 `git ls-files -v` output), clear it before retrying:
