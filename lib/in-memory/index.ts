@@ -1162,7 +1162,7 @@ function createSettings(): InMemoryDocument[] {
       mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80, capitalLockDays: 30 },
       joiningBonus: { threshold: 0, pct: 0 },
-      commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
+      commission: { baseDirectPct: 15, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
       createdAt: now,
       updatedAt: now,
     },
@@ -1175,7 +1175,7 @@ function createCommissionRules(): InMemoryDocument[] {
     {
       _id: generateObjectId(),
       level: 1,
-      directPct: 7,
+      directPct: 15,
       teamDailyPct: 1,
       teamRewardPct: 0,
       activeMin: 5,
@@ -1197,7 +1197,7 @@ function createCommissionRules(): InMemoryDocument[] {
     {
       _id: generateObjectId(),
       level: 2,
-      directPct: 8,
+      directPct: 15,
       teamDailyPct: 1,
       teamRewardPct: 0,
       activeMin: 10,
@@ -1235,7 +1235,7 @@ function createCommissionRules(): InMemoryDocument[] {
     {
       _id: generateObjectId(),
       level: 3,
-      directPct: 8,
+      directPct: 15,
       teamDailyPct: 8,
       teamRewardPct: 2,
       activeMin: 15,
@@ -1313,7 +1313,7 @@ function createCommissionRules(): InMemoryDocument[] {
     {
       _id: generateObjectId(),
       level: 4,
-      directPct: 9,
+      directPct: 15,
       teamDailyPct: 0,
       teamRewardPct: 2,
       activeMin: 23,
@@ -1361,7 +1361,7 @@ function createCommissionRules(): InMemoryDocument[] {
     {
       _id: generateObjectId(),
       level: 5,
-      directPct: 10,
+      directPct: 15,
       teamDailyPct: 0,
       teamRewardPct: 2,
       activeMin: 30,

@@ -249,7 +249,7 @@ export function LevelProgress({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Direct Commission:</span>
                     <span className="font-medium text-green-600">
-                      {nextRule.directPct}% (+{nextRule.directPct - (currentRule?.directPct || 7)}%)
+                      {nextRule.directPct}% (+{nextRule.directPct - (currentRule?.directPct || 15)}%)
                     </span>
                   </div>
                   {nextOverrides.map((summary) => (

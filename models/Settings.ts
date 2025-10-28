@@ -56,7 +56,7 @@ const SettingsSchema = new Schema<ISettings>(
       pct: { type: Number, default: 0 },
     },
     commission: {
-      baseDirectPct: { type: Number, default: 7 },
+      baseDirectPct: { type: Number, default: 15 },
       startAtDeposit: { type: Number, default: 50 },
       highTierPct: { type: Number, default: 5 },
       highTierStartAt: { type: Number, default: 100 },

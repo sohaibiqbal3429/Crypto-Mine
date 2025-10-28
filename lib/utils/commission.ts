@@ -150,6 +150,8 @@ interface DirectCommissionComputation {
   sponsor: any
   sponsorLevel: number
   rule: ICommissionRule
+  /** Effective direct commission percent used for payout */
+  pct: number
   amount: number
 }
 
@@ -170,12 +172,18 @@ async function resolveDirectCommission(
     notify: shouldPersist,
   })
   const rule = await getCommissionRuleForLevel(sponsorLevel)
-  if (!rule || rule.directPct <= 0) return null
+  if (!rule) return null
 
-  const amount = roundCurrency((depositAmount * rule.directPct) / 100)
+  // Use configured base direct percent when available; fallback to rule value
+  const settings = await Settings.findOne()
+  const configuredPct = Number(settings?.commission?.baseDirectPct)
+  const effectivePct = Number.isFinite(configuredPct) && configuredPct > 0 ? configuredPct : rule.directPct
+  if (!Number.isFinite(effectivePct) || effectivePct <= 0) return null
+
+  const amount = roundCurrency((depositAmount * effectivePct) / 100)
   if (amount <= 0) return null
 
-  return { sponsor, sponsorLevel, rule, amount }
+  return { sponsor, sponsorLevel, rule, pct: effectivePct, amount }
 }
 
 interface TeamOverridePayout {
@@ -385,7 +393,7 @@ export async function processReferralCommission(
       event_id: directUniqueKey,
       source: "direct_referral",
       level: "L1",
-      percentage: payout.rule.directPct,
+      percentage: payout.pct,
       base_amount: roundCurrency(depositAmount),
     })
   } else {
@@ -412,7 +420,7 @@ export async function processReferralCommission(
         referredUserId,
         referredUserName: referredUser.name ?? null,
         depositAmount,
-        commissionPct: payout.rule.directPct, // typically 15%
+        commissionPct: payout.pct, // typically 15%
         sponsorLevel: payout.sponsorLevel,
         depositTransactionId: options.depositTransactionId ?? null,
         policyVersion: POLICY_ADJUSTMENT_REASON,
@@ -426,7 +434,7 @@ export async function processReferralCommission(
       event_id: directUniqueKey,
       source: "direct_referral",
       level: "L1",
-      percentage: payout.rule.directPct,
+      percentage: payout.pct,
       amount: payout.amount,
       base_amount: roundCurrency(depositAmount),
     })

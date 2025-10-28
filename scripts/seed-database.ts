@@ -165,7 +165,7 @@ export async function seedDatabase(): Promise<SeedResult> {
       mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
       gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80 },
       joiningBonus: { threshold: 0, pct: 0 },
-      commission: { baseDirectPct: 7, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
+      commission: { baseDirectPct: 15, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
     })
     createdSettings = true
     console.log("✓ Default settings created")
@@ -175,7 +175,7 @@ export async function seedDatabase(): Promise<SeedResult> {
   const commissionRules: CommissionRuleSeedDoc[] = [
     {
       level: 1,
-      directPct: 7,
+      directPct: 15,
       teamDailyPct: 1,
       teamRewardPct: 0,
       activeMin: 5,
@@ -194,7 +194,7 @@ export async function seedDatabase(): Promise<SeedResult> {
     },
     {
       level: 2,
-      directPct: 8,
+      directPct: 15,
       teamDailyPct: 1,
       teamRewardPct: 0,
       activeMin: 10,
@@ -229,7 +229,7 @@ export async function seedDatabase(): Promise<SeedResult> {
     },
     {
       level: 3,
-      directPct: 8,
+      directPct: 15,
       teamDailyPct: 8,
       teamRewardPct: 2,
       activeMin: 15,
@@ -304,7 +304,7 @@ export async function seedDatabase(): Promise<SeedResult> {
     },
     {
       level: 4,
-      directPct: 9,
+      directPct: 15,
       teamDailyPct: 0,
       teamRewardPct: 2,
       activeMin: 23,
@@ -349,7 +349,7 @@ export async function seedDatabase(): Promise<SeedResult> {
     },
     {
       level: 5,
-      directPct: 10,
+      directPct: 15,
       teamDailyPct: 0,
       teamRewardPct: 2,
       activeMin: 30,
