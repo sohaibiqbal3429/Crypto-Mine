@@ -59,7 +59,7 @@ const LEVELS: LevelDefinition[] = [
   {
     id: 1,
     eligibility: { directs_active: 5 },
-    direct_rate: 0.07,
+    direct_rate: 0.15,
     team_profit_rate: 0.01,
     teams_profit: ["A"],
   },

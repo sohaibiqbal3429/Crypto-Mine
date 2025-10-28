@@ -186,7 +186,7 @@ export async function performMiningClick(userId: string) {
     throw error
   }
 
-  const baseAmount = user.depositTotal
+  const baseAmount = Number(balance.current ?? 0)
   const profit = calculateMiningProfit(baseAmount, settings.dailyProfitPercent)
 
   const newRoiTotal = user.roiEarnedTotal + profit
