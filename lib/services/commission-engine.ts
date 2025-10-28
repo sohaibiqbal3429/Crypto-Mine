@@ -2,21 +2,39 @@ import mongoose from "mongoose"
 
 import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
-<<<<<<< HEAD
 import Payout from "@/models/Payout"
 // import { getTeamDailyProfitPercent } from "@/lib/services/settings" // not needed now (fixed 1%/1%)
-=======
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 import TeamDailyProfit from "@/models/TeamDailyProfit"
-import Transaction from "@/models/Transaction"
+import Transaction, { type ITransaction } from "@/models/Transaction"
 import User from "@/models/User"
-import { getPolicyEffectiveAt, isPolicyEffectiveFor } from "@/lib/utils/policy"
 
-interface DailyOverrideResult {
+type TeamCode = "A" | "B" | "C" | "D"
+
+interface LevelEligibility {
+  directs_active?: number
+  directs_fresh_active?: number
+}
+
+interface LevelDefinition {
+  id: number
+  eligibility: LevelEligibility
+  direct_rate?: number
+  team_deposit_rate?: number
+  team_profit_rate?: number
+  teams_profit?: TeamCode[]
+  teams_deposit?: TeamCode[]
+  monthly_bonus?: { threshold_direct_usdt: number; amount: number; tier: "2200" | "4500" }
+}
+
+interface LevelComputationResult {
+  level: number
+  activeDirects: number
+  freshActiveDirects: number
+}
+
+interface DailyTeamProfitResult {
   userId: string
-  level: 1 | 2
   amount: number
-<<<<<<< HEAD
   level: number
   totalTeamProfit: number
   teams: TeamCode[]
@@ -113,9 +131,6 @@ function roundDown(amount: number, decimals = 4): number {
   const factor = 10 ** decimals
   if (amount <= 0) return Math.ceil(amount * factor) / factor
   return Math.floor(amount * factor) / factor
-=======
-  memberId: string
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 function startOfUtcDay(date: Date): Date {
@@ -133,7 +148,6 @@ function endOfPreviousUtcDay(date: Date): Date {
   return end
 }
 
-<<<<<<< HEAD
 function resolveMonthRange(referenceDate: Date) {
   const normalized = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), 1))
   const start = new Date(Date.UTC(normalized.getUTCFullYear(), normalized.getUTCMonth() - 1, 1))
@@ -151,97 +165,14 @@ async function fetchDirectReferrals(userId: string) {
     "_id depositTotal qualified qualifiedAt createdAt updatedAt",
   )
   return docs.map((doc) => toPlain(doc)!)
-=======
-const PLATFORM_DECIMALS = 4
-
-function roundTo(amount: number, decimals: number): number {
-  if (!Number.isFinite(amount)) {
-    return 0
-  }
-
-  const factor = 10 ** decimals
-  return Math.round(amount * factor) / factor
 }
 
-function roundPlatform(amount: number): number {
-  return roundTo(amount, PLATFORM_DECIMALS)
-}
-
-function normaliseObjectId(value: mongoose.Types.ObjectId | string | null | undefined): string | null {
-  if (!value) {
-    return null
-  }
-
-  if (typeof value === "string") {
-    return value
-  }
-
-  if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
-    return (value as { toHexString: () => string }).toHexString()
-  }
-
-  if (typeof (value as { toString?: () => string }).toString === "function") {
-    const str = (value as { toString: () => string }).toString()
-    if (str && str !== "[object Object]") {
-      return str
-    }
-  }
-
-  if (typeof (value as { buffer?: ArrayLike<number> }).buffer === "object") {
-    const bufferLike = (value as { buffer?: ArrayLike<number> }).buffer
-    const bytes = Array.from(bufferLike ?? [])
-    if (bytes.length > 0) {
-      return Buffer.from(bytes).toString("hex")
-    }
-  }
-
-  return null
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
-}
-
-function toObjectIdString(value: mongoose.Types.ObjectId | string | null | undefined): string | null {
-  return normaliseObjectId(value)
-}
-
-function toObjectId(value: string): mongoose.Types.ObjectId | null {
-  if (!mongoose.isValidObjectId(value)) {
-    return null
-  }
-
-  return new mongoose.Types.ObjectId(value)
-}
-
-async function creditDailyOverride(options: {
-  recipientId: string | null
-  level: 1 | 2
-  baseAmount: number
-  memberId: string
-  memberName?: string | null
-  dayKey: string
-  postedAt: Date
-}): Promise<DailyOverrideResult | null> {
-  const { recipientId, level, baseAmount, memberId, memberName, dayKey, postedAt } = options
-  if (!recipientId) {
-    return null
-  }
-
-  const amount = roundPlatform(baseAmount * 0.01)
-  if (amount <= 0) {
-    return null
-  }
-
-  if (!isPolicyEffectiveFor(postedAt)) {
-    return null
-  }
-
-  const uniqueKey = `${recipientId}|${dayKey}|${level === 1 ? "ovrL1" : "ovrL2"}|${memberId}`
-  const userObjectId = new mongoose.Types.ObjectId(recipientId)
-
-  const existing = await Transaction.findOne({
-    userId: userObjectId,
-    "meta.uniqueKey": uniqueKey,
+async function countActiveDirects(userId: string, date: Date) {
+  const referrals = await fetchDirectReferrals(userId)
+  const activeReferrals = referrals.filter((referral) => {
+    const total = Number(referral.depositTotal ?? 0)
+    return Number.isFinite(total) && total >= ACTIVE_THRESHOLD
   })
-<<<<<<< HEAD
   return { active: activeReferrals.length, fresh: activeReferrals.length }
 }
 
@@ -345,39 +276,15 @@ async function applyPayout({
       date,
       uniqueKey,
       meta,
-=======
-
-  if (existing) {
-    console.info("[commission-engine] duplicate_prevented", {
-      event_id: uniqueKey,
-      level: level === 1 ? "L1" : "L2",
-      source: "daily",
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
     })
-    return null
-  }
 
-<<<<<<< HEAD
     const balanceUpdate =
       type === "team_profit" || type === "daily_team_earning"
         ? { $inc: { teamRewardsAvailable: roundedAmount } }
         : { $inc: { current: roundedAmount, totalBalance: roundedAmount, totalEarning: roundedAmount } }
-=======
-  let balanceUpdated = false
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 
-  const attemptUpdate = async (filter: Record<string, unknown>) => {
-    if (balanceUpdated) return
-    const result = await Balance.updateOne(
-      filter,
-      {
-        $inc: {
-          teamRewardsAvailable: amount,
-        },
-      },
-    )
+    await Balance.updateOne({ userId: ensureObjectId(userId) }, balanceUpdate, { upsert: true })
 
-<<<<<<< HEAD
     const transactionType: ITransaction["type"] =
       type === "team_profit" || type === "daily_team_earning"
         ? "teamReward"
@@ -587,108 +494,19 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
     payouts: createdEntries,
     uniqueReceivers: results.length,
     totalAmount: summaryTotal,
-=======
-    if ((result as any)?.modifiedCount > 0 || (result as any)?.matchedCount > 0) {
-      balanceUpdated = true
-    }
-  }
-
-  await attemptUpdate({ userId: recipientId })
-  if (!balanceUpdated) {
-    await attemptUpdate({ userId: userObjectId })
-  }
-
-  if (!balanceUpdated) {
-    await Balance.create({
-      userId: userObjectId,
-      current: 0,
-      totalBalance: 0,
-      totalEarning: 0,
-      teamRewardsClaimed: 0,
-      teamRewardsAvailable: amount,
-    } as any)
-  }
-
-  await Transaction.create({
-    userId: userObjectId,
-    type: "teamReward",
-    amount,
-    status: "approved",
-    claimable: true,
-    meta: {
-      source: "daily_team_reward",
-      overrideKind: level === 1 ? "DAILY_OVERRIDE_L1" : "DAILY_OVERRIDE_L2",
-      overridePct: 1,
-      level,
-      baseProfit: roundPlatform(baseAmount),
-      memberId,
-      memberName: memberName ?? null,
-      uniqueKey,
-      day: dayKey,
-      eventId: uniqueKey,
-    },
-    createdAt: postedAt,
-    updatedAt: postedAt,
-  } as any)
-
-  console.info("[commission-engine] credit", {
-    event_id: uniqueKey,
-    level: level === 1 ? "L1" : "L2",
-    percentage: 1,
-    base_amount: roundPlatform(baseAmount),
-    source: "daily",
   })
 
-  return { userId: recipientId, level, amount, memberId }
+  return results
 }
 
-export async function payDailyTeamProfit(date: Date = new Date()): Promise<DailyOverrideResult[]> {
-  await dbConnect()
-
-  const windowStart = startOfPreviousUtcDay(date)
-  const windowEnd = endOfPreviousUtcDay(date)
-  const dayKey = windowStart.toISOString().slice(0, 10)
-
-  if (!isPolicyEffectiveFor(windowEnd)) {
-    console.info("[commission-engine] daily_override_skipped", {
-      day: dayKey,
-      reason: "before_policy_effective",
-      effectiveFrom: getPolicyEffectiveAt().toISOString(),
-    })
-    return []
-  }
-
-  const profitDocs = await TeamDailyProfit.find({
-    profitDate: { $gte: windowStart, $lte: windowEnd },
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
-  })
-    .select({ memberId: 1, profitAmount: 1 })
-    .lean()
-
-  if (profitDocs.length === 0) {
-    return []
-  }
-
-<<<<<<< HEAD
 /** ----------------- Monthly bonuses (unchanged) ----------------- */
 export async function payMonthlyBonuses(date: Date = new Date()) {
   await dbConnect()
   const { start, end, monthKey } = resolveMonthRange(date)
-=======
-  const memberIds = Array.from(
-    new Set(
-      profitDocs
-        .map((doc) => toObjectIdString(doc.memberId as any))
-        .filter((value): value is string => Boolean(value)),
-    ),
-  )
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 
-  const memberObjectIds = memberIds
-    .map((id) => toObjectId(id))
-    .filter((value): value is mongoose.Types.ObjectId => value !== null)
+  const userDocs = await User.find().select("_id")
+  const outcomes: CommissionOutcome[] = []
 
-<<<<<<< HEAD
   for (const userDoc of userDocs) {
     const user = toPlain(userDoc)
     if (!user?._id) continue
@@ -716,121 +534,33 @@ export async function payMonthlyBonuses(date: Date = new Date()) {
 
     const totalDeposits = teamADeposits[0]?.total ?? 0
     if (totalDeposits < levelDefinition.monthly_bonus.threshold_direct_usdt) continue
-=======
-  const members = memberObjectIds.length
-    ? await User.find({ _id: { $in: memberObjectIds } })
-        .select({ _id: 1, referredBy: 1, name: 1 })
-        .lean()
-    : []
 
-  const memberMap = new Map<string, { referredBy: string | null; name?: string | null }>()
-  const sponsorIds = new Set<string>()
-
-  for (const member of members) {
-    const id = toObjectIdString(member._id as any)
-    const referredBy = toObjectIdString(member.referredBy as any)
-    if (!id) {
-      continue
-    }
-
-    memberMap.set(id, { referredBy, name: (member as any).name ?? null })
-    if (referredBy) {
-      sponsorIds.add(referredBy)
-    }
-  }
-
-  const sponsorObjectIds = Array.from(sponsorIds)
-    .map((id) => toObjectId(id))
-    .filter((value): value is mongoose.Types.ObjectId => value !== null)
-
-  const sponsors = sponsorObjectIds.length
-    ? await User.find({ _id: { $in: sponsorObjectIds } })
-        .select({ _id: 1, referredBy: 1 })
-        .lean()
-    : []
-
-  const sponsorMap = new Map<string, string | null>()
-  for (const sponsor of sponsors) {
-    const id = toObjectIdString(sponsor._id as any)
-    if (!id) {
-      continue
-    }
-
-    const sponsorSponsorId = toObjectIdString(sponsor.referredBy as any)
-    sponsorMap.set(id, sponsorSponsorId)
-  }
-
-  const outcomes: DailyOverrideResult[] = []
-  let skippedMissingUpline = 0
-
-  for (const doc of profitDocs) {
-    const memberId = toObjectIdString(doc.memberId as any)
-    if (!memberId) continue
-
-    const baseProfitRaw = Number(doc.profitAmount ?? 0)
-    const baseProfit = roundPlatform(baseProfitRaw)
-    if (!Number.isFinite(baseProfit) || baseProfit <= 0) {
-      continue
-    }
->>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
-
-    const memberInfo = memberMap.get(memberId)
-    if (!memberInfo) {
-      skippedMissingUpline += 2
-      continue
-    }
-
-    const leaderId = memberInfo.referredBy ?? null
-    const memberName = memberInfo?.name ?? null
-    const leaderLeaderId = leaderId ? sponsorMap.get(leaderId) ?? null : null
-
-    const leaderOutcome = await creditDailyOverride({
-      recipientId: leaderId,
-      level: 1,
-      baseAmount: baseProfit,
-      memberId,
-      memberName,
-      dayKey,
-      postedAt: windowEnd,
+    const uniqueKey = `MB:${monthKey}:${userId}:${levelDefinition.monthly_bonus.tier}`
+    const outcome = await applyPayout({
+      userId,
+      type: "monthly_bonus",
+      amount: levelDefinition.monthly_bonus.amount,
+      date: end,
+      uniqueKey,
+      meta: {
+        level: levelInfo.level,
+        month: monthKey,
+        threshold: levelDefinition.monthly_bonus.threshold_direct_usdt,
+        teamDeposits: roundAmount(totalDeposits),
+      },
     })
 
-    if (leaderOutcome) {
-      outcomes.push(leaderOutcome)
-    } else if (!leaderId) {
-      skippedMissingUpline += 1
-    }
-
-    const leader2Outcome = await creditDailyOverride({
-      recipientId: leaderLeaderId,
-      level: 2,
-      baseAmount: baseProfit,
-      memberId,
-      memberName,
-      dayKey,
-      postedAt: windowEnd,
-    })
-
-    if (leader2Outcome) {
-      outcomes.push(leader2Outcome)
-    } else if (!leaderLeaderId) {
-      skippedMissingUpline += 1
-    }
-  }
-
-  if (skippedMissingUpline > 0) {
-    console.info("[commission-engine] daily_override_skipped_upline", {
-      day: dayKey,
-      skippedMissingUpline,
-    })
+    outcomes.push(outcome)
   }
 
   return outcomes
 }
 
 export async function runDailyCommissionEngine(date: Date = new Date()) {
+  await refreshAllUserLevels(date)
   return payDailyTeamProfit(date)
 }
 
-export async function runMonthlyBonusCycle() {
-  return []
+export async function runMonthlyBonusCycle(date: Date = new Date()) {
+  return payMonthlyBonuses(date)
 }
