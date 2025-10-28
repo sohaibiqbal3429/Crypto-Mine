@@ -20,13 +20,7 @@ export function KPICards({ kpis }: KPICardsProps) {
   const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
 
   const cards = [
-    {
-      title: "Total Earning",
-      value: formatCurrency(kpis.totalEarning),
-      icon: TrendingUp,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
+   
     {
       title: "Total Balance",
       value: formatCurrency(kpis.totalBalance),
@@ -55,13 +49,7 @@ export function KPICards({ kpis }: KPICardsProps) {
       color: "text-orange-600",
       bgColor: "bg-orange-50",
     },
-    {
-      title: "Daily Team Reward",
-      value: formatCurrency(kpis.teamRewardToday ?? kpis.teamReward),
-      icon: Trophy,
-      color: "text-indigo-600",
-      bgColor: "bg-indigo-50",
-    },
+    
   ]
 
   return (
