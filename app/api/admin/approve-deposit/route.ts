@@ -57,12 +57,14 @@ export async function POST(request: NextRequest) {
     ])
 
     // Apply deposit commissions and referral rewards
+    const activationId = transaction._id.toString()
     const rewardOutcome = await applyDepositRewards(
       transaction.userId.toString(),
       transaction.amount,
       {
-        depositTransactionId: transaction._id.toString(),
+        depositTransactionId: activationId,
         depositAt: transaction.createdAt,
+        activationId,
       },
     )
 

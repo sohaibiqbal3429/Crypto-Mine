@@ -424,8 +424,8 @@ function createModelProxy<T extends InMemoryDocument>(collection: InMemoryCollec
       await collection.updateOne({ _id: id }, update)
       return collection.findById(id)
     },
-    findOneAndUpdate: async (filter: QueryFilter, update: UpdateSpec) => {
-      await collection.updateOne(filter, update)
+    findOneAndUpdate: async (filter: QueryFilter, update: UpdateSpec, options?: UpdateOptions) => {
+      await collection.updateOne(filter, update, options)
       return collection.findOne(filter)
     },
   }
@@ -585,6 +585,41 @@ function compareValues(
   return false
 }
 
+function normalizeForComparison(value: any): any {
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value.toString()
+  }
+
+  if (value && typeof value === "object") {
+    if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
+      return (value as { toHexString: () => string }).toHexString()
+    }
+
+    if (typeof value.toString === "function") {
+      const stringValue = value.toString()
+      if (stringValue && stringValue !== "[object Object]") {
+        return stringValue
+      }
+    }
+  }
+
+  return value
+}
+
+function valuesEqual(actual: any, expected: any): boolean {
+  if (Array.isArray(actual)) {
+    return actual.some((item) => valuesEqual(item, expected))
+  }
+
+  if (Array.isArray(expected)) {
+    return expected.some((item) => valuesEqual(actual, item))
+  }
+
+  const normalizedActual = normalizeForComparison(actual)
+  const normalizedExpected = normalizeForComparison(expected)
+  return normalizedActual === normalizedExpected
+}
+
 function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
   return Object.entries(filter).every(([key, expected]) => {
     if (key === "$or" && Array.isArray(expected)) {
@@ -596,20 +631,6 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
     }
 
     const actual = getValueAtPath(doc, key)
-
-    if (expected instanceof mongoose.Types.ObjectId) {
-      const actualValue =
-        actual instanceof mongoose.Types.ObjectId
-          ? actual.toString()
-          : typeof actual === "string"
-            ? actual
-            : actual?.toString?.() ?? actual
-      return actualValue === expected.toString()
-    }
-
-    if (actual instanceof mongoose.Types.ObjectId && typeof expected === "string") {
-      return actual.toString() === expected
-    }
 
     if (expected && typeof expected === "object" && !(expected instanceof Date) && !Array.isArray(expected)) {
       return Object.entries(expected).every(([operator, value]) => {
@@ -623,13 +644,13 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
           case "$lt":
             return compareValues(actual, value, (a, b) => a < b)
           case "$in":
-            return Array.isArray(value) && value.includes(actual)
+            return Array.isArray(value) && value.some((candidate) => valuesEqual(actual, candidate))
           case "$nin":
-            return Array.isArray(value) && !value.includes(actual)
+            return Array.isArray(value) && !value.some((candidate) => valuesEqual(actual, candidate))
           case "$ne":
-            return actual !== value
+            return !valuesEqual(actual, value)
           case "$eq":
-            return actual === value
+            return valuesEqual(actual, value)
           case "$regex": {
             const regex = value instanceof RegExp ? value : new RegExp(String(value), (expected as any).$options || "")
             return typeof actual === "string" && regex.test(actual)
@@ -644,7 +665,7 @@ function matchesFilter(doc: Record<string, any>, filter: QueryFilter): boolean {
       })
     }
 
-    return actual === expected
+    return valuesEqual(actual, expected)
   })
 }
 
@@ -907,6 +928,23 @@ function createModelInstance<T extends Record<string, any>>(
     toObject: () => T
     toJSON: () => T
   }
+
+  Object.defineProperty(instance, "id", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const rawId = (instance as unknown as { _id?: string | mongoose.Types.ObjectId })._id
+      return typeof rawId === "string" ? rawId : rawId ? rawId.toString() : undefined
+    },
+    set(value: string | mongoose.Types.ObjectId | undefined) {
+      if (value == null) {
+        return
+      }
+
+      const normalized = typeof value === "string" ? value : value.toString()
+      ;(instance as unknown as { _id?: string })._id = normalized
+    },
+  })
 
   Object.defineProperty(instance, "save", {
     enumerable: false,

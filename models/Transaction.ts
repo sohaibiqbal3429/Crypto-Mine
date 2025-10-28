@@ -18,6 +18,8 @@ export interface ITransaction extends Document {
   meta: any
   userEmail?: string
   status?: "pending" | "approved" | "rejected"
+  claimable?: boolean
+  claimedAt?: Date
   createdAt: Date
 }
 
@@ -42,6 +44,8 @@ const TransactionSchema = new Schema<ITransaction>(
     amount: { type: Number, required: true },
     userEmail: { type: String, index: true },
     meta: { type: Schema.Types.Mixed },
+    claimable: { type: Boolean, default: false },
+    claimedAt: { type: Date },
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
@@ -60,5 +64,41 @@ TransactionSchema.index({ status: 1, createdAt: -1 })
 TransactionSchema.index({ userEmail: 1 })
 TransactionSchema.index({ createdAt: -1, _id: 1 })
 TransactionSchema.index({ type: 1, status: 1 })
+TransactionSchema.index({ userId: 1, claimable: 1, status: 1 })
+TransactionSchema.index({ "meta.uniqueKey": 1 })
+
+TransactionSchema.virtual("id").get(function (this: ITransaction) {
+  return this._id ? this._id.toString() : undefined
+})
+
+TransactionSchema.set("id", true)
+
+function ensureIdAccessor(doc: ITransaction | null) {
+  if (!doc) {
+    return
+  }
+
+  const target = doc as unknown as Record<string, unknown>
+  const descriptor = Object.getOwnPropertyDescriptor(target, "id")
+
+  if (!descriptor || descriptor.get === undefined) {
+    Object.defineProperty(target, "id", {
+      configurable: true,
+      enumerable: true,
+      get(this: ITransaction) {
+        return this._id ? this._id.toString() : undefined
+      },
+    })
+  }
+}
+
+TransactionSchema.post("init", ensureIdAccessor)
+TransactionSchema.post("save", ensureIdAccessor)
+TransactionSchema.post("findOne", ensureIdAccessor)
+TransactionSchema.post("find", (docs) => {
+  for (const doc of docs as ITransaction[]) {
+    ensureIdAccessor(doc)
+  }
+})
 
 export default createModelProxy<ITransaction>("Transaction", TransactionSchema)

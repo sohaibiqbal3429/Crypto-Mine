@@ -17,9 +17,18 @@ import {
   QUALIFYING_DIRECT_DEPOSIT,
   hasQualifiedDeposit,
 } from "@/lib/utils/leveling"
+import { getPolicyEffectiveAt, isPolicyEffectiveFor } from "@/lib/utils/policy"
 
 const MIN_DEPOSIT_FOR_REWARDS = 80
+<<<<<<< HEAD
+=======
+const SELF_BONUS_PCT = 5
+const DIRECT_REFERRAL_PCT = 15
+const LEVEL2_OVERRIDE_PCT = 3
+const FIRST_DEPOSIT_COMMISSION_AMOUNT = 2
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
+const PLATFORM_DECIMALS = 4
 
 // NEW: L2 override percent fixed to 3%
 const LEVEL2_OVERRIDE_PCT = 3
@@ -48,6 +57,117 @@ function resolveMinRewardDeposit(settings?: ISettings | null): number {
   return Math.max(configuredMin, MIN_DEPOSIT_FOR_REWARDS)
 }
 
+<<<<<<< HEAD
+=======
+function roundCurrency(amount: number, decimals = PLATFORM_DECIMALS): number {
+  const factor = 10 ** decimals
+  return Math.round(amount * factor) / factor
+}
+
+function toObjectId(value: unknown): mongoose.Types.ObjectId {
+  const idString = toObjectIdString(value)
+  if (!mongoose.isValidObjectId(idString)) {
+    throw new Error(`Invalid ObjectId value: ${idString}`)
+  }
+  return new mongoose.Types.ObjectId(idString)
+}
+
+interface TeamRewardCreditOptions {
+  userId: mongoose.Types.ObjectId | string
+  amount: number
+  occurredAt: Date
+  uniqueKey: string
+  source: string
+  meta?: Record<string, unknown>
+  logContext?: Record<string, unknown>
+}
+
+async function creditTeamReward({
+  userId,
+  amount,
+  occurredAt,
+  uniqueKey,
+  source,
+  meta = {},
+  logContext = {},
+}: TeamRewardCreditOptions): Promise<"posted" | "duplicate" | "skipped"> {
+  const roundedAmount = roundCurrency(amount)
+  if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+    console.info("[commission] credit_skipped", {
+      event_id: uniqueKey,
+      source,
+      amount: Number.isFinite(roundedAmount) ? roundedAmount : amount,
+      ...logContext,
+    })
+    return "skipped"
+  }
+
+  const userObjectId = toObjectId(userId)
+
+  const existing = await Transaction.findOne({
+    userId: userObjectId,
+    "meta.uniqueEventId": uniqueKey,
+  })
+
+  if (existing) {
+    console.info("[commission] duplicate_prevented", {
+      event_id: uniqueKey,
+      source,
+      amount: roundedAmount,
+      ...logContext,
+    })
+    return "duplicate"
+  }
+
+  await Balance.findOneAndUpdate(
+    { userId: userObjectId },
+    {
+      $inc: {
+        teamRewardsAvailable: roundedAmount,
+      },
+      $setOnInsert: {
+        current: 0,
+        totalBalance: 0,
+        totalEarning: 0,
+        lockedCapital: 0,
+        lockedCapitalLots: [],
+        staked: 0,
+        pendingWithdraw: 0,
+        teamRewardsClaimed: 0,
+        luckyDrawCredits: 0,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  )
+
+  await Transaction.create({
+    userId: userObjectId,
+    type: "teamReward",
+    amount: roundedAmount,
+    status: "approved",
+    claimable: true,
+    meta: {
+      source,
+      uniqueEventId: uniqueKey,
+      uniqueKey,
+      eventId: uniqueKey,
+      ...meta,
+    },
+    createdAt: occurredAt,
+    updatedAt: occurredAt,
+  })
+
+  console.info("[commission] credit", {
+    event_id: uniqueKey,
+    source,
+    amount: roundedAmount,
+    ...logContext,
+  })
+
+  return "posted"
+}
+
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 function toPlainObject<T = any>(doc: any): T {
   if (!doc) return doc as T
   if (typeof doc.toObject === "function") return doc.toObject() as T
@@ -149,14 +269,24 @@ function depthToTeam(depth: number): CommissionTeamCode | null {
 interface DirectCommissionComputation {
   sponsor: any
   sponsorLevel: number
-  rule: ICommissionRule
   amount: number
+  commissionPct: number
+}
+
+interface OverrideCommissionDetail {
+  sponsor: any
+  amount: number
+  commissionPct: number
+  level: number
+}
+
+interface DirectCommissionResult extends DirectCommissionComputation {
+  override?: OverrideCommissionDetail | null
 }
 
 async function resolveDirectCommission(
   referredUser: any,
   depositAmount: number,
-  options: { persistLevel?: boolean } = {},
 ): Promise<DirectCommissionComputation | null> {
   const sponsorId = referredUser?.referredBy
   if (!sponsorId) return null
@@ -164,18 +294,16 @@ async function resolveDirectCommission(
   const sponsor = await User.findById(sponsorId)
   if (!sponsor) return null
 
-  const shouldPersist = options.persistLevel ?? true
-  const sponsorLevel = await calculateUserLevel(toObjectIdString(sponsor._id), {
-    persist: shouldPersist,
-    notify: shouldPersist,
-  })
-  const rule = await getCommissionRuleForLevel(sponsorLevel)
-  if (!rule || rule.directPct <= 0) return null
+  if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+    return null
+  }
 
-  const amount = roundCurrency((depositAmount * rule.directPct) / 100)
-  if (amount <= 0) return null
+  const amount = roundCurrency(depositAmount * (DIRECT_REFERRAL_PCT / 100))
+  if (amount <= 0) {
+    return null
+  }
 
-  return { sponsor, sponsorLevel, rule, amount }
+  return { sponsor, sponsorLevel: 1, amount, commissionPct: DIRECT_REFERRAL_PCT }
 }
 
 interface TeamOverridePayout {
@@ -223,9 +351,10 @@ async function resolveTeamProfitOverrides(
 interface CalculateUserLevelOptions { persist?: boolean; notify?: boolean }
 
 export async function calculateUserLevel(
-  userId: string,
-  options: CalculateUserLevelOptions = {},
+  _userId: string,
+  _options: CalculateUserLevelOptions = {},
 ): Promise<number> {
+<<<<<<< HEAD
   const [user, directReferrals] = await Promise.all([
     User.findById(userId),
     User.find({ referredBy: userId }).select("qualified qualifiedAt depositTotal createdAt updatedAt"),
@@ -305,10 +434,14 @@ export async function calculateUserLevel(
   }
 
   return resolvedLevel
+=======
+  return 0
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 interface RecalculateUserLevelsOptions extends CalculateUserLevelOptions { syncActiveFlags?: boolean }
 
+<<<<<<< HEAD
 export async function recalculateAllUserLevels(options: RecalculateUserLevelsOptions = {}) {
   if (options.syncActiveFlags !== false) await rebuildActiveMemberFlags()
   const users = await User.find().select("_id")
@@ -318,6 +451,10 @@ export async function recalculateAllUserLevels(options: RecalculateUserLevelsOpt
       notify: options.notify ?? false,
     })
   }
+=======
+export async function recalculateAllUserLevels(_options: RecalculateUserLevelsOptions = {}) {
+  return { updated: 0 }
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 interface ReferralChainEntry { level: number; user: any }
@@ -342,6 +479,8 @@ interface ReferralCommissionOptions {
   adjustmentReason?: string
   dryRun?: boolean
   qualifiesForActivation?: boolean
+  activationId?: string
+  forceActivation?: boolean
 }
 
 /**
@@ -356,13 +495,14 @@ export async function processReferralCommission(
   settings?: ISettings | null,
   minRewardDeposit?: number,
   options: ReferralCommissionOptions = {},
-) {
+): Promise<DirectCommissionResult | null> {
   const referredUser = await User.findById(referredUserId)
   if (!referredUser) return null
 
   const resolvedSettings = settings ?? (await Settings.findOne())
   const requiredDeposit = minRewardDeposit ?? resolveMinRewardDeposit(resolvedSettings)
 
+<<<<<<< HEAD
   // Direct commission now ALWAYS computed (no activation gate)
   const payout = await resolveDirectCommission(referredUser, depositAmount)
   if (!payout) return null
@@ -430,15 +570,129 @@ export async function processReferralCommission(
       amount: payout.amount,
       base_amount: roundCurrency(depositAmount),
     })
+=======
+  const occurredAt = options.depositAt ?? new Date()
+  if (!isPolicyEffectiveFor(occurredAt)) {
+    return null
   }
 
-  await Notification.create({
-    userId: payout.sponsor._id,
-    kind: "referral-joined",
-    title: "Referral Commission Earned",
-    body: `You earned $${payout.amount.toFixed(2)} commission from ${referredUser.name}'s deposit`,
-  })
+  const activationAmount = roundCurrency(depositAmount)
+  const isActivationEvent = Boolean(options.qualifiesForActivation || options.forceActivation)
 
+  if (!isActivationEvent) {
+    console.info("[commission] activation_skipped", {
+      event_id: `activation:${options.activationId ?? options.depositTransactionId ?? "manual"}`,
+      reason: "not_activation_event",
+      activationAmount,
+    })
+    return null
+  }
+
+  const payout = await resolveDirectCommission(referredUser, activationAmount)
+  if (!payout) return null
+
+  const activationId =
+    options.activationId ??
+    options.depositTransactionId ??
+    `manual:${referredUserId}:${occurredAt.toISOString()}`
+  const sponsorIdString = toObjectIdString(payout.sponsor._id)
+  const directUniqueKey = `${sponsorIdString}|${activationId}|L1_15`
+
+  const result: DirectCommissionResult = { ...payout }
+
+  const overrideDetail: OverrideCommissionDetail | null = await (async () => {
+    if (!options.qualifiesForActivation && !options.forceActivation) {
+      return null
+    }
+
+    const leaderSponsorId = payout.sponsor?.referredBy
+    if (!leaderSponsorId) {
+      console.info("[commission] activation_override_skipped", {
+        event_id: `activation:${activationId}:l2`,
+        reason: "missing_level2",
+      })
+      return null
+    }
+
+    const leaderSponsor = await User.findById(leaderSponsorId)
+    if (!leaderSponsor) {
+      console.info("[commission] activation_override_skipped", {
+        event_id: `activation:${activationId}:l2`,
+        reason: "missing_level2",
+      })
+      return null
+    }
+
+    if (activationAmount < MIN_DEPOSIT_FOR_REWARDS) {
+      console.info("[commission] activation_override_skipped", {
+        event_id: `activation:${activationId}:l2`,
+        reason: "activation_below_threshold",
+        activationAmount,
+      })
+      return null
+    }
+
+    const overrideAmount = roundCurrency(activationAmount * (LEVEL2_OVERRIDE_PCT / 100))
+    if (overrideAmount <= 0) {
+      return null
+    }
+
+    return {
+      sponsor: leaderSponsor,
+      amount: overrideAmount,
+      commissionPct: LEVEL2_OVERRIDE_PCT,
+      level: 2,
+    }
+  })()
+
+  result.override = overrideDetail
+
+  if (options.dryRun) {
+    return result
+  }
+
+  if (!options.dryRun) {
+    const creditResult = await creditTeamReward({
+      userId: sponsorIdString,
+      amount: payout.amount,
+      occurredAt,
+      uniqueKey: directUniqueKey,
+      source: "activation_direct",
+      meta: {
+        referredUserId,
+        referredUserName: referredUser.name ?? null,
+        depositAmount: activationAmount,
+        commissionBase: activationAmount,
+        commissionPct: payout.commissionPct,
+        sponsorLevel: payout.sponsorLevel,
+        depositTransactionId: options.depositTransactionId ?? null,
+        policyVersion: POLICY_ADJUSTMENT_REASON,
+        activationId,
+        ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+      },
+      logContext: {
+        level: "L1",
+        percentage: payout.commissionPct,
+        base_amount: activationAmount,
+      },
+    })
+
+    if (creditResult === "posted") {
+      await Notification.create({
+        userId: toObjectId(sponsorIdString),
+        kind: "referral-joined",
+        title: "Referral Commission Earned",
+        body: `You earned $${payout.amount.toFixed(4)} commission from ${referredUser.name}'s activation`,
+      })
+    }
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
+  }
+
+  if (overrideDetail) {
+    const overrideSponsorId = toObjectIdString(overrideDetail.sponsor._id)
+    const overrideUniqueKey = `${overrideSponsorId}|${activationId}|L2_3`
+
+<<<<<<< HEAD
   // --- L2 3% override (activation) ---
   const qualifiesForActivation =
     depositAmount >= requiredDeposit || Boolean(options.qualifiesForActivation)
@@ -521,6 +775,37 @@ export async function processReferralCommission(
   }
 
   return payout
+=======
+    if (!options.dryRun) {
+      await creditTeamReward({
+        userId: overrideSponsorId,
+        amount: overrideDetail.amount,
+        occurredAt,
+        uniqueKey: overrideUniqueKey,
+        source: "activation_level2_override",
+        meta: {
+          referredUserId,
+          referredUserName: referredUser.name ?? null,
+          depositAmount: activationAmount,
+          commissionBase: activationAmount,
+          commissionPct: overrideDetail.commissionPct,
+          sponsorLevel: overrideDetail.level,
+          depositTransactionId: options.depositTransactionId ?? null,
+          policyVersion: POLICY_ADJUSTMENT_REASON,
+          activationId,
+          ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+        },
+        logContext: {
+          level: "L2",
+          percentage: overrideDetail.commissionPct,
+          base_amount: activationAmount,
+        },
+      })
+    }
+  }
+
+  return result
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 interface TeamOverrideContext {
@@ -533,10 +818,11 @@ interface TeamOverrideContext {
 }
 
 export async function applyTeamProfitOverrides(
-  earningUserId: string,
-  profitAmount: number,
-  context: TeamOverrideContext = {},
+  _earningUserId: string,
+  _profitAmount: number,
+  _context: TeamOverrideContext = {},
 ) {
+<<<<<<< HEAD
   if (profitAmount <= 0) return []
 
   const earningUser = await User.findById(earningUserId)
@@ -618,6 +904,9 @@ export async function applyTeamProfitOverrides(
   }
 
   return results
+=======
+  return []
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 interface PolicyRecalculateOptions { dryRun?: boolean; adjustmentReason?: string }
@@ -796,8 +1085,9 @@ interface PolicyAdjustmentResult {
 }
 
 export async function policyApplyRetroactiveAdjustments(
-  options: PolicyAdjustmentOptions = {},
+  _options: PolicyAdjustmentOptions = {},
 ) {
+<<<<<<< HEAD
   await recalculateAllUserLevels({ persist: true, notify: false })
   commissionRuleCache.clear()
 
@@ -1002,6 +1292,9 @@ export async function policyApplyRetroactiveAdjustments(
   }
 
   return results
+=======
+  return [] as PolicyAdjustmentResult[]
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 }
 
 export const policy_apply_retroactive_adjustments = policyApplyRetroactiveAdjustments
@@ -1013,6 +1306,8 @@ interface DepositRewardOptions {
   depositAt?: Date
   adjustmentReason?: string
   dryRun?: boolean
+  activationId?: string
+  forceActivation?: boolean
 }
 
 export async function applyDepositRewards(
@@ -1022,10 +1317,17 @@ export async function applyDepositRewards(
 ) {
   const [settings, userDoc] = await Promise.all([Settings.findOne(), User.findById(userId)])
   const requiredDeposit = resolveMinRewardDeposit(settings)
+<<<<<<< HEAD
 
   // Activation gates
   const qualifiesForActivation = Boolean(userDoc && !userDoc.isActive && userDoc.depositTotal >= requiredDeposit)
   const qualifiesForRewards = depositAmount >= requiredDeposit || qualifiesForActivation
+=======
+  const qualifiesForActivation = Boolean(
+    userDoc && !userDoc.isActive && userDoc.depositTotal >= requiredDeposit,
+  )
+  const isActivationEvent = Boolean(qualifiesForActivation || options.forceActivation)
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 
   const updatedDepositTotal = Number(userDoc?.depositTotal ?? 0)
   const qualifiesForDirectActivation = updatedDepositTotal >= QUALIFYING_DIRECT_DEPOSIT
@@ -1041,14 +1343,61 @@ export async function applyDepositRewards(
   }
 
   const results: {
+<<<<<<< HEAD
     selfBonus?: number
     directCommission?: DirectCommissionComputation | null
+=======
+    depositCommission?: number
+    directCommission?: DirectCommissionResult | null
+    overrideCommission?: OverrideCommissionDetail | null
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
     activated: boolean
     activationThreshold: number
+    selfBonus?: number
   } = {
-    activated: qualifiesForActivation,
+    activated: isActivationEvent,
     activationThreshold: requiredDeposit,
     directCommission: null,
+    overrideCommission: null,
+    selfBonus: 0,
+  }
+
+  const activationId =
+    options.activationId ??
+    options.depositTransactionId ??
+    `manual:${userId}:${(options.depositAt ?? new Date()).toISOString()}`
+
+  const depositOccurredAt = options.depositAt ?? new Date()
+  const depositReferenceId = options.depositTransactionId ?? activationId
+
+  if (!options.dryRun) {
+    const selfBonusAmount = roundCurrency(depositAmount * (SELF_BONUS_PCT / 100))
+    const selfUniqueKey = `${toObjectIdString(userId)}|${depositReferenceId}|self5`
+
+    const posted = await creditTeamReward({
+      userId,
+      amount: selfBonusAmount,
+      occurredAt: depositOccurredAt,
+      uniqueKey: selfUniqueKey,
+      source: "self_deposit_bonus",
+      meta: {
+        depositAmount: roundCurrency(depositAmount),
+        rewardPct: SELF_BONUS_PCT,
+        depositTransactionId: options.depositTransactionId ?? null,
+        activationId,
+        qualifiesForActivation: isActivationEvent,
+        label: "Self deposit bonus",
+      },
+      logContext: {
+        level: "SELF",
+        percentage: SELF_BONUS_PCT,
+        base_amount: roundCurrency(depositAmount),
+      },
+    })
+
+    if (posted === "posted") {
+      results.selfBonus = selfBonusAmount
+    }
   }
 
   // Mark active if needed
@@ -1056,10 +1405,19 @@ export async function applyDepositRewards(
     await User.updateOne({ _id: userId }, { $set: { isActive: true } })
   }
 
+<<<<<<< HEAD
   // === NEW: Self-bonus 5% on every approved deposit ===
   const occurredAt = options.depositAt ?? new Date()
   const selfBonusAmount = roundCurrency(depositAmount * 0.05)
   const selfKey = `${toObjectIdString(userId)}|${options.depositTransactionId ?? `manual:${occurredAt.toISOString()}`}|self5`
+=======
+  if (isActivationEvent) {
+    const existingDepositCredit = await Transaction.findOne({
+      userId,
+      type: "commission",
+      "meta.source": "deposit_commission",
+    })
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
 
   if (selfBonusAmount > 0) {
     if (!options.dryRun) {
@@ -1094,6 +1452,7 @@ export async function applyDepositRewards(
           status: "approved",
           claimable: false, // goes straight to wallet, not claim queue
           meta: {
+<<<<<<< HEAD
             source: "self_deposit_bonus",
             uniqueEventId: selfKey,
             depositAmount: roundCurrency(depositAmount),
@@ -1102,6 +1461,15 @@ export async function applyDepositRewards(
             qualifiesForActivation,
             policyVersion: POLICY_ADJUSTMENT_REASON,
             ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+=======
+            source: "deposit_commission",
+            depositAmount: roundCurrency(depositAmount),
+            fixedAmount: depositCommission,
+            policyVersion: POLICY_ADJUSTMENT_REASON,
+            ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
+            depositTransactionId: options.depositTransactionId ?? null,
+            eventId: `deposit_commission:${userId}:${options.depositTransactionId ?? "manual"}`,
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
           },
           createdAt: occurredAt,
           updatedAt: occurredAt,
@@ -1119,8 +1487,12 @@ export async function applyDepositRewards(
     results.selfBonus = selfBonusAmount
   }
 
+<<<<<<< HEAD
   // === Direct & L2 (uses UPDATED processReferralCommission) ===
   results.directCommission = await processReferralCommission(
+=======
+  const directOutcome = await processReferralCommission(
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
     userId,
     depositAmount,
     settings,
@@ -1130,16 +1502,21 @@ export async function applyDepositRewards(
       depositAt: options.depositAt,
       adjustmentReason: options.adjustmentReason,
       dryRun: options.dryRun,
-      qualifiesForActivation,
+      qualifiesForActivation: isActivationEvent,
+      activationId,
+      forceActivation: options.forceActivation,
     },
   )
 
+<<<<<<< HEAD
   // Level recompute
+=======
+  results.directCommission = directOutcome
+  results.overrideCommission = directOutcome?.override ?? null
+
+>>>>>>> 540578136175f1417fd115e5232b0c4beebc12e7
   if (!options.dryRun) {
-    if (newlyQualified && sponsorId) {
-      await calculateUserLevel(sponsorId, { notify: !results.directCommission })
-    }
-    await calculateUserLevel(userId)
+    // Legacy level logic removed
   }
 
   return results

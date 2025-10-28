@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import mongoose from "mongoose"
 
 process.env.SEED_IN_MEMORY = "true"
 
@@ -31,7 +32,7 @@ test.before(async () => {
   await dbConnect()
 })
 
-test("previewTeamEarnings reflects balance snapshot", async () => {
+test("previewTeamEarnings reflects claimable transactions", async () => {
   const user = await createUser()
   const userId = (user._id as any).toString()
 
@@ -40,12 +41,38 @@ test("previewTeamEarnings reflects balance snapshot", async () => {
     current: 0,
     totalBalance: 0,
     totalEarning: 0,
-    teamRewardsAvailable: 12.34,
     teamRewardsClaimed: 45.67,
   } as any)
 
+  await Transaction.create([
+    {
+      userId: user._id,
+      type: "teamReward",
+      amount: 5.4321,
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_reward", overridePct: 1 },
+    },
+    {
+      userId: user._id,
+      type: "teamReward",
+      amount: 6.7899,
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_reward", overridePct: 1 },
+    },
+  ] as any)
+
+  const seededClaimables = await Transaction.countDocuments({
+    userId: user._id,
+    type: "teamReward",
+    claimable: true,
+  })
+  assert.equal(seededClaimables, 2)
+
   const preview = await previewTeamEarnings(userId, new Date("2025-01-01T00:00:00Z"))
-  assert.equal(preview.available, 12.34)
+  const expectedAvailable = Number((5.4321 + 6.7899).toFixed(4))
+  assert.equal(preview.available, expectedAvailable)
   assert.equal(preview.claimedTotal, 45.67)
   assert.equal(preview.level, 0)
   assert.equal(preview.coverage.length, 0)
@@ -60,11 +87,46 @@ test("claimTeamEarnings transfers available rewards", async () => {
     current: 5,
     totalBalance: 5,
     totalEarning: 5,
-    teamRewardsAvailable: 20,
     teamRewardsClaimed: 10,
   } as any)
 
+  await Transaction.create([
+    {
+      userId: user._id,
+      type: "teamReward",
+      amount: 12.5,
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_reward", overridePct: 1 },
+    },
+    {
+      userId: user._id,
+      type: "teamReward",
+      amount: 7.5,
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_reward", overridePct: 1 },
+    },
+  ] as any)
+
+  const pendingClaimables = await Transaction.countDocuments({
+    userId: user._id,
+    type: "teamReward",
+    claimable: true,
+  })
+  assert.equal(pendingClaimables, 2)
+
   const claimTime = new Date("2025-02-01T12:00:00Z")
+  const claimUserIds: (mongoose.Types.ObjectId | string)[] = [user._id as any, userId]
+  if (mongoose.Types.ObjectId.isValid(userId)) {
+    claimUserIds.push(new mongoose.Types.ObjectId(userId))
+  }
+
+  const beforeClaimCount = await Transaction.countDocuments({
+    userId: { $in: claimUserIds },
+    type: "teamReward",
+  })
+
   const result = await claimTeamEarnings(userId, claimTime)
   assert.equal(result.claimed, 20)
   assert.equal(result.available, 0)
@@ -78,9 +140,37 @@ test("claimTeamEarnings transfers available rewards", async () => {
   assert.equal(balance?.totalBalance, 25)
   assert.equal(balance?.totalEarning, 25)
 
-  const transactions = await Transaction.find({ userId: user._id, type: "teamReward" })
-  if (transactions.length > 0) {
-    assert.equal(transactions[0]?.meta?.source, "team_rewards_claim")
+  const afterClaimCount = await Transaction.countDocuments({
+    userId: { $in: claimUserIds },
+    type: "teamReward",
+  })
+  assert.equal(afterClaimCount, beforeClaimCount + 1)
+
+  const teamRewardTransactions = await Transaction.find({
+    userId: { $in: claimUserIds },
+    type: "teamReward",
+  }).lean()
+  assert.ok(teamRewardTransactions.some((tx) => tx.meta?.source === "team_rewards_claim"))
+
+  const claimTransaction = await Transaction.findOne({
+    userId: { $in: claimUserIds },
+    type: "teamReward",
+    "meta.source": "team_rewards_claim",
+  })
+  assert.ok(claimTransaction)
+  assert.equal(Number(claimTransaction?.amount ?? 0), 20)
+
+  const originalClaimables = await Transaction.find({
+    userId: user._id,
+    "meta.source": "daily_team_reward",
+  })
+
+  for (const entry of originalClaimables) {
+    const refreshed = await Transaction.findById(entry._id)
+    assert.ok(refreshed)
+    assert.equal(refreshed?.claimable, false)
+    assert.equal(refreshed?.meta?.claimTransactionId?.toString(), claimTransaction?.id)
+    assert.equal(refreshed?.claimedAt?.toISOString(), claimTime.toISOString())
   }
 })
 
@@ -119,12 +209,12 @@ test("listTeamRewardHistory categorises transactions", async () => {
     {
       userId: user._id,
       type: "commission",
-      amount: 7,
+      amount: 18,
       status: "approved",
       meta: {
         source: "direct_referral",
         referredUserName: "Alice",
-        commissionPct: 7,
+        commissionPct: 15,
         sponsorLevel: 1,
       },
     },
@@ -156,6 +246,18 @@ test("listTeamRewardHistory categorises transactions", async () => {
     {
       userId: user._id,
       type: "teamReward",
+      amount: 0.012,
+      status: "approved",
+      claimable: true,
+      meta: {
+        source: "daily_team_reward",
+        overridePct: 1,
+        level: 1,
+      },
+    },
+    {
+      userId: user._id,
+      type: "teamReward",
       amount: 10,
       status: "approved",
       meta: {
@@ -170,10 +272,11 @@ test("listTeamRewardHistory categorises transactions", async () => {
   assert.ok(categories.includes("team_reward"))
   assert.ok(categories.includes("claim"))
   assert.ok(categories.includes("daily_team_earning"))
+  assert.ok(categories.includes("daily_profit"))
 
   const depositEntry = history.find((entry) => entry.category === "deposit_commission")
   assert.equal(depositEntry?.sourceUserName, "Alice")
-  assert.equal(depositEntry?.rate, 7)
+  assert.equal(depositEntry?.rate, 15)
 
   const rewardEntry = history.find((entry) => entry.category === "team_reward")
   assert.equal(rewardEntry?.team, "A")
@@ -183,5 +286,9 @@ test("listTeamRewardHistory categorises transactions", async () => {
   assert.deepEqual(dailyTeamEntry?.teams, ["A", "B"])
   assert.equal(dailyTeamEntry?.rate, 2)
   assert.equal(dailyTeamEntry?.level, 3)
+
+  const dailyRewardEntry = history.find((entry) => entry.category === "daily_profit")
+  assert.equal(dailyRewardEntry?.rate, 1)
+  assert.equal(dailyRewardEntry?.amount, 0.012)
 })
 

@@ -5,23 +5,39 @@ import test from "node:test"
 process.env.SEED_IN_MEMORY = "true"
 
 import dbConnect from "@/lib/mongodb"
-import {
-  payDailyTeamProfit,
-  payDirectDepositCommission,
-  payMonthlyBonuses,
-  payTeamDepositCommissions,
-  refreshAllUserLevels,
-} from "@/lib/services/commission-engine"
 import { applyDepositRewards } from "@/lib/utils/commission"
+import { payDailyTeamProfit } from "@/lib/services/commission-engine"
+import { runDailyMiningProfit } from "@/lib/services/daily-mining"
 import Balance from "@/models/Balance"
-import Payout from "@/models/Payout"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
 
-test.before(async () => {
-  await dbConnect()
-})
+const toId = (value: unknown) => {
+  if (typeof value === "string") return value
+  if (!value) return ""
+
+  if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
+    return (value as { toHexString: () => string }).toHexString()
+  }
+
+  if (typeof (value as { toString?: () => string }).toString === "function") {
+    const str = (value as { toString: () => string }).toString()
+    if (str && str !== "[object Object]") {
+      return str
+    }
+  }
+
+  if (typeof (value as { buffer?: ArrayLike<number> }).buffer === "object") {
+    const bufferLike = (value as { buffer: ArrayLike<number> }).buffer
+    const bytes = Array.from(bufferLike ?? [])
+    if (bytes.length) {
+      return Buffer.from(bytes).toString("hex")
+    }
+  }
+
+  return JSON.stringify(value)
+}
 
 async function createUser(overrides: Record<string, unknown> = {}) {
   await dbConnect()
@@ -38,330 +54,415 @@ async function createUser(overrides: Record<string, unknown> = {}) {
   } as any)
 }
 
-const toId = (value: unknown) =>
-  typeof value === "string" ? value : (value as { toString?: () => string })?.toString?.() ?? ""
+function toPlain<T = any>(doc: any): T {
+  if (doc && typeof doc.toObject === "function") {
+    return doc.toObject() as T
+  }
+  return doc as T
+}
 
-test("L1 direct commission and team profit payouts are applied once", { concurrency: false }, async () => {
-  const sponsor = await createUser()
-  const directUsers = await Promise.all(
-    Array.from({ length: 5 }, async () =>
-      createUser({
-        referredBy: sponsor._id,
-        depositTotal: 100,
-        qualified: true,
-        qualifiedAt: new Date("2025-10-01T00:00:00Z"),
-      }),
-    ),
-  )
+test.before(async () => {
+  await dbConnect()
+})
 
-  await Balance.create({
-    userId: sponsor._id,
-    current: 0,
-    totalBalance: 0,
-    totalEarning: 0,
-    teamRewardsAvailable: 0,
-    teamRewardsClaimed: 0,
-  } as any)
+test("direct referral pays 15% and second-level override pays 3% once", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
 
-  await refreshAllUserLevels(new Date("2025-10-10T00:00:00Z"))
+  const depositAmount = 200
 
   const deposit = await Transaction.create({
-    userId: directUsers[0]._id,
+    userId: member._id,
     type: "deposit",
-    amount: 100,
+    amount: depositAmount,
     status: "approved",
-    createdAt: new Date("2025-10-10T12:00:00Z"),
-    updatedAt: new Date("2025-10-10T12:00:00Z"),
   } as any)
 
-  const firstPayout = await payDirectDepositCommission(toId(deposit._id))
-  assert.ok(firstPayout)
-  assert.equal(firstPayout?.amount, 7)
-  assert.equal(firstPayout?.created, true)
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: depositAmount } })
 
-  const duplicate = await payDirectDepositCommission(toId(deposit._id))
-  assert.ok(duplicate)
-  assert.equal(duplicate?.created, false)
+  const activationId = toId(deposit._id)
+  const outcome = await applyDepositRewards(toId(member._id), depositAmount, {
+    depositTransactionId: activationId,
+    depositAt: deposit.createdAt,
+    activationId,
+  })
 
-  let sponsorBalance = await Balance.findOne({ userId: sponsor._id })
-  assert.ok(sponsorBalance)
-  assert.equal(Number(sponsorBalance?.current ?? 0), 7)
-  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0)
+  const expectedDirect = Number((depositAmount * 0.15).toFixed(4))
+  const expectedOverride = Number((depositAmount * 0.03).toFixed(4))
+
+  assert.equal(outcome.directCommission?.amount, expectedDirect)
+  assert.equal(outcome.directCommission?.commissionPct, 15)
+  assert.equal(outcome.overrideCommission?.amount, expectedOverride)
+  assert.equal(outcome.overrideCommission?.commissionPct, 3)
+
+  const allTransactions = (await Transaction.find()).map((tx) => toPlain<any>(tx))
+
+  const leaderTransactions = allTransactions.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_direct" &&
+      toId(tx.userId) === toId(leader._id),
+  )
+  assert.equal(leaderTransactions.length, 1)
+  assert.equal(Number(leaderTransactions[0]?.amount ?? 0), expectedDirect)
+  assert.equal(Number(leaderTransactions[0]?.meta?.commissionBase ?? 0), depositAmount)
+  assert.equal(leaderTransactions[0]?.meta?.activationId, activationId)
+  assert.equal(leaderTransactions[0]?.claimable, true)
+
+  const leaderLeaderTransactions = allTransactions.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_level2_override" &&
+      toId(tx.userId) === toId(leaderLeader._id),
+  )
+  assert.equal(leaderLeaderTransactions.length, 1)
+  assert.equal(Number(leaderLeaderTransactions[0]?.amount ?? 0), expectedOverride)
+  assert.equal(Number(leaderLeaderTransactions[0]?.meta?.commissionBase ?? 0), depositAmount)
+  assert.equal(leaderLeaderTransactions[0]?.meta?.activationId, activationId)
+  assert.equal(leaderLeaderTransactions[0]?.claimable, true)
+
+  const memberTransactions = allTransactions.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "self_deposit_bonus" &&
+      toId(tx.userId) === toId(member._id),
+  )
+  assert.equal(memberTransactions.length, 1)
+  assert.equal(Number(memberTransactions[0]?.amount ?? 0), Number((depositAmount * 0.05).toFixed(4)))
+  assert.equal(memberTransactions[0]?.claimable, true)
+
+  // Running again should not duplicate payouts
+  await applyDepositRewards(toId(member._id), depositAmount, {
+    depositTransactionId: activationId,
+    depositAt: deposit.createdAt,
+    activationId,
+  })
+
+  const afterDuplicate = (await Transaction.find()).map((tx) => toPlain<any>(tx))
+
+  const duplicateDirect = afterDuplicate.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_direct" &&
+      toId(tx.userId) === toId(leader._id),
+  )
+  assert.equal(duplicateDirect.length, 1)
+
+  const duplicateOverride = afterDuplicate.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_level2_override" &&
+      toId(tx.userId) === toId(leaderLeader._id),
+  )
+  assert.equal(duplicateOverride.length, 1)
+
+  const duplicateSelf = afterDuplicate.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "self_deposit_bonus" &&
+      toId(tx.userId) === toId(member._id),
+  )
+  assert.equal(duplicateSelf.length, 1)
+})
+
+test("self-deposit bonus credits 5% once per deposit", async () => {
+  const member = await createUser({ status: "inactive", isActive: false })
+
+  const depositAmount = 100
+  const deposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: depositAmount,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: depositAmount } })
+
+  const depositId = toId(deposit._id)
+
+  await applyDepositRewards(toId(member._id), depositAmount, {
+    depositTransactionId: depositId,
+    depositAt: deposit.createdAt,
+    activationId: depositId,
+  })
+
+
+  const selfUniqueKey = `${toId(member._id)}|${depositId}|self5`
+  const reward = await Transaction.findOne({
+    type: "teamReward",
+    "meta.uniqueEventId": selfUniqueKey,
+  })
+
+  assert.ok(reward)
+  assert.equal(Number(toPlain<any>(reward)?.amount ?? 0), Number((depositAmount * 0.05).toFixed(4)))
+  assert.equal(toPlain<any>(reward)?.claimable, true)
+
+  await applyDepositRewards(toId(member._id), depositAmount, {
+    depositTransactionId: depositId,
+    depositAt: deposit.createdAt,
+    activationId: depositId,
+  })
+
+  const rewardAfter = await Transaction.find({
+    type: "teamReward",
+    "meta.uniqueEventId": selfUniqueKey,
+  })
+
+  assert.equal(rewardAfter.length, 1)
+
+})
+
+test("top-ups do not trigger additional activation commissions", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
+
+  const activationDeposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: 120,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: 120 } })
+
+  const activationId = toId(activationDeposit._id)
+  const activationOutcome = await applyDepositRewards(toId(member._id), 120, {
+    depositTransactionId: activationId,
+    depositAt: activationDeposit.createdAt,
+    activationId,
+  })
+
+  assert.equal(Number(activationOutcome.directCommission?.amount ?? 0), Number((120 * 0.15).toFixed(4)))
+  assert.equal(Number(activationOutcome.overrideCommission?.amount ?? 0), Number((120 * 0.03).toFixed(4)))
+
+  const topUpDeposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: 150,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: 150 } })
+
+  const topUpId = toId(topUpDeposit._id)
+  const topUpOutcome = await applyDepositRewards(toId(member._id), 150, {
+    depositTransactionId: topUpId,
+    depositAt: topUpDeposit.createdAt,
+    activationId: topUpId,
+  })
+
+  assert.equal(topUpOutcome.directCommission, null)
+  assert.equal(topUpOutcome.overrideCommission, null)
+  assert.equal(topUpOutcome.activated, false)
+
+  const allCommissionTx = (await Transaction.find({ type: "teamReward" })).map((tx) => toPlain<any>(tx))
+  const leaderDirects = allCommissionTx.filter(
+    (tx) => tx.meta?.source === "activation_direct" && toId(tx.userId) === toId(leader._id),
+  )
+
+  assert.equal(leaderDirects.length, 1)
+  assert.equal(Number(leaderDirects[0]?.meta?.commissionBase ?? 0), 120)
+
+  const level2Overrides = allCommissionTx.filter(
+    (tx) => tx.meta?.source === "activation_level2_override" && toId(tx.userId) === toId(leaderLeader._id),
+  )
+
+  assert.equal(level2Overrides.length, 1)
+  assert.equal(Number(level2Overrides[0]?.meta?.commissionBase ?? 0), 120)
+})
+
+test("level-2 override requires activation threshold", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
+
+  const activation79 = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: 79,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: 79 } })
+
+  await applyDepositRewards(toId(member._id), 79, {
+    depositTransactionId: toId(activation79._id),
+    depositAt: activation79.createdAt,
+    activationId: toId(activation79._id),
+  })
+
+  const allAfter79 = (await Transaction.find()).map((tx) => toPlain<any>(tx))
+  const l2After79 = allAfter79.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_level2_override" &&
+      toId(tx.userId) === toId(leaderLeader._id),
+  )
+  assert.equal(l2After79.length, 0)
+
+  const leaderLeader2 = await createUser()
+  const leader2 = await createUser({ referredBy: leaderLeader2._id })
+  const member2 = await createUser({ referredBy: leader2._id, status: "inactive", isActive: false })
+
+  const activation80 = await Transaction.create({
+    userId: member2._id,
+    type: "deposit",
+    amount: 80,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member2._id }, { $inc: { depositTotal: 80 } })
+
+  await applyDepositRewards(toId(member2._id), 80, {
+    depositTransactionId: toId(activation80._id),
+    depositAt: activation80.createdAt,
+    activationId: toId(activation80._id),
+  })
+
+  const allAfter80 = (await Transaction.find()).map((tx) => toPlain<any>(tx))
+  const l2After80 = allAfter80.filter(
+    (tx) =>
+      tx.type === "teamReward" &&
+      tx.meta?.source === "activation_level2_override" &&
+      toId(tx.userId) === toId(leaderLeader2._id),
+  )
+  assert.equal(l2After80.length, 1)
+  assert.equal(Number(l2After80[0]?.amount ?? 0), Number((80 * 0.03).toFixed(4)))
+})
+
+test("daily overrides pay 1% to level 1 and level 2 uplines", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
 
   await TeamDailyProfit.create({
-    memberId: directUsers[0]._id,
-    profitDate: new Date("2025-10-11T12:00:00Z"),
+    memberId: member._id,
+    profitDate: new Date("2025-01-02T12:00:00Z"),
+    profitAmount: 20,
+    activeOnDate: true,
+  } as any)
+
+  const results = await payDailyTeamProfit(new Date("2025-01-03T00:00:00Z"))
+  const leaderResult = results.find((entry) => entry.userId === toId(leader._id))
+  const leaderLeaderResult = results.find((entry) => entry.userId === toId(leaderLeader._id))
+
+  assert.ok(leaderResult)
+  assert.ok(leaderLeaderResult)
+  assert.equal(leaderResult?.amount, 0.2)
+  assert.equal(leaderLeaderResult?.amount, 0.2)
+
+  const balances = (await Balance.find()).map((doc) => toPlain<any>(doc))
+  const leaderBalance = balances.find((doc) => toId(doc.userId) === toId(leader._id))
+  assert.ok(leaderBalance)
+  assert.equal(Number(leaderBalance?.teamRewardsAvailable ?? 0), 0.2)
+  assert.equal(Number(leaderBalance?.current ?? 0), 0)
+  assert.equal(Number(leaderBalance?.totalBalance ?? 0), 0)
+
+  const leaderLeaderBalance = balances.find((doc) => toId(doc.userId) === toId(leaderLeader._id))
+  assert.ok(leaderLeaderBalance)
+  assert.equal(Number(leaderLeaderBalance?.teamRewardsAvailable ?? 0), 0.2)
+  assert.equal(Number(leaderLeaderBalance?.current ?? 0), 0)
+  assert.equal(Number(leaderLeaderBalance?.totalBalance ?? 0), 0)
+
+  // Running the payout again should be idempotent
+  const repeat = await payDailyTeamProfit(new Date("2025-01-03T00:00:00Z"))
+  assert.equal(repeat.length, 0)
+
+  const overrideTransactions = await Transaction.find({
+    type: "teamReward",
+    "meta.source": "daily_team_reward",
+  })
+  assert.equal(overrideTransactions.length, 2)
+  overrideTransactions.forEach((tx) => {
+    assert.equal(tx.claimable, true)
+    assert.equal(Number(tx.amount ?? 0), 0.2)
+  })
+})
+
+test("daily mining uses current balance and feeds overrides", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
+
+  await Transaction.deleteMany({})
+  await TeamDailyProfit.deleteMany({})
+  await Balance.deleteMany({})
+
+  await Balance.create({
+    userId: member._id,
+    current: 30,
+    totalBalance: 500,
+    totalEarning: 100,
+  } as any)
+
+  const miningDay = new Date("2025-02-02T00:00:00Z")
+  await runDailyMiningProfit(miningDay)
+  const allDgpEntries = (await TeamDailyProfit.find()).map((doc) => toPlain<any>(doc))
+
+  const miningTransactions = (await Transaction.find({ "meta.source": "daily_mining_profit" })).map((tx) =>
+    toPlain<any>(tx),
+  )
+  const memberTransactions = miningTransactions.filter((tx) => toId(tx.userId) === toId(member._id))
+  assert.equal(memberTransactions.length, 1)
+  const baseTx = memberTransactions[0]
+  assert.ok(baseTx)
+  assert.equal(Number(baseTx?.amount ?? 0), Number((30 * 0.015).toFixed(4)))
+  assert.equal(Number(baseTx?.meta?.baseAmount ?? 0), 30)
+
+  const updatedBalanceDoc = await Balance.findOne({ userId: member._id })
+  const updatedBalance = toPlain<any>(updatedBalanceDoc)
+  assert.ok(updatedBalance)
+  const expectedProfit = Number((30 * 0.015).toFixed(4))
+  assert.equal(Number(updatedBalance?.current ?? 0), 30 + expectedProfit)
+  assert.equal(Number(updatedBalance?.totalBalance ?? 0), 500)
+  assert.equal(Number(updatedBalance?.totalEarning ?? 0), 100 + expectedProfit)
+
+  const memberDoc = toPlain<any>(await User.findById(member._id))
+  const leaderDoc = toPlain<any>(await User.findById(leader._id))
+
+  const dgp = (await TeamDailyProfit.find())
+    .map((doc) => toPlain<any>(doc))
+    .find((doc) => toId(doc.memberId) === toId(member._id))
+  assert.ok(dgp)
+  assert.equal(Number(dgp?.profitAmount ?? 0), Number((30 * 0.015).toFixed(4)))
+
+  const overrideResults = await payDailyTeamProfit(new Date("2025-02-02T00:00:00Z"))
+  const l1 = overrideResults.find((entry) => entry.userId === toId(leader._id))
+  const l2 = overrideResults.find((entry) => entry.userId === toId(leaderLeader._id))
+  assert.ok(l1)
+  assert.ok(l2)
+  assert.equal(Number(l1?.amount ?? 0), Number(((30 * 0.015) * 0.01).toFixed(4)))
+  assert.equal(Number(l2?.amount ?? 0), Number(((30 * 0.015) * 0.01).toFixed(4)))
+
+  const claimableOverrides = await Transaction.find({
+    type: "teamReward",
+    "meta.source": "daily_team_reward",
+  })
+  assert.equal(claimableOverrides.length, 2)
+  claimableOverrides.forEach((tx) => {
+    assert.equal(tx.claimable, true)
+    assert.ok(tx.meta?.uniqueKey)
+  })
+})
+
+test("missing uplines are skipped without errors", async () => {
+  const leader = await createUser()
+  const member = await createUser({ referredBy: leader._id })
+
+  await TeamDailyProfit.create({
+    memberId: member._id,
+    profitDate: new Date("2025-03-02T12:00:00Z"),
     profitAmount: 10,
     activeOnDate: true,
-  })
-
-  const profitResults = await payDailyTeamProfit(new Date("2025-10-12T00:00:00Z"))
-  const sponsorResult = profitResults.find((entry) => entry.userId === toId(sponsor._id))
-  assert.ok(sponsorResult)
-  assert.equal(sponsorResult?.amount, 0.1)
-  assert.equal(sponsorResult?.totalTeamProfit, 10)
-
-  const payout = await Payout.findOne({
-    uniqueKey: `DTE:2025-10-11:${toId(directUsers[0]._id)}:${toId(sponsor._id)}:A`,
-  })
-  assert.ok(payout)
-  assert.equal(payout?.amount, 0.1)
-  assert.equal(payout?.type, "daily_team_earning")
-  assert.equal(payout?.meta?.team, "A")
-
-  sponsorBalance = await Balance.findOne({ userId: sponsor._id })
-  assert.ok(sponsorBalance)
-  assert.equal(Number(sponsorBalance?.teamRewardsAvailable ?? 0), 0)
-  assert.equal(Number(sponsorBalance?.teamRewardsClaimed ?? 0), 0.1)
-  assert.equal(Number(sponsorBalance?.current ?? 0), 7.1)
-})
-
-test("L2 team profit payout covers generations A-C", { concurrency: false }, async () => {
-  const sponsor = await createUser()
-  const teamA = await Promise.all(
-    Array.from({ length: 10 }, async (_, index) =>
-      createUser({
-        referredBy: sponsor._id,
-        depositTotal: 120,
-        qualified: true,
-        qualifiedAt: new Date("2025-10-0" + ((index % 3) + 1) + "T00:00:00Z"),
-      }),
-    ),
-  )
-
-  const teamB = await createUser({
-    referredBy: teamA[0]._id,
-    depositTotal: 150,
-    qualified: true,
-    qualifiedAt: new Date("2025-10-05T00:00:00Z"),
-  })
-
-  const teamC = await createUser({
-    referredBy: teamB._id,
-    depositTotal: 200,
-    qualified: true,
-    qualifiedAt: new Date("2025-10-06T00:00:00Z"),
-  })
-
-  await refreshAllUserLevels(new Date("2025-10-11T00:00:00Z"))
-
-  await Promise.all([
-    ...teamA.slice(0, 4).map((member) =>
-      TeamDailyProfit.create({
-        memberId: member._id,
-        profitDate: new Date("2025-10-11T08:00:00Z"),
-        profitAmount: 10,
-        activeOnDate: true,
-      }),
-    ),
-    TeamDailyProfit.create({
-      memberId: teamB._id,
-      profitDate: new Date("2025-10-11T08:00:00Z"),
-      profitAmount: 20,
-      activeOnDate: true,
-    }),
-    TeamDailyProfit.create({
-      memberId: teamC._id,
-      profitDate: new Date("2025-10-11T08:00:00Z"),
-      profitAmount: 10,
-      activeOnDate: true,
-    }),
-  ])
-
-  const results = await payDailyTeamProfit(new Date("2025-10-12T00:00:00Z"))
-  const sponsorResult = results.find((entry) => entry.userId === toId(sponsor._id))
-  assert.ok(sponsorResult)
-  assert.equal(sponsorResult?.amount, 0.7)
-  assert.equal(sponsorResult?.totalTeamProfit, 70)
-})
-
-test("L3 sponsors receive team deposit commission from depth A-D", { concurrency: false }, async () => {
-  const sponsor = await createUser()
-  const teamA = await Promise.all(
-    Array.from({ length: 15 }, async () =>
-      createUser({
-        referredBy: sponsor._id,
-        depositTotal: 100,
-        qualified: true,
-        qualifiedAt: new Date("2025-09-15T00:00:00Z"),
-      }),
-    ),
-  )
-
-  const teamB = await createUser({
-    referredBy: teamA[0]._id,
-    depositTotal: 120,
-    qualified: true,
-    qualifiedAt: new Date("2025-09-16T00:00:00Z"),
-  })
-
-  const teamC = await createUser({
-    referredBy: teamB._id,
-    depositTotal: 140,
-    qualified: true,
-    qualifiedAt: new Date("2025-09-17T00:00:00Z"),
-  })
-
-  await refreshAllUserLevels(new Date("2025-09-18T00:00:00Z"))
-
-  const deposit = await Transaction.create({
-    userId: teamC._id,
-    type: "deposit",
-    amount: 500,
-    status: "approved",
-    createdAt: new Date("2025-09-18T10:00:00Z"),
-    updatedAt: new Date("2025-09-18T10:00:00Z"),
   } as any)
 
-  const outcomes = await payTeamDepositCommissions(toId(deposit._id))
+  const outcomes = await payDailyTeamProfit(new Date("2025-03-03T00:00:00Z"))
   assert.equal(outcomes.length, 1)
-  assert.equal(outcomes[0]?.amount, 40)
-  assert.equal(outcomes[0]?.created, true)
-})
+  assert.equal(outcomes[0]?.level, 1)
+  assert.equal(outcomes[0]?.userId, toId(leader._id))
 
-test("first qualifying deposit awards a single $2 credit", { concurrency: false }, async () => {
-  const user = await createUser()
-  const userId = toId(user._id)
-
-  await Balance.create({
-    userId: user._id,
-    current: 0,
-    totalBalance: 0,
-    totalEarning: 0,
-    teamRewardsAvailable: 0,
-    teamRewardsClaimed: 0,
-  } as any)
-
-  const firstResult = await applyDepositRewards(userId, 100)
-  assert.equal(firstResult.depositCommission, 2)
-
-  let balance = await Balance.findOne({ userId: user._id })
-  assert.ok(balance)
-  assert.equal(Number(balance?.current ?? 0), 2)
-  assert.equal(Number(balance?.totalBalance ?? 0), 2)
-  assert.equal(Number(balance?.totalEarning ?? 0), 2)
-
-  let commissionTxs = await Transaction.find({
-    userId: user._id,
-    type: "commission",
-    "meta.source": "deposit_commission",
-  })
-  assert.equal(commissionTxs.length, 1)
-  assert.equal(Number(commissionTxs[0]?.amount ?? 0), 2)
-  assert.equal(commissionTxs[0]?.meta?.fixedAmount, 2)
-
-  const secondResult = await applyDepositRewards(userId, 150)
-  assert.equal(secondResult.depositCommission, 0)
-
-  balance = await Balance.findOne({ userId: user._id })
-  assert.ok(balance)
-  assert.equal(Number(balance?.current ?? 0), 2)
-  assert.equal(Number(balance?.totalBalance ?? 0), 2)
-  assert.equal(Number(balance?.totalEarning ?? 0), 2)
-
-  commissionTxs = await Transaction.find({
-    userId: user._id,
-    type: "commission",
-    "meta.source": "deposit_commission",
-  })
-  assert.equal(commissionTxs.length, 1)
-})
-
-test("Monthly bonuses pay out for L4 and L5 when thresholds met", { concurrency: false }, async () => {
-  const l4Sponsor = await createUser()
-  const l4Directs = await Promise.all(
-    Array.from({ length: 23 }, async () =>
-      createUser({
-        referredBy: l4Sponsor._id,
-        depositTotal: 100,
-        qualified: true,
-        qualifiedAt: new Date("2024-10-05T00:00:00Z"),
-      }),
-    ),
-  )
-
-  await refreshAllUserLevels(new Date("2024-10-31T00:00:00Z"))
-
-  await Promise.all(
-    l4Directs.slice(0, 5).map((member, index) =>
-      Transaction.create({
-        userId: member._id,
-        type: "deposit",
-        amount: 460,
-        status: "approved",
-        createdAt: new Date(`2024-10-${10 + index}T12:00:00Z`),
-        updatedAt: new Date(`2024-10-${10 + index}T12:00:00Z`),
-      } as any),
-    ),
-  )
-
-  const l5Sponsor = await createUser()
-  const l5Directs = await Promise.all(
-    Array.from({ length: 30 }, async (_, index) =>
-      createUser({
-        referredBy: l5Sponsor._id,
-        depositTotal: 150,
-        qualified: true,
-        qualifiedAt: new Date(`2024-09-${String((index % 10) + 10).padStart(2, "0")}T00:00:00Z`),
-      }),
-    ),
-  )
-
-  await refreshAllUserLevels(new Date("2024-10-31T00:00:00Z"))
-
-  await Promise.all(
-    l5Directs.slice(0, 10).map((member, index) =>
-      Transaction.create({
-        userId: member._id,
-        type: "deposit",
-        amount: 470,
-        status: "approved",
-        createdAt: new Date(`2024-10-${String(5 + index).padStart(2, "0")}T09:00:00Z`),
-        updatedAt: new Date(`2024-10-${String(5 + index).padStart(2, "0")}T09:00:00Z`),
-      } as any),
-    ),
-  )
-
-  const outcomes = await payMonthlyBonuses(new Date("2024-11-01T00:00:00Z"))
-  const l4Outcome = outcomes.find((outcome) => outcome.uniqueKey.includes(toId(l4Sponsor._id)))
-  const l5Outcome = outcomes.find((outcome) => outcome.uniqueKey.includes(toId(l5Sponsor._id)))
-
-  assert.ok(l4Outcome)
-  assert.equal(l4Outcome?.amount, 200)
-  assert.equal(l4Outcome?.created, true)
-
-  assert.ok(l5Outcome)
-  assert.equal(l5Outcome?.amount, 400)
-  assert.equal(l5Outcome?.created, true)
-
-  const duplicate = await payMonthlyBonuses(new Date("2024-11-01T00:00:00Z"))
-  const l4Duplicate = duplicate.find((outcome) => outcome.uniqueKey.includes(toId(l4Sponsor._id)))
-  const l5Duplicate = duplicate.find((outcome) => outcome.uniqueKey.includes(toId(l5Sponsor._id)))
-  assert.ok(l4Duplicate)
-  assert.equal(l4Duplicate?.created, false)
-  assert.ok(l5Duplicate)
-  assert.equal(l5Duplicate?.created, false)
-})
-
-test("Negative team profits do not generate payouts", { concurrency: false }, async () => {
-  const sponsor = await createUser()
-  const direct = await createUser({
-    referredBy: sponsor._id,
-    depositTotal: 100,
-    qualified: true,
-    qualifiedAt: new Date("2025-10-01T00:00:00Z"),
-  })
-
-  await refreshAllUserLevels(new Date("2025-10-11T00:00:00Z"))
-
-  await TeamDailyProfit.create({
-    memberId: direct._id,
-    profitDate: new Date("2025-10-11T08:00:00Z"),
-    profitAmount: -5,
-    activeOnDate: true,
-  })
-
-  const results = await payDailyTeamProfit(new Date("2025-10-12T00:00:00Z"))
-  const sponsorResult = results.find((entry) => entry.userId === toId(sponsor._id))
-  assert.equal(sponsorResult, undefined)
+  const hasLevel2 = outcomes.some((entry) => entry.level === 2)
+  assert.equal(hasLevel2, false)
 })
