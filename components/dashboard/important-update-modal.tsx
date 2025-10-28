@@ -80,6 +80,9 @@ export function ImportantUpdateModal() {
 =======
         <div className="bg-[#773004] px-6 py-4 text-white">
           <DialogTitle className="text-center text-lg font-semibold uppercase tracking-wide">
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             10 Dollar Game
           </DialogTitle>
@@ -107,6 +110,9 @@ export function ImportantUpdateModal() {
                 We are excited to introduce the "10 Dollar Game" – a fun and engaging way to boost your mining power! For just $10, you can participate in this game and stand a chance to win 30 Dollar. Don't miss out on this opportunity to enhance your mining experience!
               </p>
              
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             </div>
           </DialogDescription>
@@ -125,6 +131,9 @@ export function ImportantUpdateModal() {
 =======
           <Button className="w-full" onClick={() => setOpen(false)}>
             Buy Now 
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
           </Button>
         </div>
