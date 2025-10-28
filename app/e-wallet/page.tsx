@@ -6,6 +6,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -17,6 +18,7 @@ interface WalletAddress {
   chain: string
   address: string
   createdAt: string
+  verified?: boolean
 }
 
 export default function EWalletPage() {
@@ -236,18 +238,18 @@ export default function EWalletPage() {
                   <Card key={address._id}>
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
-<<<<<<< Updated upstream
                         <div className="flex-1 space-y-2">
-                          <h3 className="font-semibold">{address.label}</h3>
-=======
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-semibold">{address.label}</h3>
-                            <Badge variant={address.verified ? "default" : "secondary"}>
-                              {address.verified ? "Verified" : "verified"}
-                            </Badge>
+                            {typeof address.verified === "boolean" && (
+                              <Badge
+                                variant={address.verified ? "default" : "secondary"}
+                                className="text-xs"
+                              >
+                                {address.verified ? "Verified" : "Unverified"}
+                              </Badge>
+                            )}
                           </div>
->>>>>>> Stashed changes
                           <p className="text-sm text-muted-foreground">
                             <strong>Chain:</strong> {address.chain}
                           </p>
