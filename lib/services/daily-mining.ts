@@ -55,15 +55,17 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
 
   const users = userIds.length
     ? await User.find({ _id: { $in: userIds } })
-        .select({ _id: 1, miningDailyRateOverridePct: 1 })
+        .select({ _id: 1, miningDailyRateOverridePct: 1, isActive: 1 })
         .lean()
     : []
 
   const rateByUser = new Map<string, number | null>()
+  const activeFlagByUser = new Map<string, boolean>()
   for (const u of users) {
     const k = (u._id as any).toString()
     const v = typeof (u as any).miningDailyRateOverridePct === "number" ? (u as any).miningDailyRateOverridePct : null
     rateByUser.set(k, v)
+    activeFlagByUser.set(k, Boolean((u as any).isActive))
   }
 
   // Resolve global default
@@ -95,6 +97,7 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
     }
 
     const overrideRate = rateByUser.get(uid)
+    const isActiveOnDate = activeFlagByUser.get(uid) ?? false
     const rate = typeof overrideRate === "number" && overrideRate > 0 ? overrideRate : defaultRate
     const amount = round((base * rate) / 100)
     if (amount <= 0) {
@@ -164,19 +167,23 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
     } as any)
 
     // Upsert a TeamDailyProfit entry for the member for this day
-    const existingDgp = await TeamDailyProfit.findOne({
-      memberId: new mongoose.Types.ObjectId(uid),
-      profitDate: { $gte: windowStart, $lte: windowEnd },
-    })
-
-    if (!existingDgp) {
-      await TeamDailyProfit.create({
+    await TeamDailyProfit.updateOne(
+      {
         memberId: new mongoose.Types.ObjectId(uid),
-        profitDate: windowEnd,
-        profitAmount: amount,
-        activeOnDate: true,
-      } as any)
-    }
+        profitDate: { $gte: windowStart, $lte: windowEnd },
+      },
+      {
+        $set: {
+          profitAmount: amount,
+          activeOnDate: isActiveOnDate,
+        },
+        $setOnInsert: {
+          memberId: new mongoose.Types.ObjectId(uid),
+          profitDate: windowEnd,
+        },
+      },
+      { upsert: true },
+    )
 
     console.info("[daily-mining] credit", {
       event_id: uniqueKey,

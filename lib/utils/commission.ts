@@ -74,6 +74,52 @@ interface TeamRewardCreditOptions {
   logContext?: Record<string, unknown>
 }
 
+async function detectReferralCycle(
+  startingUser: any,
+  maxDepth = 10,
+): Promise<{ detected: boolean; path: string[] }> {
+  if (!startingUser) {
+    return { detected: false, path: [] }
+  }
+
+  const visited = new Set<string>()
+  let current: any | null = startingUser
+  let depth = 0
+  const path: string[] = []
+
+  while (current && depth < maxDepth) {
+    const currentId = toObjectIdString(current._id)
+    path.push(currentId)
+
+    if (visited.has(currentId)) {
+      return { detected: true, path }
+    }
+
+    visited.add(currentId)
+
+    if (!current.referredBy) {
+      return { detected: false, path }
+    }
+
+    const sponsorIdString = toObjectIdString(current.referredBy)
+
+    if (visited.has(sponsorIdString)) {
+      path.push(sponsorIdString)
+      return { detected: true, path }
+    }
+
+    const sponsor = await User.findById(sponsorIdString)
+    if (!sponsor) {
+      return { detected: false, path }
+    }
+
+    current = sponsor
+    depth += 1
+  }
+
+  return { detected: false, path }
+}
+
 async function creditTeamReward({
   userId,
   amount,
@@ -140,6 +186,7 @@ async function creditTeamReward({
     claimable: true,
     meta: {
       source,
+      accrual: true,
       uniqueEventId: uniqueKey,
       uniqueKey,
       eventId: uniqueKey,
@@ -475,11 +522,31 @@ export async function processReferralCommission(
   const payout = await resolveDirectCommission(referredUser, activationAmount)
   if (!payout) return null
 
+  const referredUserIdString = toObjectIdString(referredUser._id)
+  const sponsorIdString = toObjectIdString(payout.sponsor._id)
+
+  if (sponsorIdString === referredUserIdString) {
+    console.info("[commission] referral_cycle_self", {
+      event_id: options.activationId ?? options.depositTransactionId ?? "manual",
+      referredUserId: referredUserIdString,
+      sponsorId: sponsorIdString,
+    })
+    return null
+  }
+
+  const lineageCheck = await detectReferralCycle(referredUser)
+  if (lineageCheck.detected) {
+    console.info("[commission] referral_cycle_detected", {
+      event_id: options.activationId ?? options.depositTransactionId ?? "manual",
+      path: lineageCheck.path,
+    })
+    return null
+  }
+
   const activationId =
     options.activationId ??
     options.depositTransactionId ??
     `manual:${referredUserId}:${occurredAt.toISOString()}`
-  const sponsorIdString = toObjectIdString(payout.sponsor._id)
   const directUniqueKey = `${sponsorIdString}|${activationId}|L1_15`
 
   const result: DirectCommissionResult = { ...payout }
@@ -541,7 +608,7 @@ export async function processReferralCommission(
       amount: payout.amount,
       occurredAt,
       uniqueKey: directUniqueKey,
-      source: "activation_direct",
+      source: "direct_referral",
       meta: {
         referredUserId,
         referredUserName: referredUser.name ?? null,
@@ -905,28 +972,71 @@ export async function applyDepositRewards(
     const selfBonusAmount = roundCurrency(depositAmount * (SELF_BONUS_PCT / 100))
     const selfUniqueKey = `${toObjectIdString(userId)}|${depositReferenceId}|self5`
 
-    const posted = await creditTeamReward({
-      userId,
-      amount: selfBonusAmount,
-      occurredAt: depositOccurredAt,
-      uniqueKey: selfUniqueKey,
-      source: "self_deposit_bonus",
-      meta: {
-        depositAmount: roundCurrency(depositAmount),
-        rewardPct: SELF_BONUS_PCT,
-        depositTransactionId: options.depositTransactionId ?? null,
-        activationId,
-        qualifiesForActivation: isActivationEvent,
-        label: "Self deposit bonus",
-      },
-      logContext: {
-        level: "SELF",
-        percentage: SELF_BONUS_PCT,
-        base_amount: roundCurrency(depositAmount),
-      },
+    const userObjectId = toObjectId(userId)
+    const existingSelfBonus = await Transaction.findOne({
+      userId: userObjectId,
+      "meta.uniqueEventId": selfUniqueKey,
     })
 
-    if (posted === "posted") {
+    if (existingSelfBonus) {
+      console.info("[commission] duplicate_prevented", {
+        event_id: selfUniqueKey,
+        source: "self_deposit_bonus",
+        amount: selfBonusAmount,
+      })
+    } else if (selfBonusAmount > 0) {
+      await Balance.findOneAndUpdate(
+        { userId: userObjectId },
+        {
+          $inc: {
+            current: selfBonusAmount,
+            totalBalance: selfBonusAmount,
+            totalEarning: selfBonusAmount,
+          },
+          $setOnInsert: {
+            current: 0,
+            totalBalance: 0,
+            totalEarning: 0,
+            lockedCapital: 0,
+            lockedCapitalLots: [],
+            staked: 0,
+            pendingWithdraw: 0,
+            teamRewardsAvailable: 0,
+            teamRewardsClaimed: 0,
+            luckyDrawCredits: 0,
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      )
+
+      await Transaction.create({
+        userId: userObjectId,
+        type: "bonus",
+        amount: selfBonusAmount,
+        status: "approved",
+        claimable: false,
+        meta: {
+          source: "self_deposit_bonus",
+          rewardPct: SELF_BONUS_PCT,
+          depositAmount: roundCurrency(depositAmount),
+          depositTransactionId: options.depositTransactionId ?? null,
+          activationId,
+          qualifiesForActivation: isActivationEvent,
+          label: "Self deposit bonus",
+          uniqueEventId: selfUniqueKey,
+          uniqueKey: selfUniqueKey,
+          eventId: selfUniqueKey,
+        },
+        createdAt: depositOccurredAt,
+        updatedAt: depositOccurredAt,
+      })
+
+      console.info("[commission] credit", {
+        event_id: selfUniqueKey,
+        source: "self_deposit_bonus",
+        amount: selfBonusAmount,
+      })
+
       results.selfBonus = selfBonusAmount
     }
   }
@@ -936,10 +1046,11 @@ export async function applyDepositRewards(
   }
 
   if (isActivationEvent) {
+    const depositCommissionUniqueKey = `${toObjectIdString(userId)}|${depositReferenceId}|deposit2`
+
     const existingDepositCredit = await Transaction.findOne({
-      userId,
-      type: "commission",
-      "meta.source": "deposit_commission",
+      userId: toObjectId(userId),
+      "meta.uniqueEventId": depositCommissionUniqueKey,
     })
 
     if (!existingDepositCredit) {
@@ -948,7 +1059,7 @@ export async function applyDepositRewards(
 
       if (depositCommission > 0 && !options.dryRun) {
         await Balance.updateOne(
-          { userId },
+          { userId: toObjectId(userId) },
           {
             $inc: {
               current: depositCommission,
@@ -960,7 +1071,7 @@ export async function applyDepositRewards(
         )
 
         await Transaction.create({
-          userId,
+          userId: toObjectId(userId),
           type: "commission",
           amount: depositCommission,
           meta: {
@@ -971,11 +1082,18 @@ export async function applyDepositRewards(
             ...(options.adjustmentReason ? { adjustment_reason: options.adjustmentReason } : {}),
             depositTransactionId: options.depositTransactionId ?? null,
             eventId: `deposit_commission:${userId}:${options.depositTransactionId ?? "manual"}`,
+            uniqueEventId: depositCommissionUniqueKey,
+            uniqueKey: depositCommissionUniqueKey,
           },
         })
       }
     } else {
       results.depositCommission = 0
+      console.info("[commission] duplicate_prevented", {
+        event_id: depositCommissionUniqueKey,
+        source: "deposit_commission",
+        amount: Number(existingDepositCredit.amount ?? 0),
+      })
     }
   }
 

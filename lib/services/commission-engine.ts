@@ -42,8 +42,21 @@ function roundTo(amount: number, decimals: number): number {
   return Math.round(amount * factor) / factor
 }
 
+function roundDownTo(amount: number, decimals: number): number {
+  if (!Number.isFinite(amount)) {
+    return 0
+  }
+
+  const factor = 10 ** decimals
+  return Math.floor(amount * factor) / factor
+}
+
 function roundPlatform(amount: number): number {
   return roundTo(amount, PLATFORM_DECIMALS)
+}
+
+function roundDownPlatform(amount: number): number {
+  return roundDownTo(amount, PLATFORM_DECIMALS)
 }
 
 function normaliseObjectId(value: mongoose.Types.ObjectId | string | null | undefined): string | null {
@@ -97,13 +110,24 @@ async function creditDailyOverride(options: {
   memberName?: string | null
   dayKey: string
   postedAt: Date
+  memberActive: boolean
 }): Promise<DailyOverrideResult | null> {
-  const { recipientId, level, baseAmount, memberId, memberName, dayKey, postedAt } = options
+  const { recipientId, level, baseAmount, memberId, memberName, dayKey, postedAt, memberActive } = options
   if (!recipientId) {
     return null
   }
 
-  const amount = roundPlatform(baseAmount * 0.01)
+  if (level === 2 && !memberActive) {
+    console.info("[commission-engine] daily_override_skipped", {
+      event_id: `DTE:${dayKey}:${memberId}:inactive`,
+      level: "L2",
+      reason: "inactive_member",
+    })
+    return null
+  }
+
+  const baseProfit = roundDownPlatform(baseAmount)
+  const amount = roundDownPlatform(baseProfit * 0.01)
   if (amount <= 0) {
     return null
   }
@@ -112,56 +136,48 @@ async function creditDailyOverride(options: {
     return null
   }
 
-  const uniqueKey = `${recipientId}|${dayKey}|${level === 1 ? "ovrL1" : "ovrL2"}|${memberId}`
+  const teamCode = level === 1 ? "A" : "B"
+  const uniqueKey = `DTE:${dayKey}:${memberId}:${recipientId}:${teamCode}`
   const userObjectId = new mongoose.Types.ObjectId(recipientId)
 
   const existing = await Transaction.findOne({
     userId: userObjectId,
-    "meta.uniqueKey": uniqueKey,
+    $or: [
+      { "meta.uniqueEventId": uniqueKey },
+      { "meta.uniqueKey": uniqueKey },
+    ],
   })
 
   if (existing) {
     console.info("[commission-engine] duplicate_prevented", {
       event_id: uniqueKey,
       level: level === 1 ? "L1" : "L2",
-      source: "daily",
+      source: "daily_team_earning",
     })
     return null
   }
 
-  let balanceUpdated = false
-
-  const attemptUpdate = async (filter: Record<string, unknown>) => {
-    if (balanceUpdated) return
-    const result = await Balance.updateOne(
-      filter,
-      {
-        $inc: {
-          teamRewardsAvailable: amount,
-        },
+  await Balance.findOneAndUpdate(
+    { userId: userObjectId },
+    {
+      $inc: {
+        teamRewardsAvailable: amount,
       },
-    )
-
-    if ((result as any)?.modifiedCount > 0 || (result as any)?.matchedCount > 0) {
-      balanceUpdated = true
-    }
-  }
-
-  await attemptUpdate({ userId: recipientId })
-  if (!balanceUpdated) {
-    await attemptUpdate({ userId: userObjectId })
-  }
-
-  if (!balanceUpdated) {
-    await Balance.create({
-      userId: userObjectId,
-      current: 0,
-      totalBalance: 0,
-      totalEarning: 0,
-      teamRewardsClaimed: 0,
-      teamRewardsAvailable: amount,
-    } as any)
-  }
+      $setOnInsert: {
+        current: 0,
+        totalBalance: 0,
+        totalEarning: 0,
+        lockedCapital: 0,
+        lockedCapitalLots: [],
+        staked: 0,
+        pendingWithdraw: 0,
+        teamRewardsClaimed: 0,
+        teamRewardsAvailable: 0,
+        luckyDrawCredits: 0,
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  )
 
   await Transaction.create({
     userId: userObjectId,
@@ -170,13 +186,15 @@ async function creditDailyOverride(options: {
     status: "approved",
     claimable: true,
     meta: {
-      source: "daily_team_reward",
+      source: "daily_team_earning",
       overrideKind: level === 1 ? "DAILY_OVERRIDE_L1" : "DAILY_OVERRIDE_L2",
       overridePct: 1,
       level,
-      baseProfit: roundPlatform(baseAmount),
+      team: teamCode,
+      baseProfit,
       memberId,
       memberName: memberName ?? null,
+      uniqueEventId: uniqueKey,
       uniqueKey,
       day: dayKey,
       eventId: uniqueKey,
@@ -189,8 +207,8 @@ async function creditDailyOverride(options: {
     event_id: uniqueKey,
     level: level === 1 ? "L1" : "L2",
     percentage: 1,
-    base_amount: roundPlatform(baseAmount),
-    source: "daily",
+    base_amount: baseProfit,
+    source: "daily_team_earning",
   })
 
   return { userId: recipientId, level, amount, memberId }
@@ -215,7 +233,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
   const profitDocs = await TeamDailyProfit.find({
     profitDate: { $gte: windowStart, $lte: windowEnd },
   })
-    .select({ memberId: 1, profitAmount: 1 })
+    .select({ memberId: 1, profitAmount: 1, activeOnDate: 1 })
     .lean()
 
   if (profitDocs.length === 0) {
@@ -285,7 +303,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
     if (!memberId) continue
 
     const baseProfitRaw = Number(doc.profitAmount ?? 0)
-    const baseProfit = roundPlatform(baseProfitRaw)
+    const baseProfit = roundDownPlatform(baseProfitRaw)
     if (!Number.isFinite(baseProfit) || baseProfit <= 0) {
       continue
     }
@@ -299,6 +317,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
     const leaderId = memberInfo.referredBy ?? null
     const memberName = memberInfo?.name ?? null
     const leaderLeaderId = leaderId ? sponsorMap.get(leaderId) ?? null : null
+    const memberActive = Boolean(doc.activeOnDate)
 
     const leaderOutcome = await creditDailyOverride({
       recipientId: leaderId,
@@ -308,6 +327,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       memberName,
       dayKey,
       postedAt: windowEnd,
+      memberActive,
     })
 
     if (leaderOutcome) {
@@ -324,6 +344,7 @@ export async function payDailyTeamProfit(date: Date = new Date()): Promise<Daily
       memberName,
       dayKey,
       postedAt: windowEnd,
+      memberActive,
     })
 
     if (leader2Outcome) {
