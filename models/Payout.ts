@@ -49,5 +49,6 @@ const PayoutSchema = new Schema<IPayout>(
 PayoutSchema.index({ userId: 1, createdAt: -1 })
 PayoutSchema.index({ status: 1, createdAt: -1 })
 PayoutSchema.index({ type: 1, date: -1 })
+PayoutSchema.index({ uniqueKey: 1 }, { unique: true })
 
 export default createModelProxy<IPayout>("Payout", PayoutSchema)

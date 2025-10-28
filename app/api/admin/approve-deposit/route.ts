@@ -35,26 +35,28 @@ export async function POST(request: NextRequest) {
     )
 
     // Update user deposit total and balance
-    await Promise.all([
-      User.updateOne({ _id: transaction.userId }, { $inc: { depositTotal: transaction.amount } }),
-      Balance.updateOne(
-        { userId: transaction.userId },
-        {
-          $inc: {
-            current: transaction.amount,
-            totalBalance: transaction.amount,
-          },
-          $setOnInsert: {
-            totalEarning: 0,
-            staked: 0,
-            pendingWithdraw: 0,
-            teamRewardsAvailable: 0,
-            teamRewardsClaimed: 0,
-          },
+    await User.updateOne(
+      { _id: transaction.userId },
+      { $inc: { depositTotal: transaction.amount } },
+    )
+
+    await Balance.updateOne(
+      { userId: transaction.userId },
+      {
+        $inc: {
+          current: transaction.amount,
+          totalBalance: transaction.amount,
         },
-        { upsert: true },
-      ),
-    ])
+        $setOnInsert: {
+          totalEarning: 0,
+          staked: 0,
+          pendingWithdraw: 0,
+          teamRewardsAvailable: 0,
+          teamRewardsClaimed: 0,
+        },
+      },
+      { upsert: true },
+    )
 
     // Apply deposit commissions and referral rewards
     const activationId = transaction._id.toString()

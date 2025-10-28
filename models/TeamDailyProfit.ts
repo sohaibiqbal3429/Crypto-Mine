@@ -32,7 +32,7 @@ const TeamDailyProfitSchema = new Schema<ITeamDailyProfit>(
     memberId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     profitDate: { type: Date, required: true, index: true },
     profitAmount: { type: Number, required: true },
-    activeOnDate: { type: Boolean, default: true },
+    activeOnDate: { type: Boolean, default: false },
     claimedBy: { type: [TeamDailyProfitClaimSchema], default: [] },
   },
   {

@@ -363,6 +363,10 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
   }
 
   if (tx.type === "bonus") {
+    if (source === "self_deposit_bonus") {
+      return "bonus"
+    }
+
     if (source === "team_override") {
       switch (tx.meta?.overrideKind) {
         case "team_reward":
@@ -393,26 +397,22 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
     return "team_commission"
   }
 
-  if (tx.type === "teamReward" && source === "daily_team_earning") {
-    return "daily_team_earning"
-  }
-
-  if (tx.type === "teamReward" && source === "daily_team_reward") {
-    return "daily_profit"
-  }
-
   if (tx.type === "teamReward") {
-    if (source === "activation_direct") {
-      return "deposit_commission"
+    if (source === "daily_team_earning") {
+      return "daily_team_earning"
     }
 
-    if (source === "activation_level2_override") {
-      return "team_commission"
+    const teamRewardSources = new Set([
+      "direct_referral",
+      "activation_level2_override",
+      "daily_team_earning",
+    ])
+
+    if (teamRewardSources.has(source)) {
+      return "team_reward"
     }
 
-    if (source === "self_deposit_bonus") {
-      return "other"
-    }
+    return "team_reward"
   }
 
   return "other"
