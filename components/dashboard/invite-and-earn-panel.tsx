@@ -69,7 +69,7 @@ export function InviteAndEarnPanel({ referralCode = "CRYPTO123", activeInvites =
           <Share2 className="h-6 w-6 text-emerald-500" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Earn 10% of your friends’ daily earnings when they start mining with your referral link.
+          Earn 15% of your friends’ daily earnings when they start mining with your referral link.
         </p>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-6">

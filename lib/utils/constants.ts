@@ -51,7 +51,7 @@ export const LEVEL_CONFIG = {
   ],
   perks: {
     directCommission: {
-      1: "7% direct commission + 1% Team A daily profit share",
+      1: "15% direct commission + 1% Team A daily profit share",
       2: "8% direct commission + 1% daily profit share across Teams A–C",
       3: "8% direct commission with 8% team commission + 2% team reward across Teams A–D",
       4: "9% direct commission + 2% team reward; $200 bonus when monthly direct sales reach 2,200 USDT",
