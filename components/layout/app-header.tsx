@@ -50,9 +50,9 @@ export function AppHeader() {
           </button>
 
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Link href="/dashboard" className="flex items-center gap-2" prefetch={false}>
-              <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="h-9 w-9 rounded-xl" />
-              <span className="sr-only">Go to dashboard</span>
+            <Link href="/" className="flex items-center gap-2" prefetch>
+              <Image src="/logo.png" alt="CryptoMine" width={32} height={32} className="h-8 w-8 rounded-lg" priority />
+              <span className="text-base font-semibold text-foreground">CryptoMine</span>
             </Link>
             <span className="truncate text-sm font-medium text-foreground/90">{pageTitle}</span>
           </div>

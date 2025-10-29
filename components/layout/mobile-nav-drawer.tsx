@@ -162,6 +162,7 @@ export function MobileNavDrawer({ open, onOpenChange, anchorRef }: MobileNavDraw
           <li key={item.href}>
             <Link
               href={item.href}
+              prefetch={item.href === "/team" ? true : undefined}
               onClick={() => onOpenChange(false)}
               className={linkClasses(isActive)}
               aria-current={isActive ? "page" : undefined}
@@ -176,6 +177,7 @@ export function MobileNavDrawer({ open, onOpenChange, anchorRef }: MobileNavDraw
         <li key={ADMIN_NAV_ITEM.href}>
           <Link
             href={ADMIN_NAV_ITEM.href}
+            prefetch={ADMIN_NAV_ITEM.href === "/team" ? true : undefined}
             onClick={() => onOpenChange(false)}
             className={linkClasses(
               pathname === ADMIN_NAV_ITEM.href || pathname.startsWith(`${ADMIN_NAV_ITEM.href}/`),
