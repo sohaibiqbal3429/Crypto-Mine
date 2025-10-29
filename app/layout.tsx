@@ -13,6 +13,11 @@ export const metadata: Metadata = {
   description:
     "Join our innovative mining ecosystem with referral rewards, team building, and sustainable earning opportunities.",
   generator: "v0.app",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 }
 
 export default function RootLayout({
