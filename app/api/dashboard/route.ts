@@ -6,7 +6,7 @@ import User from "@/models/User"
 import Balance from "@/models/Balance"
 import MiningSession from "@/models/MiningSession"
 import Settings from "@/models/Settings"
-import Payout from "@/models/Payout"
+import Transaction from "@/models/Transaction"
 import { getUserFromRequest } from "@/lib/auth"
 import { hasQualifiedDeposit } from "@/lib/utils/leveling"
 import { getClaimableTeamRewardTotal } from "@/lib/services/team-earnings"
@@ -46,15 +46,17 @@ export async function getDailyTeamRewardTotal(
     idCandidates.push(new mongoose.Types.ObjectId(userIdString))
   }
 
-  const results = await Payout.aggregate([
+  const results = await Transaction.aggregate([
     {
       $match: {
         userId: { $in: idCandidates },
-        type: "daily_team_earning",
+        type: "teamReward",
+        status: "approved",
+        "meta.source": "daily_team_earning",
         $or: [
           { "meta.day": dayKey },
           {
-            date: {
+            createdAt: {
               $gte: start,
               $lte: end,
             },
