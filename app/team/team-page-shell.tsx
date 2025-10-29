@@ -190,9 +190,19 @@ export default function TeamPageShell() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="structure">Team Directory</TabsTrigger>
-              <TabsTrigger value="levels">Levels &amp; Progress</TabsTrigger>
+            <TabsList className="grid h-12 w-full grid-cols-2 rounded-full bg-muted/70 p-1.5">
+              <TabsTrigger
+                value="structure"
+                className="rounded-full px-4 py-2 text-base font-semibold data-[state=active]:shadow-md"
+              >
+                Team Directory
+              </TabsTrigger>
+              <TabsTrigger
+                value="levels"
+                className="rounded-full px-4 py-2 text-base font-semibold data-[state=active]:shadow-md"
+              >
+                Levels &amp; Progress
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="structure" className="space-y-6">
