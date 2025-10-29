@@ -22,6 +22,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/logo.png" sizes="any" />
+        <link rel="apple-touch-icon" href="/logo.png" />
+        <meta name="theme-color" content="#000000" />
+      </head>
       <body className={cn("min-h-screen bg-background font-sans antialiased text-foreground")}>
         <Suspense fallback={null}>
           <TopLoaderProvider>

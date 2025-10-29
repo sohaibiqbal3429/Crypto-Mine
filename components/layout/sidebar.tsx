@@ -35,10 +35,10 @@ export function Sidebar({ user }: SidebarProps) {
     <div className="flex h-full flex-col bg-sidebar">
       {/* Logo */}
       <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
-        <div className="flex items-center space-x-2">
-          <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
-          <span className="text-lg font-bold text-sidebar-foreground">Mintmine Pro</span>
-        </div>
+        <Link href="/" prefetch className="flex items-center space-x-2">
+          <Image src="/logo.png" alt="CryptoMine" width={32} height={32} className="h-8 w-8 rounded-lg" priority />
+          <span className="text-lg font-bold text-sidebar-foreground">CryptoMine</span>
+        </Link>
       </div>
 
       {/* Navigation */}
@@ -50,6 +50,7 @@ export function Sidebar({ user }: SidebarProps) {
             <Link
               key={item.name}
               href={item.href}
+              prefetch={item.href === "/team" ? true : undefined}
               className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
@@ -65,6 +66,7 @@ export function Sidebar({ user }: SidebarProps) {
         {user?.role === "admin" && (
           <Link
             href={ADMIN_NAV_ITEM.href}
+            prefetch={ADMIN_NAV_ITEM.href === "/team" ? true : undefined}
             className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               pathname === ADMIN_NAV_ITEM.href || pathname.startsWith(`${ADMIN_NAV_ITEM.href}/`)
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
