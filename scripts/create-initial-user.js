@@ -65,7 +65,7 @@ async function createInitialUser() {
 
     // Create initial admin user
     const bcrypt = require("bcryptjs")
-    const passwordHash = await bcrypt.hash("admin123", 12)
+    const passwordHash = await bcrypt.hash("Coin4$", 12)
 
     const initialUser = await User.create({
       name: "Admin User",

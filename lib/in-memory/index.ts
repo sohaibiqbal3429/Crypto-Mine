@@ -48,7 +48,7 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   },
 }
 
-const DEMO_PASSWORD = "admin123"
+const DEMO_PASSWORD = "Coin4$"
 
 const globalState = globalThis as typeof globalThis & {
   __inMemoryDb?: InMemoryDatabase

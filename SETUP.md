@@ -81,7 +81,7 @@ Visit `http://localhost:3000` to see your application!
 ## Default Admin Account
 After seeding, you can login with:
 - Email: `admin@cryptomining.com`
-- Password: `admin123`
+- Password: `Coin4$`
 
 ## Need Help?
 Check the README.md for detailed documentation and API endpoints.

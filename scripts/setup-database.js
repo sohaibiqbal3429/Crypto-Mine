@@ -79,7 +79,7 @@ async function setupDatabase() {
     } else {
       // Create initial admin user
       const bcrypt = require("bcryptjs")
-      const passwordHash = await bcrypt.hash("admin123", 12)
+    const passwordHash = await bcrypt.hash("Coin4$", 12)
 
       const initialUser = await User.create({
         name: "Admin User",
@@ -128,7 +128,7 @@ async function setupDatabase() {
     console.log("\n🎉 Database setup completed successfully!")
     console.log("📝 You can now use the following credentials to test:")
     console.log("   Referral Code: AAAAAA")
-    console.log("   Admin Login: admin@cryptomining.com / admin123")
+    console.log("   Admin Login: admin@cryptomining.com / Coin4$")
     console.log("\n🚀 Start the development server: npm run dev")
   } catch (error) {
     console.error("❌ Error setting up database:", error.message)

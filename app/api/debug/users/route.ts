@@ -41,7 +41,7 @@ export async function POST() {
     }
 
     // Create initial admin user
-    const passwordHash = await hashPassword("admin123")
+    const passwordHash = await hashPassword("Coin4$")
 
     const initialUser = await User.create({
       name: "Admin User",

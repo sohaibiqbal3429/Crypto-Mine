@@ -418,7 +418,7 @@ export async function seedDatabase(): Promise<SeedResult> {
 
   const adminExists = await userModel.findOne({ email: "admin@cryptomining.com" })
   if (!adminExists) {
-    const passwordHash = await bcrypt.hash("admin123", 12)
+    const passwordHash = await bcrypt.hash("Coin4$", 12)
     await userModel.create({
       email: "admin@cryptomining.com",
       passwordHash,
@@ -435,7 +435,7 @@ export async function seedDatabase(): Promise<SeedResult> {
       lastLoginAt: new Date(),
     })
     createdAdmin = true
-    console.log("✓ Admin user created (admin@cryptomining.com / admin123)")
+    console.log("✓ Admin user created (admin@cryptomining.com / Coin4$)")
   }
 
   console.log("🎉 Database seeding completed!")
