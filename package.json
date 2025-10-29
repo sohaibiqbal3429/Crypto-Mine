@@ -8,10 +8,10 @@
     "lint": "next lint",
     "test": "tsc --project tsconfig.tests.json && node --test -r ./dist-tests/tests/register-paths dist-tests/tests",
     "seed:build": "tsc --project tsconfig.scripts.json",
-    "seed:db": "npm run seed:build && node dist/scripts/seed-database.js",
-    "migrate:commission15": "npm run seed:build && node dist/scripts/migrations/20251029-direct-commission-15.js",
-    "migrate:retrofix15": "npm run seed:build && node dist/scripts/migrations/20251029-retrofix-direct-commission.js",
-    "admin:reset-password": "npm run seed:build && node dist/scripts/migrations/20251029-admin-password-reset.js",
+    "seed:db": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/seed-database.js",
+    "migrate:commission15": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-direct-commission-15.js",
+    "migrate:retrofix15": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-retrofix-direct-commission.js",
+    "admin:reset-password": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-admin-password-reset.js",
     "start": "next start"
   },
   "dependencies": {

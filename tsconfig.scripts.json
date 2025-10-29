@@ -12,6 +12,12 @@
     "emitDeclarationOnly": false,
     "declaration": false
   },
-  "include": ["scripts/**/*.ts", "lib/mongodb.ts", "lib/utils/**/*.ts", "models/**/*.ts"],
+  "include": [
+    "scripts/**/*.ts",
+    "lib/mongodb.ts",
+    "lib/utils/**/*.ts",
+    "lib/in-memory/**/*.ts",
+    "models/**/*.ts"
+  ],
   "exclude": ["node_modules"]
 }
