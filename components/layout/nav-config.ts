@@ -33,7 +33,7 @@ export const PRIMARY_NAV_ITEMS: AppNavItem[] = [
   { name: "History", href: "/transactions", icon: History },
   { name: "Support", href: "/support", icon: HelpCircle },
   { name: "Profile", href: "/profile", icon: User },
-  { name: "Terms", href: "/terms", icon: FileText },
+  { name: "FAQ,s", href: "/terms", icon: FileText },
 ]
 
 export const ADMIN_NAV_ITEM: AppNavItem = {

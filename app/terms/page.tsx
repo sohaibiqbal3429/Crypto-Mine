@@ -42,162 +42,146 @@ export default function TermsPage() {
       <main className="flex-1 overflow-auto md:ml-64">
         <div className="p-6 lg:p-10">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-balance">Terms of Service</h1>
+            <h1 className="text-3xl font-bold text-balance">Terms of Service / FAQ</h1>
             <p className="text-muted-foreground">Last updated: January 15, 2025</p>
           </div>
 
           <div className="space-y-6 lg:space-y-8">
+            {/* 1 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>1. Acceptance of Terms</CardTitle>
+                <CardTitle>1. What is MintMine Pro?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  By accessing and using Mintmine Pro ("the Platform"), you accept and agree to be bound by the terms
-                  and provision of this agreement. If you do not agree to abide by the above, please do not use this
-                  service.
+                  MintMine Pro is a digital mining platform that allows users to earn daily profits through secure and
+                  automated crypto mining. It’s designed for both beginners and professionals to grow their digital
+                  income safely.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 2 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>2. Platform Description</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>Mintmine Pro is a cryptocurrency mining and investment platform that allows users to:</p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Participate in Mint-Coin mining activities</li>
-                  <li>Stake cryptocurrencies for rewards</li>
-                  <li>Refer new users and earn commissions</li>
-                  <li>Manage digital wallets and transactions</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="w-full">
-              <CardHeader>
-                <CardTitle>3. User Responsibilities</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p>Users are responsible for:</p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Providing accurate and truthful information during registration</li>
-                  <li>Maintaining the security of their account credentials</li>
-                  <li>Complying with all applicable laws and regulations</li>
-                  <li>Not engaging in fraudulent or malicious activities</li>
-                  <li>Understanding the risks associated with cryptocurrency investments</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="w-full">
-              <CardHeader>
-                <CardTitle>4. Mining and Rewards</CardTitle>
+                <CardTitle>2. How do I start mining on MintMine Pro?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Mining rewards are calculated based on various factors including user level, deposit amount, and
-                  platform performance. Rewards are not guaranteed and may vary based on market conditions and platform
-                  policies.
-                </p>
-                <p>
-                  Users can mine Mint-Coins once every 24 hours. The platform reserves the right to adjust mining rewards
-                  and cooldown periods as needed.
+                  Simply create an account, verify your email, and choose a mining plan. Once you make a deposit, your
+                  mining process will automatically begin, and you’ll start earning daily rewards.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 3 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>5. Deposits and Withdrawals</CardTitle>
+                <CardTitle>3. What is the minimum deposit amount?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Minimum deposit: $80 USDT
-                  <br />
-                  Minimum withdrawal: $10 USDT
-                  <br />
-                  Withdrawal processing time: 24-48 hours
-                  <br />
-                  Withdrawal fee: 2% of the withdrawal amount
-                </p>
-                <p>
-                  All transactions are subject to verification and may be delayed or rejected if they violate platform
-                  policies or applicable laws.
+                  The minimum deposit is <strong>30 USDT</strong>. Deposits below this amount are not accepted. Higher
+                  deposits unlock better earning opportunities and bonuses.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 4 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>6. Referral Program</CardTitle>
+                <CardTitle>4. How much profit can I earn daily?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Users can earn commissions by referring new users to the platform. Commission rates vary by level and
-                  are subject to change. Referral abuse or fraudulent referrals may result in account suspension.
+                  Your daily profit depends on your selected plan. Basic users can earn between <strong>1% – 1.5%</strong>{' '}
+                  daily, while higher-level plans offer increased profit rates.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 5 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>7. Risk Disclosure</CardTitle>
-              </CardHeader>
-              <CardContent className="prose prose-sm max-w-none">
-                <p className="font-semibold text-amber-600">
-                  IMPORTANT: Cryptocurrency investments carry significant risks.
-                </p>
-                <ul className="list-disc pl-6 space-y-1">
-                  <li>Cryptocurrency values can be extremely volatile</li>
-                  <li>Past performance does not guarantee future results</li>
-                  <li>You may lose some or all of your investment</li>
-                  <li>Regulatory changes may affect platform operations</li>
-                  <li>Technical issues may temporarily affect platform availability</li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="w-full">
-              <CardHeader>
-                <CardTitle>8. Account Termination</CardTitle>
+                <CardTitle>5. How does the referral bonus system work?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  The platform reserves the right to suspend or terminate user accounts for violations of these terms,
-                  suspicious activities, or legal requirements. Users may also close their accounts at any time by
-                  contacting support.
+                  When you refer someone who deposits <strong>30 USDT</strong> or more, you receive a{' '}
+                  <strong>15% bonus</strong> instantly as a depositor reward.
+                </p>
+                <p className="mt-2">
+                  <em>Example:</em> If your referral deposits <strong>100 USDT</strong>, you earn{' '}
+                  <strong>15 USDT</strong> directly into your account.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 6 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>9. Limitation of Liability</CardTitle>
+                <CardTitle>6. Is there any joining fee?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Mintmine Pro shall not be liable for any direct, indirect, incidental, special, or consequential
-                  damages resulting from the use or inability to use the platform, even if advised of the possibility of
-                  such damages.
+                  No. Joining MintMine Pro is completely free. You only need to deposit funds to start your mining plan.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 7 */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>10. Changes to Terms</CardTitle>
+                <CardTitle>7. How can I withdraw my earnings?</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  These terms may be updated from time to time. Users will be notified of significant changes via email
-                  or platform notifications. Continued use of the platform after changes constitutes acceptance of the
-                  new terms.
+                  Withdrawals can be made directly from your dashboard once you reach the minimum withdrawal limit. All
+                  withdrawals are processed securely, usually within <strong>24 hours</strong>.
                 </p>
               </CardContent>
             </Card>
 
+            {/* 8 */}
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle>8. What payment methods are supported?</CardTitle>
+              </CardHeader>
+              <CardContent className="prose prose-sm max-w-none">
+                <p>
+                  MintMine Pro supports <strong>USDT (BEP-20)</strong> and other popular crypto wallets. You can deposit
+                  and withdraw funds using these methods easily.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 9 */}
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle>9. Can I upgrade my mining plan later?</CardTitle>
+              </CardHeader>
+              <CardContent className="prose prose-sm max-w-none">
+                <p>
+                  Yes, you can upgrade your mining plan anytime. Upgrading increases your daily profit percentage and
+                  overall mining performance.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 10 */}
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle>10. What should I do if I face any issue or delay?</CardTitle>
+              </CardHeader>
+              <CardContent className="prose prose-sm max-w-none">
+                <p>
+                  If you encounter any problem or delay, please contact the MintMine Pro support team through the{' '}
+                  <strong>“Help”</strong> or <strong>“Contact Us”</strong> section in your dashboard for quick assistance.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 11 Contact (updated email) */}
             <Card>
               <CardHeader>
                 <CardTitle>11. Contact Information</CardTitle>
@@ -205,12 +189,107 @@ export default function TermsPage() {
               <CardContent className="prose prose-sm max-w-none">
                 <p>For questions about these terms or the platform, please contact us at:</p>
                 <p>
-                  Email:mintminepro@mail.com
+                  Email: <a href="mailto:mintminepro@gmail.com">mintminepro@gmail.com</a>
                   <br />
                   Support: Available 24/7 through the platform
                 </p>
               </CardContent>
             </Card>
+
+            {/* Levels & Rewards Section */}
+            <div className="mt-6">
+              <h2 className="text-2xl font-semibold mb-4">Levels & Rewards</h2>
+
+              {/* Level 1 */}
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle>Level 1 – Beginner</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-sm max-w-none">
+                  <ul className="list-disc pl-6 space-y-1">
+                    <li>
+                      Verify your email and complete basic profile setup — <strong>Reward: 0.50 USDT</strong>
+                    </li>
+                    <li>
+                      Join MintMine Pro’s official Telegram or Twitter channel — <strong>Reward: 0.50 USDT</strong>
+                    </li>
+                    <li>
+                      Make your first deposit of <strong>30 USDT</strong> and activate mining —{' '}
+                      <strong>Reward: 0.75 USDT</strong>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Level 2 */}
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle>Level 2 – Regular Miner</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-sm max-w-none">
+                  <p className="text-muted-foreground mb-2">For users showing consistent activity.</p>
+                  <ul className="list-disc pl-6 space-y-1">
+                    <li>
+                      Log in daily and claim mining rewards for <strong>3 consecutive days</strong> —{' '}
+                      <strong>Reward: 0.5 USDT</strong>
+                    </li>
+                    <li>
+                      Invite one new user through your referral link (sign-up only) —{' '}
+                      <strong>Reward: 0.05 USDT</strong>
+                    </li>
+                    <li>
+                      Maintain an active balance above <strong>50 USDT</strong> for 2 days —{' '}
+                      <strong>Reward: 0.75 USDT</strong>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Level 3 */}
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle>Level 3 – Advanced Miner</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-sm max-w-none">
+                  <p className="text-muted-foreground mb-2">For users expanding their network and deposits.</p>
+                  <ul className="list-disc pl-6 space-y-1">
+                    <li>
+                      Refer one user who deposits <strong>100 USDT</strong> or more — <strong>Reward: 1 USDT</strong>
+                    </li>
+                    <li>
+                      Maintain <strong>5 consecutive active mining days</strong> — <strong>Reward: 0.75 USDT</strong>
+                    </li>
+                    <li>
+                      Increase your total personal deposit to <strong>150 USDT</strong> or above —{' '}
+                      <strong>Reward: 1.25 USDT</strong>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Level 4 */}
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle>Level 4 – Pro Member</CardTitle>
+                </CardHeader>
+                <CardContent className="prose prose-sm max-w-none">
+                  <p className="text-muted-foreground mb-2">For top-level members with strong team growth.</p>
+                  <ul className="list-disc pl-6 space-y-1">
+                    <li>
+                      Invite <strong>three active depositors</strong> (each <strong>30 USDT</strong> or more) —{' '}
+                      <strong>Reward: 0.85 USDT</strong>
+                    </li>
+                    <li>
+                      Achieve total team deposit volume of <strong>300 USDT</strong> or more —{' '}
+                      <strong>Reward: 1.5 USDT</strong>
+                    </li>
+                    <li>
+                      Maintain <strong>7 consecutive active mining days</strong> — <strong>Reward: 1.00 USDT</strong>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </main>
