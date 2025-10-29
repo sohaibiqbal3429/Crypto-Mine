@@ -4,9 +4,9 @@ import dbConnect from "@/lib/mongodb"
 import Balance from "@/models/Balance"
 import Payout from "@/models/Payout"
 // import { getTeamDailyProfitPercent } from "@/lib/services/settings" // not needed now (fixed 1%/1%)
-import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction, { type ITransaction } from "@/models/Transaction"
 import User from "@/models/User"
+import { runDailyTeamEarnings } from "@/lib/services/daily-team-earnings"
 
 type TeamCode = "A" | "B" | "C" | "D"
 
@@ -32,14 +32,6 @@ interface LevelComputationResult {
   freshActiveDirects: number
 }
 
-interface DailyTeamProfitResult {
-  userId: string
-  amount: number
-  level: number
-  totalTeamProfit: number
-  teams: TeamCode[]
-}
-
 interface CommissionOutcome {
   payoutId?: string
   amount: number
@@ -49,10 +41,6 @@ interface CommissionOutcome {
 }
 
 const ACTIVE_THRESHOLD = 80
-
-// ---- Fixed daily override policy (as per your spec) ----
-const DAILY_L1_PCT = 0.01 // 1% for Team A (L1) always
-const DAILY_L2_PCT = 0.01 // 1% for Team B (L2) only if member was Active that day
 
 // Existing level table left intact for monthly/deposit flows if used elsewhere
 const LEVELS: LevelDefinition[] = [
@@ -97,8 +85,6 @@ const LEVELS: LevelDefinition[] = [
 ]
 
 const LEVELS_BY_ID = new Map(LEVELS.map((definition) => [definition.id, definition]))
-const TEAM_DEPTH: Record<TeamCode, number> = { A: 1, B: 2, C: 3, D: 4 }
-
 function ensureObjectId(value: mongoose.Types.ObjectId | string): mongoose.Types.ObjectId {
   if (value instanceof mongoose.Types.ObjectId) return value
   if (mongoose.Types.ObjectId.isValid(value)) return new mongoose.Types.ObjectId(value)
@@ -131,21 +117,6 @@ function roundDown(amount: number, decimals = 4): number {
   const factor = 10 ** decimals
   if (amount <= 0) return Math.ceil(amount * factor) / factor
   return Math.floor(amount * factor) / factor
-}
-
-function startOfUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
-}
-function startOfPreviousUtcDay(date: Date): Date {
-  const start = startOfUtcDay(date)
-  start.setUTCDate(start.getUTCDate() - 1)
-  return start
-}
-function endOfPreviousUtcDay(date: Date): Date {
-  const end = startOfUtcDay(date)
-  end.setUTCDate(end.getUTCDate() - 1)
-  end.setUTCHours(23, 59, 59, 999)
-  return end
 }
 
 function resolveMonthRange(referenceDate: Date) {
@@ -322,33 +293,6 @@ async function loadUser(userId: string) {
   return toPlain(doc)
 }
 
-/** ----------------------- DAILY OVERRIDES CORE CHANGE -----------------------
- * We now build a map: memberId -> { amount: sum(profitAmount), active: OR(activeOnDate) }
- * So we can pay:
- *   - Team A (L1): 1% of baseProfit (always)
- *   - Team B (L2): 1% of baseProfit (only if member was active that day)
- * Team C/D: no payouts.
- * -------------------------------------------------------------------------- */
-interface ProfitEntry { amount: number; active: boolean }
-
-async function loadDailyProfits(windowStart: Date, windowEnd: Date): Promise<Map<string, ProfitEntry>> {
-  const profitDocs = await TeamDailyProfit.find({
-    profitDate: { $gte: windowStart, $lte: windowEnd },
-  }).select("memberId profitAmount activeOnDate")
-
-  const profitMap = new Map<string, ProfitEntry>()
-  for (const profitDoc of profitDocs) {
-    const profit = toPlain(profitDoc)
-    if (!profit) continue
-    const key = normalizeId(profit.memberId)
-    const prev = profitMap.get(key) ?? { amount: 0, active: false }
-    const nextAmount = Number(prev.amount) + Number(profit.profitAmount ?? 0)
-    const nextActive = Boolean(prev.active) || Boolean((profit as any).activeOnDate)
-    profitMap.set(key, { amount: nextAmount, active: nextActive })
-  }
-  return profitMap
-}
-
 export async function payDirectDepositCommission(depositId: string) {
   // (unchanged; kept for completeness)
   await dbConnect()
@@ -375,130 +319,6 @@ export async function payTeamDepositCommissions(depositId: string) {
 }
 
 /** ===================== DAILY OVERRIDES (UPDATED) ===================== */
-export async function payDailyTeamProfit(date: Date = new Date()): Promise<DailyTeamProfitResult[]> {
-  await dbConnect()
-  const windowEnd = endOfPreviousUtcDay(date)
-  const windowStart = startOfPreviousUtcDay(date)
-
-  const profitMap = await loadDailyProfits(windowStart, windowEnd)
-  const dayKey = windowStart.toISOString().slice(0, 10)
-
-  const userCache = new Map<string, Awaited<ReturnType<typeof loadUser>> | null>()
-  const levelCache = new Map<string, LevelComputationResult>()
-  const summary = new Map<string, { amount: number; level: number; totalTeamProfit: number; teams: Set<TeamCode> }>()
-
-  const getUserCached = async (userId: string) => {
-    if (!userCache.has(userId)) userCache.set(userId, await loadUser(userId))
-    return userCache.get(userId)
-  }
-  const getLevelCached = async (userId: string) => {
-    if (!levelCache.has(userId)) levelCache.set(userId, await persistLevel(userId, windowEnd))
-    return levelCache.get(userId)!
-  }
-
-  let createdEntries = 0
-
-  for (const [memberId, entry] of profitMap.entries()) {
-    const baseProfit = roundDown(entry.amount, 4)
-    const memberWasActive = Boolean(entry.active)
-    if (baseProfit <= 0) continue
-
-    const member = await getUserCached(memberId)
-    if (!member) continue
-
-    // Traverse uplines up to 2 levels only (A, B)
-    let currentSponsorId = member.referredBy ? normalizeId(member.referredBy) : null
-    let levelIdx = 0 as 0 | 1 // 0 -> A, 1 -> B
-    const teamsAB: TeamCode[] = ["A", "B"]
-
-    while (currentSponsorId && levelIdx < 2) {
-      const teamCode = teamsAB[levelIdx]
-      const sponsorLevelInfo = await getLevelCached(currentSponsorId) // informational only
-      const rate = levelIdx === 0 ? DAILY_L1_PCT : memberWasActive ? DAILY_L2_PCT : 0
-
-      if (rate > 0) {
-        const amount = roundDown(baseProfit * rate, 4)
-        if (amount > 0) {
-          const uniqueKey = `DTE:${dayKey}:${memberId}:${currentSponsorId}:${teamCode}`
-
-          const outcome = await applyPayout({
-            userId: currentSponsorId,
-            type: "daily_team_earning",
-            sourceId: memberId,
-            amount,
-            date: windowEnd,
-            uniqueKey,
-            meta: {
-              level: sponsorLevelInfo.level,
-              levelAtPosting: sponsorLevelInfo.level,
-              rate,
-              ratePct: Number((rate * 100).toFixed(2)), // always 1.00
-              teamProfitPct: Number((rate * 100).toFixed(2)),
-              day: dayKey,
-              team: teamCode,
-              teams: [teamCode],
-              teamDepth: TEAM_DEPTH[teamCode],
-              generation: TEAM_DEPTH[teamCode],
-              baseProfit,
-              baseProfitRounded: baseProfit,
-              teamProfit: baseProfit,
-              memberId,
-              memberName: typeof member.name === "string" ? member.name : undefined,
-              fromUserId: memberId,
-              fromUserName: typeof member.name === "string" ? member.name : undefined,
-              source: "daily_team_earning",
-              postingStatus: "posted",
-              memberActive: memberWasActive,
-            },
-          })
-
-          if (outcome.created) {
-            createdEntries += 1
-            const summaryEntry = summary.get(currentSponsorId) ?? {
-              amount: 0,
-              level: sponsorLevelInfo.level,
-              totalTeamProfit: 0,
-              teams: new Set<TeamCode>(),
-            }
-            summaryEntry.amount = roundDown(summaryEntry.amount + outcome.amount, 4)
-            summaryEntry.level = sponsorLevelInfo.level
-            summaryEntry.totalTeamProfit = roundDown(summaryEntry.totalTeamProfit + baseProfit, 4)
-            summaryEntry.teams.add(teamCode)
-            summary.set(currentSponsorId, summaryEntry)
-          }
-        }
-      } else if (levelIdx === 1 /* L2 skipped because not active */) {
-        console.info("[commission-engine] daily_override_skipped", {
-          event_id: `${currentSponsorId}|${dayKey}|ovrL2|${memberId}`,
-          reason: "member_inactive",
-        })
-      }
-
-      const sponsor = await getUserCached(currentSponsorId)
-      currentSponsorId = sponsor?.referredBy ? normalizeId(sponsor.referredBy) : null
-      levelIdx = (levelIdx + 1) as 0 | 1
-    }
-  }
-
-  const results: DailyTeamProfitResult[] = Array.from(summary.entries()).map(([userId, entry]) => ({
-    userId,
-    amount: roundDown(entry.amount, 4),
-    level: entry.level,
-    totalTeamProfit: roundDown(entry.totalTeamProfit, 4),
-    teams: Array.from(entry.teams).sort((a, b) => TEAM_DEPTH[a] - TEAM_DEPTH[b]),
-  }))
-
-  const summaryTotal = roundDown(results.reduce((sum, entry) => sum + entry.amount, 0), 4)
-  console.info("[commission-engine] Daily team earnings posted", {
-    day: dayKey,
-    payouts: createdEntries,
-    uniqueReceivers: results.length,
-    totalAmount: summaryTotal,
-  })
-
-  return results
-}
-
 /** ----------------- Monthly bonuses (unchanged) ----------------- */
 export async function payMonthlyBonuses(date: Date = new Date()) {
   await dbConnect()
@@ -558,7 +378,7 @@ export async function payMonthlyBonuses(date: Date = new Date()) {
 
 export async function runDailyCommissionEngine(date: Date = new Date()) {
   await refreshAllUserLevels(date)
-  return payDailyTeamProfit(date)
+  return runDailyTeamEarnings(date)
 }
 
 export async function runMonthlyBonusCycle(date: Date = new Date()) {

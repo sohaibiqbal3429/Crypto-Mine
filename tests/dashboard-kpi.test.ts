@@ -7,7 +7,7 @@ process.env.SEED_IN_MEMORY = "true"
 
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
-import Payout from "@/models/Payout"
+import Transaction from "@/models/Transaction"
 import { getDailyTeamRewardTotal } from "@/app/api/dashboard/route"
 
 async function createUser(overrides: Record<string, unknown> = {}) {
@@ -30,54 +30,59 @@ test.before(async () => {
   await dbConnect()
 })
 
-test("getDailyTeamRewardTotal sums the previous UTC day payouts", async () => {
+test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
   const user = await createUser()
   const otherUser = await createUser()
-  const createdPayoutIds: mongoose.Types.ObjectId[] = []
+  const createdTransactionIds: mongoose.Types.ObjectId[] = []
 
   try {
-    const payoutWithDay = await Payout.create({
+    const rewardWithDay = await Transaction.create({
       userId: user._id,
-      type: "daily_team_earning",
+      type: "teamReward",
       amount: 0.12,
-      status: "completed",
-      date: new Date("2025-10-11T23:59:59Z"),
-      uniqueKey: randomUUID(),
-      meta: { day: "2025-10-11" },
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_earning", day: "2025-10-11", uniqueEventId: randomUUID(), team: "A" },
+      createdAt: new Date("2025-10-11T23:59:59Z"),
+      updatedAt: new Date("2025-10-11T23:59:59Z"),
     } as any)
-    createdPayoutIds.push(payoutWithDay._id as mongoose.Types.ObjectId)
+    createdTransactionIds.push(rewardWithDay._id as mongoose.Types.ObjectId)
 
-    const payoutWithoutDay = await Payout.create({
+    const rewardWithoutDay = await Transaction.create({
       userId: user._id,
-      type: "daily_team_earning",
+      type: "teamReward",
       amount: 0.05,
-      status: "completed",
-      date: new Date("2025-10-11T18:30:00Z"),
-      uniqueKey: randomUUID(),
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_earning", uniqueEventId: randomUUID(), team: "A" },
+      createdAt: new Date("2025-10-11T18:30:00Z"),
+      updatedAt: new Date("2025-10-11T18:30:00Z"),
     } as any)
-    createdPayoutIds.push(payoutWithoutDay._id as mongoose.Types.ObjectId)
+    createdTransactionIds.push(rewardWithoutDay._id as mongoose.Types.ObjectId)
 
-    const otherUserPayout = await Payout.create({
+    const otherUserReward = await Transaction.create({
       userId: otherUser._id,
-      type: "daily_team_earning",
+      type: "teamReward",
       amount: 0.99,
-      status: "completed",
-      date: new Date("2025-10-11T23:00:00Z"),
-      uniqueKey: randomUUID(),
-      meta: { day: "2025-10-11" },
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_earning", day: "2025-10-11", uniqueEventId: randomUUID(), team: "B" },
+      createdAt: new Date("2025-10-11T23:00:00Z"),
+      updatedAt: new Date("2025-10-11T23:00:00Z"),
     } as any)
-    createdPayoutIds.push(otherUserPayout._id as mongoose.Types.ObjectId)
+    createdTransactionIds.push(otherUserReward._id as mongoose.Types.ObjectId)
 
-    const previousDayPayout = await Payout.create({
+    const previousDayReward = await Transaction.create({
       userId: user._id,
-      type: "daily_team_earning",
+      type: "teamReward",
       amount: 0.3,
-      status: "completed",
-      date: new Date("2025-10-10T23:59:59Z"),
-      uniqueKey: randomUUID(),
-      meta: { day: "2025-10-10" },
+      status: "approved",
+      claimable: true,
+      meta: { source: "daily_team_earning", day: "2025-10-10", uniqueEventId: randomUUID(), team: "A" },
+      createdAt: new Date("2025-10-10T23:59:59Z"),
+      updatedAt: new Date("2025-10-10T23:59:59Z"),
     } as any)
-    createdPayoutIds.push(previousDayPayout._id as mongoose.Types.ObjectId)
+    createdTransactionIds.push(previousDayReward._id as mongoose.Types.ObjectId)
 
     const total = await getDailyTeamRewardTotal(
       user._id as mongoose.Types.ObjectId,
@@ -86,8 +91,8 @@ test("getDailyTeamRewardTotal sums the previous UTC day payouts", async () => {
 
     assert.equal(Number(total.toFixed(2)), 0.17)
   } finally {
-    if (createdPayoutIds.length > 0) {
-      await Payout.deleteMany({ _id: { $in: createdPayoutIds } })
+    if (createdTransactionIds.length > 0) {
+      await Transaction.deleteMany({ _id: { $in: createdTransactionIds } })
     }
     await User.deleteMany({ _id: { $in: [user._id, otherUser._id] } })
   }

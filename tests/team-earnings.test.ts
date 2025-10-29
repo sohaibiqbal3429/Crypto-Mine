@@ -51,7 +51,7 @@ test("previewTeamEarnings reflects claimable transactions", async () => {
       amount: 5.4321,
       status: "approved",
       claimable: true,
-      meta: { source: "daily_team_reward", overridePct: 1 },
+      meta: { source: "daily_team_earning", overridePct: 1 },
     },
     {
       userId: user._id,
@@ -59,7 +59,7 @@ test("previewTeamEarnings reflects claimable transactions", async () => {
       amount: 6.7899,
       status: "approved",
       claimable: true,
-      meta: { source: "daily_team_reward", overridePct: 1 },
+      meta: { source: "daily_team_earning", overridePct: 1 },
     },
   ] as any)
 
@@ -97,7 +97,7 @@ test("claimTeamEarnings transfers available rewards", async () => {
       amount: 12.5,
       status: "approved",
       claimable: true,
-      meta: { source: "daily_team_reward", overridePct: 1 },
+      meta: { source: "daily_team_earning", overridePct: 1 },
     },
     {
       userId: user._id,
@@ -105,7 +105,7 @@ test("claimTeamEarnings transfers available rewards", async () => {
       amount: 7.5,
       status: "approved",
       claimable: true,
-      meta: { source: "daily_team_reward", overridePct: 1 },
+      meta: { source: "daily_team_earning", overridePct: 1 },
     },
   ] as any)
 
@@ -162,7 +162,7 @@ test("claimTeamEarnings transfers available rewards", async () => {
 
   const originalClaimables = await Transaction.find({
     userId: user._id,
-    "meta.source": "daily_team_reward",
+    "meta.source": "daily_team_earning",
   })
 
   for (const entry of originalClaimables) {
@@ -250,7 +250,7 @@ test("listTeamRewardHistory categorises transactions", async () => {
       status: "approved",
       claimable: true,
       meta: {
-        source: "daily_team_reward",
+        source: "daily_team_earning",
         overridePct: 1,
         level: 1,
       },

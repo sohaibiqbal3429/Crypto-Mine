@@ -117,14 +117,15 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
 
     // idempotent per (user, day)
     const uniqueKey = `DMP:${dayKey}:${uid}`
-    const existing = await Transaction.findOne({
-      userId: new mongoose.Types.ObjectId(uid),
-      "meta.uniqueKey": uniqueKey,
-      type: "earn",
-      "meta.source": "daily_mining_profit",
-    })
-      .select({ _id: 1 })
-      .lean()
+    const existing = await Transaction.findOne(
+      {
+        userId: new mongoose.Types.ObjectId(uid),
+        "meta.uniqueKey": uniqueKey,
+        type: "earn",
+        "meta.source": "daily_mining_profit",
+      },
+      { _id: 1 },
+    )
 
     if (existing) {
       skipped += 1
@@ -161,10 +162,13 @@ export async function runDailyMiningProfit(now: Date = new Date()) {
     } as any)
 
     // Mark/Upsert TeamDailyProfit with active flag from User.isActive
-    const existingDgp = await TeamDailyProfit.findOne({
-      memberId: new mongoose.Types.ObjectId(uid),
-      profitDate: { $gte: windowStart, $lte: windowEnd },
-    }).select({ _id: 1, activeOnDate: 1 })
+    const existingDgp = await TeamDailyProfit.findOne(
+      {
+        memberId: new mongoose.Types.ObjectId(uid),
+        profitDate: { $gte: windowStart, $lte: windowEnd },
+      },
+      { _id: 1, activeOnDate: 1 },
+    )
 
     const memberActive = activeByUser.get(uid) ?? false
 
