@@ -6,8 +6,8 @@
 # next.js
 /.next/
 /out/
-.env
-.env.local
+# .env
+# .env.local
 
 # production
 /build
@@ -29,3 +29,7 @@ next-env.d.ts
 
 # npm lockfile
 package-lock.json
+
+# uploads (user-generated content; do not track)
+public/uploads/
+public/uploads/deposit-receipts/
