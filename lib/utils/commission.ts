@@ -24,6 +24,9 @@ const POLICY_ADJUSTMENT_REASON = "policy_update_20240601"
 // NEW: L2 override percent fixed to 3%
 const LEVEL2_OVERRIDE_PCT = 3
 
+// 🔒 NEW: force direct referral to 15% (ignores settings/rule %)
+const DIRECT_L1_PCT = 15
+
 // === Precision: 4 decimal places per platform spec ===
 function roundCurrency(amount: number): number {
   return Math.round(amount * 10000) / 10000
@@ -155,6 +158,8 @@ interface DirectCommissionComputation {
   amount: number
 }
 
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// UPDATED: always pay 15% direct commission
 async function resolveDirectCommission(
   referredUser: any,
   depositAmount: number,
@@ -171,20 +176,18 @@ async function resolveDirectCommission(
     persist: shouldPersist,
     notify: shouldPersist,
   })
+
+  // We still fetch a rule for compatibility, but percent is forced to 15%.
   const rule = await getCommissionRuleForLevel(sponsorLevel)
   if (!rule) return null
 
-  // Use configured base direct percent when available; fallback to rule value
-  const settings = await Settings.findOne()
-  const configuredPct = Number(settings?.commission?.baseDirectPct)
-  const effectivePct = Number.isFinite(configuredPct) && configuredPct > 0 ? configuredPct : rule.directPct
-  if (!Number.isFinite(effectivePct) || effectivePct <= 0) return null
-
+  const effectivePct = DIRECT_L1_PCT // 15%
   const amount = roundCurrency((depositAmount * effectivePct) / 100)
   if (amount <= 0) return null
 
   return { sponsor, sponsorLevel, rule, pct: effectivePct, amount }
 }
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 interface TeamOverridePayout {
   sponsor: any
@@ -420,7 +423,7 @@ export async function processReferralCommission(
         referredUserId,
         referredUserName: referredUser.name ?? null,
         depositAmount,
-        commissionPct: payout.pct, // typically 15%
+        commissionPct: payout.pct, // now 15
         sponsorLevel: payout.sponsorLevel,
         depositTransactionId: options.depositTransactionId ?? null,
         policyVersion: POLICY_ADJUSTMENT_REASON,
