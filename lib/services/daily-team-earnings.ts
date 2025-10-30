@@ -5,6 +5,7 @@ import Balance from "@/models/Balance"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import { emitAuditLog } from "@/lib/observability/audit"
 
 const TEAM_DEPTH: Record<"A" | "B", number> = { A: 1, B: 2 }
 
@@ -67,28 +68,33 @@ function normalizeId(value: mongoose.Types.ObjectId | string | Record<string, un
   }
 }
 
-function roundDown(amount: number, decimals = 4): number {
-  if (!Number.isFinite(amount)) {
-    return 0
-  }
-
-  const factor = 10 ** decimals
-  if (amount <= 0) {
-    return Math.ceil(amount * factor) / factor
-  }
-
-  return Math.floor(amount * factor) / factor
+function round2(amount: number): number {
+  const f = 100
+  return Math.round(amount * f) / f
 }
 
-function getPreviousUtcDayRange(reference: Date) {
-  const start = new Date(
-    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate() - 1, 0, 0, 0, 0),
-  )
-  const end = new Date(
-    Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate() - 1, 23, 59, 59, 999),
-  )
+// Previous local day window for Asia/Karachi (UTC+05:00), with UTC timestamps
+function getPreviousPktDayRange(reference: Date) {
+  const OFFSET_MS = 5 * 60 * 60 * 1000
+  const local = new Date(reference.getTime() + OFFSET_MS)
 
-  return { start, end, dayKey: start.toISOString().slice(0, 10) }
+  // local date components
+  const y = local.getUTCFullYear()
+  const m = local.getUTCMonth()
+  const d = local.getUTCDate()
+
+  const startLocal = new Date(Date.UTC(y, m, d - 1, 0, 0, 0, 0))
+  const endLocal = new Date(Date.UTC(y, m, d - 1, 23, 59, 59, 999))
+
+  // convert back to UTC instants
+  const start = new Date(startLocal.getTime() - OFFSET_MS)
+  const end = new Date(endLocal.getTime() - OFFSET_MS)
+
+  const dayKey = `${startLocal.getUTCFullYear()}-${String(startLocal.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    startLocal.getUTCDate(),
+  ).padStart(2, "0")}`
+
+  return { start, end, dayKey }
 }
 
 type AggregatedProfit = {
@@ -250,7 +256,7 @@ async function creditTeamReward({
     uniqueEventId,
   }
 
-  await Transaction.create({
+  const created = await Transaction.create({
     userId: sponsorObjectId,
     type: "teamReward",
     amount: reward,
@@ -259,7 +265,7 @@ async function creditTeamReward({
     meta: { ...meta, uniqueKey: uniqueEventId },
   } as any)
 
-  return true
+  return created?._id ? created._id.toString() : ""
 }
 
 export interface DailyTeamEarningsSummary {
@@ -272,7 +278,8 @@ export interface DailyTeamEarningsSummary {
 export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamEarningsSummary> {
   await dbConnect()
 
-  const { start, end, dayKey } = getPreviousUtcDayRange(now)
+  // Settle previous PKT day (00:00 PKT schedule)
+  const { start, end, dayKey } = getPreviousPktDayRange(now)
   const profits = await aggregateProfits(start, end)
 
   const userCache = new Map<string, CachedUser | null>()
@@ -281,12 +288,13 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
   const receivers = new Set<string>()
 
   for (const [memberId, aggregated] of profits.entries()) {
-    const baseProfit = roundDown(aggregated.sumProfit, 4)
-    if (baseProfit <= 0) {
+    const baseProfitRaw = Number(aggregated.sumProfit ?? 0)
+    if (!Number.isFinite(baseProfitRaw) || baseProfitRaw <= 0) {
       continue
     }
 
-    const reward = roundDown(baseProfit * 0.01, 4)
+    // 1% per level, 2-decimal, round half-up
+    const reward = round2(baseProfitRaw * 0.01)
     if (reward <= 0) {
       continue
     }
@@ -298,37 +306,44 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
 
     if (member.referredBy) {
       const sponsorA = await loadUserCached(userCache, member.referredBy)
+      let l1TxnId: string | null = null
+      let l2TxnId: string | null = null
+      let l1Id: string | null = null
+      let l2Id: string | null = null
+
       if (sponsorA) {
-        const created = await creditTeamReward({
+        l1Id = sponsorA.id
+        const createdId = await creditTeamReward({
           sponsor: sponsorA,
           team: "A",
           dayKey,
-          baseProfit,
+          baseProfit: baseProfitRaw,
           reward,
           member,
           memberActive: aggregated.wasActive,
         })
-
-        if (created) {
+        if (createdId) {
+          l1TxnId = createdId
           postedCount += 1
           totalReward += reward
           receivers.add(sponsorA.id)
         }
 
-        if (aggregated.wasActive && sponsorA.referredBy) {
+        if (sponsorA.referredBy) {
           const sponsorB = await loadUserCached(userCache, sponsorA.referredBy)
           if (sponsorB) {
-            const createdB = await creditTeamReward({
+            l2Id = sponsorB.id
+            const createdBId = await creditTeamReward({
               sponsor: sponsorB,
               team: "B",
               dayKey,
-              baseProfit,
+              baseProfit: baseProfitRaw,
               reward,
               member,
               memberActive: aggregated.wasActive,
             })
-
-            if (createdB) {
+            if (createdBId) {
+              l2TxnId = createdBId
               postedCount += 1
               totalReward += reward
               receivers.add(sponsorB.id)
@@ -336,6 +351,18 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           }
         }
       }
+
+      // Emit an audit log for the combined payout per member per day
+      emitAuditLog("daily_referral_earnings", {
+        date: dayKey,
+        userId: member.id,
+        earningBase: round2(baseProfitRaw),
+        L1Id: l1Id,
+        L1Amount: l1TxnId ? reward : 0,
+        L2Id: l2Id,
+        L2Amount: l2TxnId ? reward : 0,
+        txnIds: [l1TxnId, l2TxnId].filter(Boolean),
+      })
     }
   }
 
@@ -343,7 +370,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
     day: dayKey,
     postedCount,
     uniqueReceivers: receivers.size,
-    totalReward: roundDown(totalReward, 4),
+    totalReward: round2(totalReward),
   }
 
   console.info("[daily-team-earnings] summary", summary)

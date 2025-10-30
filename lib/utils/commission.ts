@@ -11,6 +11,7 @@ import CommissionRule, {
 } from "@/models/CommissionRule"
 import Settings, { type ISettings } from "@/models/Settings"
 import Notification from "@/models/Notification"
+import { emitAuditLog } from "@/lib/observability/audit"
 import LevelHistory from "@/models/LevelHistory"
 import {
   LEVEL_PROGRESS_REQUIREMENTS,
@@ -30,6 +31,11 @@ const DIRECT_L1_PCT = 15
 // === Precision: 4 decimal places per platform spec ===
 function roundCurrency(amount: number): number {
   return Math.round(amount * 10000) / 10000
+}
+
+// 2-decimal currency rounding, half-up
+function roundMoney2(amount: number): number {
+  return Math.round(amount * 100) / 100
 }
 
 const LEVEL_THRESHOLDS = LEVEL_PROGRESS_REQUIREMENTS
@@ -1067,11 +1073,19 @@ export async function applyDepositRewards(
     await User.updateOne({ _id: userId }, { $set: { isActive: true } })
   }
 
-  // === NEW: Self-bonus 5% on every approved deposit ===
+  // === UPDATED: Self-deposit bonus 5% ONLY for Active Members (lifetime >= $80 before this deposit) ===
   const occurredAt = options.depositAt ?? new Date()
-  const selfBonusAmount = roundCurrency(depositAmount * 0.05)
   const selfKey = `${toObjectIdString(userId)}|${options.depositTransactionId ?? `manual:${occurredAt.toISOString()}`}|self5`
 
+  // Determine active status BEFORE this deposit was applied
+  const lifetimeTotalCurrent = Number(userDoc?.depositTotal ?? 0)
+  const lifetimeBefore = lifetimeTotalCurrent - Number(depositAmount ?? 0)
+  const isActiveBeforeDeposit = lifetimeBefore >= requiredDeposit
+
+  const bonusPercent = isActiveBeforeDeposit ? 5 : 0
+  const selfBonusAmount = bonusPercent > 0 ? roundMoney2(depositAmount * 0.05) : 0
+
+  let bonusTxnId: string | null = null
   if (selfBonusAmount > 0) {
     if (!options.dryRun) {
       const existingSelf = await Transaction.findOne({
@@ -1084,8 +1098,9 @@ export async function applyDepositRewards(
           source: "self_deposit_bonus",
           level: "SELF",
           percentage: 5,
-          base_amount: roundCurrency(depositAmount),
+          base_amount: roundMoney2(depositAmount),
         })
+        bonusTxnId = (existingSelf as any)?._id?.toString?.() ?? null
       } else {
         await Balance.updateOne(
           { userId },
@@ -1098,17 +1113,18 @@ export async function applyDepositRewards(
           },
           { upsert: true },
         )
-        await Transaction.create({
+        const created = await Transaction.create({
           userId,
           type: "bonus",
           amount: selfBonusAmount,
           status: "approved",
-          claimable: false, // goes straight to wallet, not claim queue
+          claimable: false,
           meta: {
             source: "self_deposit_bonus",
             uniqueEventId: selfKey,
-            depositAmount: roundCurrency(depositAmount),
+            depositAmount: roundMoney2(depositAmount),
             rewardPct: 5,
+            isActiveBeforeDeposit,
             depositTransactionId: options.depositTransactionId ?? null,
             qualifiesForActivation,
             policyVersion: POLICY_ADJUSTMENT_REASON,
@@ -1117,18 +1133,32 @@ export async function applyDepositRewards(
           createdAt: occurredAt,
           updatedAt: occurredAt,
         })
+        bonusTxnId = (created as any)?._id?.toString?.() ?? null
         console.info("[commission] credit", {
           event_id: selfKey,
           source: "self_deposit_bonus",
           level: "SELF",
           percentage: 5,
           amount: selfBonusAmount,
-          base_amount: roundCurrency(depositAmount),
+          base_amount: roundMoney2(depositAmount),
         })
       }
     }
     results.selfBonus = selfBonusAmount
+  } else {
+    results.selfBonus = 0
   }
+
+  // Audit log for deposit bonus decision
+  emitAuditLog("deposit_bonus", {
+    timestamp: occurredAt.toISOString(),
+    userId,
+    depositAmount: roundMoney2(depositAmount),
+    isActiveBeforeDeposit,
+    bonusPercent,
+    bonusAmount: selfBonusAmount,
+    txnId: bonusTxnId,
+  })
 
   // === Direct & L2 (uses UPDATED processReferralCommission) ===
   results.directCommission = await processReferralCommission(
