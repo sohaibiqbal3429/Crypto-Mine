@@ -1,4 +1,8 @@
-import "dotenv/config"
+import dotenv from "dotenv"
+import path from "path"
+
+// Load env like the seeder does so server + scripts match
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") })
 import bcrypt from "bcryptjs"
 
 import dbConnect from "@/lib/mongodb"
@@ -29,4 +33,3 @@ run()
     console.error("[admin-reset] Error:", err)
     process.exit(1)
   })
-
