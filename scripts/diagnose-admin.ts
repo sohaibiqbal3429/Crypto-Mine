@@ -17,17 +17,18 @@ async function main() {
   const conn = await dbConnect()
   console.log("[diag] Connected:", (conn as any)?.inMemory ? "in-memory" : "mongodb")
 
-  const user = await User.findOne({ email })
+  const user = (await User.findOne({ email }).select({ _id: 1, updatedAt: 1, passwordHash: 1 }).lean()) as
+    | { _id: any; updatedAt?: Date; passwordHash?: string }
+    | null
   if (!user) {
     console.log("[diag] User not found:", email)
     process.exit(1)
     return
   }
 
-  console.log("[diag] User id:", user._id.toString())
+  console.log("[diag] User id:", String(user._id))
   console.log("[diag] PasswordHash head:", String(user.passwordHash || "").slice(0, 12))
   console.log("[diag] UpdatedAt:", user.updatedAt)
 }
 
 main().then(() => process.exit(0)).catch((err) => { console.error(err); process.exit(1) })
-
