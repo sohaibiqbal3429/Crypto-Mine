@@ -9,6 +9,7 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -669,9 +670,8 @@ export default function ProfilePage() {
                       <form onSubmit={handlePasswordUpdate} className="space-y-4">
                         <div className="space-y-2">
                           <Label htmlFor="currentPassword">Current Password</Label>
-                          <Input
+                          <PasswordInput
                             id="currentPassword"
-                            type="password"
                             value={passwordData.currentPassword}
                             onChange={(event) =>
                               setPasswordData((prev) => ({ ...prev, currentPassword: event.target.value }))
@@ -682,9 +682,8 @@ export default function ProfilePage() {
 
                         <div className="space-y-2">
                           <Label htmlFor="newPassword">New Password</Label>
-                          <Input
+                          <PasswordInput
                             id="newPassword"
-                            type="password"
                             value={passwordData.newPassword}
                             onChange={(event) =>
                               setPasswordData((prev) => ({ ...prev, newPassword: event.target.value }))
@@ -695,9 +694,8 @@ export default function ProfilePage() {
 
                         <div className="space-y-2">
                           <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                          <Input
+                          <PasswordInput
                             id="confirmPassword"
-                            type="password"
                             value={passwordData.confirmPassword}
                             onChange={(event) =>
                               setPasswordData((prev) => ({ ...prev, confirmPassword: event.target.value }))

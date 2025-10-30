@@ -8,6 +8,7 @@ import { Loader2, LockKeyhole, RefreshCw } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { OTPInput } from "@/components/auth/otp-input"
 
@@ -300,9 +301,8 @@ export default function ForgotPasswordPage() {
                   <Label htmlFor="password" className="text-sm font-semibold text-foreground/90">
                     New Password
                   </Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     placeholder="Enter new password"
                     value={formData.password}
                     onChange={(event) => setFormData((prev) => ({ ...prev, password: event.target.value }))}
@@ -316,9 +316,8 @@ export default function ForgotPasswordPage() {
                   <Label htmlFor="confirmPassword" className="text-sm font-semibold text-foreground/90">
                     Confirm Password
                   </Label>
-                  <Input
+                  <PasswordInput
                     id="confirmPassword"
-                    type="password"
                     placeholder="Re-enter new password"
                     value={formData.confirmPassword}
                     onChange={(event) =>
