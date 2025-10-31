@@ -10,14 +10,10 @@ import { emitAuditLog } from "@/lib/observability/audit"
 const TEAM_DEPTH: Record<"A" | "B", number> = { A: 1, B: 2 }
 
 function ensureObjectId(value: mongoose.Types.ObjectId | string): mongoose.Types.ObjectId {
-  if (value instanceof mongoose.Types.ObjectId) {
-    return value
-  }
-
+  if (value instanceof mongoose.Types.ObjectId) return value
   if (typeof value === "string" && mongoose.Types.ObjectId.isValid(value)) {
     return new mongoose.Types.ObjectId(value)
   }
-
   throw new Error("Invalid ObjectId value")
 }
 
@@ -25,60 +21,46 @@ function toStringId(value: mongoose.Types.ObjectId | string): string {
   return typeof value === "string" ? value : value.toString()
 }
 
-function normalizeId(value: mongoose.Types.ObjectId | string | Record<string, unknown> | null | undefined): string | null {
-  if (!value) {
-    return null
-  }
-
-  if (value instanceof mongoose.Types.ObjectId) {
-    return value.toHexString()
-  }
-
+function normalizeId(
+  value: mongoose.Types.ObjectId | string | Record<string, unknown> | null | undefined,
+): string | null {
+  if (!value) return null
+  if (value instanceof mongoose.Types.ObjectId) return value.toHexString()
   if (typeof value === "string") {
-    if (!mongoose.Types.ObjectId.isValid(value)) {
-      throw new Error("Invalid ObjectId value")
-    }
+    if (!mongoose.Types.ObjectId.isValid(value)) throw new Error("Invalid ObjectId value")
     return value
   }
-
   if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
     return (value as { toHexString: () => string }).toHexString()
   }
-
   if (typeof value === "object") {
     const record = value as Record<string, unknown>
-    if (record._id) {
-      return normalizeId(record._id as mongoose.Types.ObjectId | string | Record<string, unknown>)
-    }
+    if (record._id) return normalizeId(record._id as any)
     if (record.buffer && typeof record.buffer === "object") {
       const raw = record.buffer as Record<string, unknown>
-      const bytes = Object.keys(raw)
-        .sort((a, b) => Number(a) - Number(b))
-        .map((key) => Number(raw[key] ?? 0))
-      if (bytes.length === 12) {
-        return Buffer.from(bytes).toString("hex")
-      }
+      const bytes = Object.keys(raw).sort((a, b) => Number(a) - Number(b)).map((k) => Number(raw[k] ?? 0))
+      if (bytes.length === 12) return Buffer.from(bytes).toString("hex")
     }
   }
-
   try {
-    return toStringId(ensureObjectId(value as unknown as mongoose.Types.ObjectId | string))
-  } catch (error) {
+    return toStringId(ensureObjectId(value as any))
+  } catch {
     throw new Error("Invalid ObjectId value")
   }
 }
 
+// 2-decimal (half-up)
 function round2(amount: number): number {
   const f = 100
   return Math.round(amount * f) / f
 }
 
-// Previous local day window for Asia/Karachi (UTC+05:00), with UTC timestamps
+// Compute the *previous* PKT calendar day window using UTC timestamps.
+// This is intended to run at 00:00 PKT.
 function getPreviousPktDayRange(reference: Date) {
-  const OFFSET_MS = 5 * 60 * 60 * 1000
+  const OFFSET_MS = 5 * 60 * 60 * 1000 // UTC+05:00, PKT
   const local = new Date(reference.getTime() + OFFSET_MS)
 
-  // local date components
   const y = local.getUTCFullYear()
   const m = local.getUTCMonth()
   const d = local.getUTCDate()
@@ -86,7 +68,6 @@ function getPreviousPktDayRange(reference: Date) {
   const startLocal = new Date(Date.UTC(y, m, d - 1, 0, 0, 0, 0))
   const endLocal = new Date(Date.UTC(y, m, d - 1, 23, 59, 59, 999))
 
-  // convert back to UTC instants
   const start = new Date(startLocal.getTime() - OFFSET_MS)
   const end = new Date(endLocal.getTime() - OFFSET_MS)
 
@@ -108,15 +89,9 @@ type CachedUser = {
   name?: string
 }
 
-/**
- * In several places we need to query by either string or ObjectId user identifiers.
- * This helper ensures a consistent candidate list for idempotency lookups.
- */
 function buildUserIdCandidates(userId: string): (mongoose.Types.ObjectId | string)[] {
   const candidates: (mongoose.Types.ObjectId | string)[] = [userId]
-  if (mongoose.Types.ObjectId.isValid(userId)) {
-    candidates.push(ensureObjectId(userId))
-  }
+  if (mongoose.Types.ObjectId.isValid(userId)) candidates.push(ensureObjectId(userId))
   return candidates
 }
 
@@ -124,9 +99,7 @@ async function loadUserCached(
   cache: Map<string, CachedUser | null>,
   userId: string,
 ): Promise<CachedUser | null> {
-  if (cache.has(userId)) {
-    return cache.get(userId) ?? null
-  }
+  if (cache.has(userId)) return cache.get(userId) ?? null
 
   const doc = await User.findOne(
     { _id: { $in: buildUserIdCandidates(userId) } },
@@ -138,7 +111,7 @@ async function loadUserCached(
     return null
   }
 
-  const normalizedId = normalizeId(doc._id as mongoose.Types.ObjectId | string)!
+  const normalizedId = normalizeId(doc._id as any)!
   const referredBy = normalizeId((doc as { referredBy?: mongoose.Types.ObjectId | string | null }).referredBy)
   const cached: CachedUser = {
     id: normalizedId,
@@ -150,40 +123,48 @@ async function loadUserCached(
   return cached
 }
 
+/**
+ * Aggregate a user's *daily earnings base*:
+ *  - Include: mining/trading/profit income
+ *  - Exclude: deposits, bonuses, airdrops, and anything else
+ *
+ * We trust `TeamDailyProfit` as the canonical per-member profit table for the day,
+ * and *optionally* add direct `Transaction` rows of type 'earn' that are clearly
+ * marked as profit sources.
+ */
 async function aggregateProfits(start: Date, end: Date): Promise<Map<string, AggregatedProfit>> {
-  const docs = await TeamDailyProfit.find({
+  const map = new Map<string, AggregatedProfit>()
+
+  // 1) Canonical: roll up TeamDailyProfit for the window (already net profit)
+  const profitDocs = await TeamDailyProfit.find({
     profitDate: { $gte: start, $lte: end },
   })
     .select({ memberId: 1, profitAmount: 1, activeOnDate: 1 })
     .lean()
 
-  const map = new Map<string, AggregatedProfit>()
-
-  for (const doc of docs) {
-    const memberIdRaw = (doc as { memberId?: mongoose.Types.ObjectId | string }).memberId
-    const memberId = normalizeId(memberIdRaw)
-    if (!memberId) {
-      continue
-    }
-
-    const profitAmount = Number((doc as { profitAmount?: unknown }).profitAmount ?? 0)
+  for (const doc of profitDocs) {
+    const memberId = normalizeId((doc as { memberId?: mongoose.Types.ObjectId | string }).memberId)
+    if (!memberId) continue
+    const amount = Number((doc as { profitAmount?: unknown }).profitAmount ?? 0)
     const activeOnDate = Boolean((doc as { activeOnDate?: unknown }).activeOnDate)
 
-    const previous = map.get(memberId) ?? { sumProfit: 0, wasActive: false }
-    map.set(memberId, {
-      sumProfit: previous.sumProfit + profitAmount,
-      wasActive: previous.wasActive || activeOnDate,
-    })
+    const prev = map.get(memberId) ?? { sumProfit: 0, wasActive: false }
+    map.set(memberId, { sumProfit: prev.sumProfit + amount, wasActive: prev.wasActive || activeOnDate })
   }
 
-  // Include other daily earnings (type: "earn") posted in the window that are not mining profits
+  // 2) (Optional) Any other explicit profit EARN tx (strict allow-list on meta.source)
+  //    This keeps us aligned with: "Daily earnings = net profit or mining/trading income only
+  //    (exclude deposits, bonuses, airdrops)."
+  const ALLOWED_PROFIT_SOURCES = ["mining", "trading", "profit", "roi"] as const
+
   const earnTx = await Transaction.find({
     type: "earn",
     status: "approved",
     createdAt: { $gte: start, $lte: end },
     $or: [
-      { "meta.source": { $ne: "daily_mining_profit" } },
-      { "meta.source": { $exists: false } },
+      { "meta.source": { $in: ALLOWED_PROFIT_SOURCES } },
+      // Some systems store category/kind instead of source; keep this conservative.
+      { "meta.category": { $in: ["profit", "roi", "trading", "mining"] } },
     ],
   })
     .select({ userId: 1, amount: 1 })
@@ -193,6 +174,8 @@ async function aggregateProfits(start: Date, end: Date): Promise<Map<string, Agg
     const uid = normalizeId((tx as { userId?: mongoose.Types.ObjectId | string }).userId)
     if (!uid) continue
     const amt = Number((tx as { amount?: unknown }).amount ?? 0)
+    if (!(amt > 0)) continue
+
     const prev = map.get(uid) ?? { sumProfit: 0, wasActive: false }
     map.set(uid, { sumProfit: prev.sumProfit + amt, wasActive: prev.wasActive })
   }
@@ -202,21 +185,13 @@ async function aggregateProfits(start: Date, end: Date): Promise<Map<string, Agg
 
 async function hasExistingEvent(userId: string, uniqueEventId: string) {
   const existing = await Transaction.findOne(
-    {
-      "meta.uniqueEventId": uniqueEventId,
-    },
+    { "meta.uniqueEventId": uniqueEventId },
     { _id: 1, userId: 1 },
   )
-
-  if (!existing) {
-    return false
-  }
+  if (!existing) return false
 
   const storedUserId = normalizeId((existing as { userId?: mongoose.Types.ObjectId | string }).userId)
-  if (!storedUserId) {
-    return true
-  }
-
+  if (!storedUserId) return true
   const normalizedUserId = normalizeId(userId)
   return storedUserId === normalizedUserId
 }
@@ -241,10 +216,7 @@ async function creditTeamReward({
   const uniqueEventId = `DTE:${dayKey}:${member.id}:${sponsor.id}:${team}`
   const exists = await hasExistingEvent(sponsor.id, uniqueEventId)
   if (exists) {
-    console.info("[daily-team-earnings] duplicate_prevented", {
-      userId: sponsor.id,
-      uniqueEventId,
-    })
+    console.info("[daily-team-earnings] duplicate_prevented", { userId: sponsor.id, uniqueEventId })
     return null
   }
 
@@ -252,10 +224,7 @@ async function creditTeamReward({
 
   await Balance.updateOne(
     { userId: sponsorObjectId },
-    {
-      $inc: { teamRewardsAvailable: reward },
-      $setOnInsert: { userId: sponsorObjectId },
-    },
+    { $inc: { teamRewardsAvailable: reward }, $setOnInsert: { userId: sponsorObjectId } },
     { upsert: true },
   )
 
@@ -267,9 +236,9 @@ async function creditTeamReward({
     memberName: member.name,
     fromUserId: member.id,
     fromUserName: member.name,
-    ratePct: 1,
-    baseProfit,
-    baseProfitRounded: baseProfit,
+    ratePct: 1, // 1% per level
+    baseProfit: baseProfit,
+    baseProfitRounded: round2(baseProfit),
     teamProfit: baseProfit,
     teamDepth: TEAM_DEPTH[team],
     generation: TEAM_DEPTH[team],
@@ -296,10 +265,18 @@ export interface DailyTeamEarningsSummary {
   totalReward: number
 }
 
+/**
+ * Two-level daily referral earnings:
+ *  - From each user's *daily earnings base*: pay 1% to L1 and 1% to L2
+ *  - If a level doesn't exist, it's simply skipped
+ *  - Uses 2-decimals, half-up
+ *  - Intended to run daily at 00:00 Asia/Karachi (PKT)
+ *  - Emits a single audit log per member/day with: {date, userId, earningBase, L1Id, L1Amount, L2Id, L2Amount, txnIds}
+ */
 export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamEarningsSummary> {
   await dbConnect()
 
-  // Settle previous PKT day (00:00 PKT schedule)
+  // Settle the previous PKT day (scheduler should trigger at 00:00 PKT)
   const { start, end, dayKey } = getPreviousPktDayRange(now)
   const profits = await aggregateProfits(start, end)
 
@@ -310,23 +287,18 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
 
   for (const [memberId, aggregated] of profits.entries()) {
     const baseProfitRaw = Number(aggregated.sumProfit ?? 0)
-    if (!Number.isFinite(baseProfitRaw) || baseProfitRaw <= 0) {
-      continue
-    }
+    if (!(baseProfitRaw > 0)) continue
 
-    // 1% per level, 2-decimal, round half-up
+    // 1% per level, two-decimal, half-up
     const reward = round2(baseProfitRaw * 0.01)
-    if (reward <= 0) {
-      continue
-    }
+    if (!(reward > 0)) continue
 
     const member = await loadUserCached(userCache, memberId)
-    if (!member) {
-      continue
-    }
+    if (!member) continue
 
     if (member.referredBy) {
       const sponsorA = await loadUserCached(userCache, member.referredBy)
+
       let l1TxnId: string | null = null
       let l2TxnId: string | null = null
       let l1Id: string | null = null
@@ -334,7 +306,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
 
       if (sponsorA) {
         l1Id = sponsorA.id
-        const createdId = await creditTeamReward({
+        const createdA = await creditTeamReward({
           sponsor: sponsorA,
           team: "A",
           dayKey,
@@ -343,8 +315,8 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           member,
           memberActive: aggregated.wasActive,
         })
-        if (createdId) {
-          l1TxnId = createdId
+        if (createdA) {
+          l1TxnId = createdA
           postedCount += 1
           totalReward += reward
           receivers.add(sponsorA.id)
@@ -354,7 +326,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           const sponsorB = await loadUserCached(userCache, sponsorA.referredBy)
           if (sponsorB) {
             l2Id = sponsorB.id
-            const createdBId = await creditTeamReward({
+            const createdB = await creditTeamReward({
               sponsor: sponsorB,
               team: "B",
               dayKey,
@@ -363,8 +335,8 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
               member,
               memberActive: aggregated.wasActive,
             })
-            if (createdBId) {
-              l2TxnId = createdBId
+            if (createdB) {
+              l2TxnId = createdB
               postedCount += 1
               totalReward += reward
               receivers.add(sponsorB.id)
@@ -373,7 +345,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
         }
       }
 
-      // Emit an audit log for the combined payout per member per day
+      // Required audit log (single line per member/day)
       emitAuditLog("daily_referral_earnings", {
         date: dayKey,
         userId: member.id,
@@ -395,6 +367,5 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
   }
 
   console.info("[daily-team-earnings] summary", summary)
-
   return summary
 }
