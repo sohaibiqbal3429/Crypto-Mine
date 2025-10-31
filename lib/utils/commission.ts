@@ -1179,6 +1179,9 @@ export async function applyDepositRewards(
 
   // Level recompute
   if (!options.dryRun) {
+    const sponsorId = userDoc?.referredBy ? userDoc.referredBy.toString() : null
+    const qualifiesForDirectActivation = updatedDepositTotal >= QUALIFYING_DIRECT_DEPOSIT
+    const newlyQualified = qualifiesForDirectActivation && Boolean(userDoc) && !Boolean(userDoc?.qualified)
     if (newlyQualified && sponsorId) {
       await calculateUserLevel(sponsorId, { notify: !results.directCommission })
     }
