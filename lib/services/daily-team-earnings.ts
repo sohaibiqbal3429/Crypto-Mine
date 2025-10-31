@@ -176,6 +176,27 @@ async function aggregateProfits(start: Date, end: Date): Promise<Map<string, Agg
     })
   }
 
+  // Include other daily earnings (type: "earn") posted in the window that are not mining profits
+  const earnTx = await Transaction.find({
+    type: "earn",
+    status: "approved",
+    createdAt: { $gte: start, $lte: end },
+    $or: [
+      { "meta.source": { $ne: "daily_mining_profit" } },
+      { "meta.source": { $exists: false } },
+    ],
+  })
+    .select({ userId: 1, amount: 1 })
+    .lean()
+
+  for (const tx of earnTx) {
+    const uid = normalizeId((tx as { userId?: mongoose.Types.ObjectId | string }).userId)
+    if (!uid) continue
+    const amt = Number((tx as { amount?: unknown }).amount ?? 0)
+    const prev = map.get(uid) ?? { sumProfit: 0, wasActive: false }
+    map.set(uid, { sumProfit: prev.sumProfit + amt, wasActive: prev.wasActive })
+  }
+
   return map
 }
 
@@ -216,7 +237,7 @@ async function creditTeamReward({
   reward: number
   member: CachedUser
   memberActive: boolean
-}): Promise<boolean> {
+}): Promise<string | null> {
   const uniqueEventId = `DTE:${dayKey}:${member.id}:${sponsor.id}:${team}`
   const exists = await hasExistingEvent(sponsor.id, uniqueEventId)
   if (exists) {
@@ -224,7 +245,7 @@ async function creditTeamReward({
       userId: sponsor.id,
       uniqueEventId,
     })
-    return false
+    return null
   }
 
   const sponsorObjectId = ensureObjectId(sponsor.id)
@@ -265,7 +286,7 @@ async function creditTeamReward({
     meta: { ...meta, uniqueKey: uniqueEventId },
   } as any)
 
-  return created?._id ? created._id.toString() : ""
+  return created?._id ? created._id.toString() : null
 }
 
 export interface DailyTeamEarningsSummary {

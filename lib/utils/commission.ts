@@ -1080,7 +1080,9 @@ export async function applyDepositRewards(
   // Determine active status BEFORE this deposit was applied
   const lifetimeTotalCurrent = Number(userDoc?.depositTotal ?? 0)
   const lifetimeBefore = lifetimeTotalCurrent - Number(depositAmount ?? 0)
-  const isActiveBeforeDeposit = lifetimeBefore >= requiredDeposit
+  // Active definition for deposit bonus: fixed $80 lifetime before this deposit
+  const ACTIVE_BONUS_THRESHOLD = 80
+  const isActiveBeforeDeposit = lifetimeBefore >= ACTIVE_BONUS_THRESHOLD
 
   const bonusPercent = isActiveBeforeDeposit ? 5 : 0
   const selfBonusAmount = bonusPercent > 0 ? roundMoney2(depositAmount * 0.05) : 0
