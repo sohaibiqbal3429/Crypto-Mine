@@ -3,6 +3,7 @@ import mongoose from "mongoose"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
+import LedgerEntry from "@/models/LedgerEntry"
 import CommissionRule, {
   type CommissionTeamCode,
   type MonthlyBonusRule,
@@ -36,6 +37,12 @@ function roundCurrency(amount: number): number {
 // 2-decimal currency rounding, half-up
 function roundMoney2(amount: number): number {
   return Math.round(amount * 100) / 100
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = (error as { code?: unknown }).code
+  return code === 11000
 }
 
 const LEVEL_THRESHOLDS = LEVEL_PROGRESS_REQUIREMENTS
@@ -158,10 +165,17 @@ function depthToTeam(depth: number): CommissionTeamCode | null {
 interface DirectCommissionComputation {
   sponsor: any
   sponsorLevel: number
-  rule: ICommissionRule
+  rule: ICommissionRule | null
   /** Effective direct commission percent used for payout */
   pct: number
   amount: number
+}
+
+interface OverrideCommissionComputation {
+  sponsor: any
+  sponsorLevel: number
+  amount: number
+  commissionPct: number
 }
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -185,13 +199,12 @@ async function resolveDirectCommission(
 
   // We still fetch a rule for compatibility, but percent is forced to 15%.
   const rule = await getCommissionRuleForLevel(sponsorLevel)
-  if (!rule) return null
 
   const effectivePct = DIRECT_L1_PCT // 15%
   const amount = roundCurrency((depositAmount * effectivePct) / 100)
   if (amount <= 0) return null
 
-  return { sponsor, sponsorLevel, rule, pct: effectivePct, amount }
+  return { sponsor, sponsorLevel, rule: rule ?? null, pct: effectivePct, amount }
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -373,7 +386,7 @@ export async function processReferralCommission(
   settings?: ISettings | null,
   minRewardDeposit?: number,
   options: ReferralCommissionOptions = {},
-) {
+): Promise<(DirectCommissionComputation & { overrideResult: OverrideCommissionComputation | null }) | null> {
   const referredUser = await User.findById(referredUserId)
   if (!referredUser) return null
 
@@ -390,7 +403,7 @@ export async function processReferralCommission(
   const sponsorIdStr = toObjectIdString(payout.sponsor._id)
   const directUniqueKey = `${sponsorIdStr}|${activationId}|L1_15`
 
-  if (options.dryRun) return payout
+  if (options.dryRun) return { ...payout, overrideResult: null }
 
   // --- Idempotency: Direct L1 ---
   const existingDirect = await Transaction.findOne({
@@ -439,6 +452,28 @@ export async function processReferralCommission(
       updatedAt: occurredAt,
     })
 
+    try {
+      await LedgerEntry.create({
+        userId: payout.sponsor._id,
+        beneficiaryId: payout.sponsor._id,
+        sourceUserId: referredUser._id,
+        type: "deposit_commission",
+        amount: payout.amount,
+        rate: payout.pct,
+        meta: {
+          uniqueKey: directUniqueKey,
+          depositId: options.depositTransactionId ?? null,
+          source: "deposit_commission",
+          referredUserId,
+          depositAmount: roundCurrency(depositAmount),
+        },
+      })
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        throw error
+      }
+    }
+
     console.info("[commission] credit", {
       event_id: directUniqueKey,
       source: "direct_referral",
@@ -459,6 +494,7 @@ export async function processReferralCommission(
   // --- L2 3% override (activation) ---
   const qualifiesForActivation =
     depositAmount >= requiredDeposit || Boolean(options.qualifiesForActivation)
+  let overrideResult: OverrideCommissionComputation | null = null
   if (qualifiesForActivation) {
     const l2Id = payout.sponsor?.referredBy
     if (!l2Id) {
@@ -466,7 +502,7 @@ export async function processReferralCommission(
         event_id: `activation:${activationId}:l2`,
         reason: "missing_level2",
       })
-      return payout
+      return { ...payout, overrideResult: null }
     }
     const leader2 = await User.findById(l2Id)
     if (!leader2) {
@@ -474,7 +510,7 @@ export async function processReferralCommission(
         event_id: `activation:${activationId}:l2`,
         reason: "missing_level2",
       })
-      return payout
+      return { ...payout, overrideResult: null }
     }
 
     const activationAmount = roundCurrency(depositAmount)
@@ -533,11 +569,17 @@ export async function processReferralCommission(
           amount: l2Amount,
           base_amount: activationAmount,
         })
+        overrideResult = {
+          sponsor: leader2,
+          sponsorLevel: payout.sponsorLevel,
+          amount: l2Amount,
+          commissionPct: LEVEL2_OVERRIDE_PCT,
+        }
       }
     }
   }
 
-  return payout
+  return { ...payout, overrideResult }
 }
 
 interface TeamOverrideContext {
@@ -1060,12 +1102,14 @@ export async function applyDepositRewards(
   const results: {
     selfBonus?: number
     directCommission?: DirectCommissionComputation | null
+    overrideCommission?: OverrideCommissionComputation | null
     activated: boolean
     activationThreshold: number
   } = {
     activated: qualifiesForActivation,
     activationThreshold: requiredDeposit,
     directCommission: null,
+    overrideCommission: null,
   }
 
   // Mark active if needed
@@ -1163,7 +1207,7 @@ export async function applyDepositRewards(
   })
 
   // === Direct & L2 (uses UPDATED processReferralCommission) ===
-  results.directCommission = await processReferralCommission(
+  const directResult = await processReferralCommission(
     userId,
     depositAmount,
     settings,
@@ -1176,6 +1220,14 @@ export async function applyDepositRewards(
       qualifiesForActivation,
     },
   )
+  if (directResult) {
+    const { overrideResult, ...directOnly } = directResult
+    results.directCommission = directOnly
+    results.overrideCommission = overrideResult
+  } else {
+    results.directCommission = null
+    results.overrideCommission = null
+  }
 
   // Level recompute
   if (!options.dryRun) {

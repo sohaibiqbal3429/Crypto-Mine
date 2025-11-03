@@ -302,8 +302,11 @@ export async function approveLuckyDrawDeposit({ adminId, depositId }: LuckyDrawA
 
     const ledgerPayload = {
       userId: deposit.userId,
+      beneficiaryId: deposit.userId,
+      sourceUserId: deposit.userId,
       type: "LUCKY_DRAW_DEPOSIT" as const,
       amount: LUCKY_DRAW_AMOUNT,
+      rate: null,
       refId: deposit._id,
       meta: {
         transactionHash: deposit.transactionHash,
