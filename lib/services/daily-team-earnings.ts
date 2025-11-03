@@ -163,7 +163,13 @@ async function aggregateProfits(start: Date, end: Date): Promise<Map<string, Agg
   // 2) (Optional) Any other explicit profit EARN tx (strict allow-list on meta.source)
   //    This keeps us aligned with: "Daily earnings = net profit or mining/trading income only
   //    (exclude deposits, bonuses, airdrops)."
-  const ALLOWED_PROFIT_SOURCES = ["mining", "trading", "profit", "roi"] as const
+  const ALLOWED_PROFIT_SOURCES = [
+    "mining",
+    "trading",
+    "profit",
+    "roi",
+    "daily_mining_profit",
+  ] as const
 
   const earnTx = await Transaction.find({
     type: "earn",

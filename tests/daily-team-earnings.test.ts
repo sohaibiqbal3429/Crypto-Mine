@@ -157,6 +157,62 @@ test("runDailyTeamEarnings handles missing uplines", { concurrency: false }, asy
   assert.equal(transactions.length, 1)
   assert.equal(toId(transactions[0]?.userId), toId(leader._id))
 })
+
+test("runDailyTeamEarnings credits fallback mining profit sources", { concurrency: false }, async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id })
+
+  await Transaction.deleteMany({})
+  await Balance.deleteMany({})
+  await TeamDailyProfit.deleteMany({})
+  await LedgerEntry.deleteMany({})
+
+  const profitAt = new Date("2025-02-02T12:00:00Z")
+
+  await Transaction.create({
+    userId: member._id,
+    type: "earn",
+    amount: 50,
+    status: "approved",
+    meta: { source: "daily_mining_profit" },
+    createdAt: profitAt,
+    updatedAt: profitAt,
+  } as any)
+
+  const summary = await runDailyTeamEarnings(new Date("2025-02-03T00:00:00Z"))
+  assert.equal(summary.day, "2025-02-02")
+  assert.equal(summary.postedCount, 2)
+  assert.equal(summary.totalReward, 1)
+
+  const transactions = await Transaction.find({
+    type: "teamReward",
+    "meta.source": "daily_team_earning",
+  }).lean()
+
+  assert.equal(transactions.length, 2)
+
+  const leaderTx = transactions.find((tx) => toId(tx.userId) === toId(leader._id))
+  const leaderLeaderTx = transactions.find((tx) => toId(tx.userId) === toId(leaderLeader._id))
+
+  assert.ok(leaderTx)
+  assert.ok(leaderLeaderTx)
+  assert.equal(Number(leaderTx?.amount ?? 0), 0.5)
+  assert.equal(Number(leaderLeaderTx?.amount ?? 0), 0.5)
+
+  const ledgerEntries = await LedgerEntry.find({ type: "daily_team_commission" }).lean()
+  assert.equal(ledgerEntries.length, 2)
+
+  const balances = await Balance.find().lean()
+  const leaderBalance = balances.find((doc) => toId(doc.userId) === toId(leader._id))
+  const leaderLeaderBalance = balances.find((doc) => toId(doc.userId) === toId(leaderLeader._id))
+  assert.equal(Number(leaderBalance?.teamRewardsAvailable ?? 0), 0.5)
+  assert.equal(Number(leaderLeaderBalance?.teamRewardsAvailable ?? 0), 0.5)
+
+  const rerun = await runDailyTeamEarnings(new Date("2025-02-03T00:00:00Z"))
+  assert.equal(rerun.postedCount, 0)
+  assert.equal(rerun.totalReward, 0)
+})
 function toId(value: unknown): string {
   if (!value) return ""
   if (typeof value === "string") {

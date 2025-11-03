@@ -142,6 +142,7 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
   assert.equal(Number(ledgerEntries[0]?.rate ?? 0), 15)
   assert.equal(toId(ledgerEntries[0]?.beneficiaryId), toId(leader._id))
   assert.equal(toId(ledgerEntries[0]?.sourceUserId), toId(member._id))
+  assert.equal(ledgerEntries[0]?.meta?.deposit_id, activationId)
 
   // Running again should not duplicate payouts
   await applyDepositRewards(
