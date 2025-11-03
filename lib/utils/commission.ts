@@ -463,6 +463,7 @@ export async function processReferralCommission(
         meta: {
           uniqueKey: directUniqueKey,
           depositId: options.depositTransactionId ?? null,
+          deposit_id: options.depositTransactionId ?? null,
           source: "deposit_commission",
           referredUserId,
           depositAmount: roundCurrency(depositAmount),

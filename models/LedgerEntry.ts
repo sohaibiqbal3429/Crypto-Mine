@@ -44,5 +44,9 @@ LedgerEntrySchema.index({ beneficiaryId: 1, createdAt: -1 })
 LedgerEntrySchema.index({ type: 1, createdAt: -1 })
 LedgerEntrySchema.index({ type: 1, refId: 1 }, { unique: true, sparse: true })
 LedgerEntrySchema.index({ type: 1, "meta.uniqueKey": 1 }, { unique: true, sparse: true })
+LedgerEntrySchema.index(
+  { beneficiaryId: 1, type: 1, "meta.date": 1 },
+  { unique: true, sparse: true },
+)
 
 export default createModelProxy<ILedgerEntry>("LedgerEntry", LedgerEntrySchema)

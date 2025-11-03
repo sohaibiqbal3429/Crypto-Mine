@@ -10,6 +10,15 @@ function normalizeUserId(id: string | mongoose.Types.ObjectId): string {
   return typeof id === "string" ? id : id.toString()
 }
 
+function buildUserIdCandidates(id: string): (string | mongoose.Types.ObjectId)[] {
+  const normalized = normalizeUserId(id)
+  const candidates: (string | mongoose.Types.ObjectId)[] = [normalized]
+  if (mongoose.Types.ObjectId.isValid(normalized)) {
+    candidates.push(new mongoose.Types.ObjectId(normalized))
+  }
+  return candidates
+}
+
 function normalizeDocumentId(value: unknown): string | null {
   if (!value) return null
   if (typeof value === "string") {
@@ -566,9 +575,10 @@ export async function listTeamRewardHistory(
 ): Promise<RewardHistoryEntry[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 100, 200))
   const userIdString = normalizeUserId(userId)
+  const candidates = buildUserIdCandidates(userIdString)
 
   const transactions = await Transaction.find({
-    userId: userIdString,
+    userId: { $in: candidates },
     $or: [
       { type: "teamReward" },
       { type: "bonus", "meta.source": { $in: ["team_override", "monthly_policy_bonus"] } },
