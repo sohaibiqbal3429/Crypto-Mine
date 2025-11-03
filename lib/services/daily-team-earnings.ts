@@ -6,6 +6,7 @@ import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
 import { emitAuditLog } from "@/lib/observability/audit"
+import { getTeamDailyProfitPercent } from "@/lib/services/settings"
 
 const TEAM_DEPTH: Record<"A" | "B", number> = { A: 1, B: 2 }
 
@@ -279,6 +280,9 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
   // Settle the previous PKT day (scheduler should trigger at 00:00 PKT)
   const { start, end, dayKey } = getPreviousPktDayRange(now)
   const profits = await aggregateProfits(start, end)
+  // Admin-configurable percent; default to 1% if not set
+  const overridePct = await getTeamDailyProfitPercent().catch(() => null)
+  const ratePct = typeof overridePct === "number" && Number.isFinite(overridePct) ? overridePct : 1
 
   const userCache = new Map<string, CachedUser | null>()
   let postedCount = 0
@@ -289,8 +293,8 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
     const baseProfitRaw = Number(aggregated.sumProfit ?? 0)
     if (!(baseProfitRaw > 0)) continue
 
-    // 1% per level, two-decimal, half-up
-    const reward = round2(baseProfitRaw * 0.01)
+    // Configurable percent per level, two-decimal, half-up
+    const reward = round2(baseProfitRaw * (ratePct / 100))
     if (!(reward > 0)) continue
 
     const member = await loadUserCached(userCache, memberId)
@@ -322,7 +326,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           receivers.add(sponsorA.id)
         }
 
-        if (sponsorA.referredBy) {
+        if (sponsorA.referredBy && aggregated.wasActive) {
           const sponsorB = await loadUserCached(userCache, sponsorA.referredBy)
           if (sponsorB) {
             l2Id = sponsorB.id
