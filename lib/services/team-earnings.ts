@@ -10,6 +10,60 @@ function normalizeUserId(id: string | mongoose.Types.ObjectId): string {
   return typeof id === "string" ? id : id.toString()
 }
 
+function buildUserIdCandidates(id: string): (string | mongoose.Types.ObjectId)[] {
+  const normalized = normalizeUserId(id)
+  const candidates: (string | mongoose.Types.ObjectId)[] = [normalized]
+  if (mongoose.Types.ObjectId.isValid(normalized)) {
+    candidates.push(new mongoose.Types.ObjectId(normalized))
+  }
+  return candidates
+}
+
+function normalizeDocumentId(value: unknown): string | null {
+  if (!value) return null
+  if (typeof value === "string") {
+    if (mongoose.Types.ObjectId.isValid(value)) {
+      return new mongoose.Types.ObjectId(value).toHexString()
+    }
+    return value
+  }
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value.toHexString()
+  }
+  if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
+    try {
+      return (value as { toHexString: () => string }).toHexString()
+    } catch {
+      // ignore fallthrough to buffer handling
+    }
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>
+    if (record._id) {
+      return normalizeDocumentId(record._id)
+    }
+    if (record.buffer && typeof record.buffer === "object") {
+      const raw = record.buffer as Record<string, unknown>
+      const bytes = Object.keys(raw)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((key) => Number(raw[key] ?? 0))
+      if (bytes.length === 12) {
+        return Buffer.from(bytes).toString("hex")
+      }
+    }
+  }
+  if (typeof (value as { toString?: () => string }).toString === "function") {
+    const str = (value as { toString: () => string }).toString()
+    if (str && str !== "[object Object]") {
+      if (mongoose.Types.ObjectId.isValid(str)) {
+        return new mongoose.Types.ObjectId(str).toHexString()
+      }
+      return str
+    }
+  }
+  return null
+}
+
 function toObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
   if (id instanceof mongoose.Types.ObjectId) {
     return id
@@ -76,8 +130,38 @@ function buildClaimableRewardsQuery(userId: string) {
 }
 
 export async function getClaimableTeamRewardTotal(userId: string): Promise<number> {
-  const claimable = await buildClaimableRewardsQuery(userId).select({ amount: 1 }).lean()
-  const total = claimable.reduce((sum, tx) => sum + Number(tx?.amount ?? 0), 0)
+  const claimable = await buildClaimableRewardsQuery(userId).select({ amount: 1, userId: 1 }).lean()
+  let total = claimable.reduce((sum, tx) => sum + Number(tx?.amount ?? 0), 0)
+  if (total <= 0 && claimable.length === 0) {
+    const normalizedTarget = normalizeDocumentId(userId) ?? normalizeUserId(userId)
+    const fallbackClaimable = await Transaction.find({
+      type: "teamReward",
+      status: "approved",
+      claimable: true,
+    })
+      .select({ amount: 1, userId: 1 })
+      .lean()
+    for (const tx of fallbackClaimable) {
+      const txUserId = normalizeDocumentId((tx as { userId?: unknown }).userId)
+      if (txUserId && txUserId === normalizedTarget) {
+        total += Number((tx as { amount?: unknown }).amount ?? 0)
+      }
+    }
+  }
+  if (total <= 0) {
+    const userIdString = normalizeUserId(userId)
+    const candidates: (string | mongoose.Types.ObjectId)[] = [userIdString]
+    if (mongoose.Types.ObjectId.isValid(userIdString)) {
+      candidates.push(new mongoose.Types.ObjectId(userIdString))
+    }
+    const balanceDoc = await Balance.findOne({ userId: { $in: candidates } })
+    if (
+      balanceDoc &&
+      typeof (balanceDoc as { teamRewardsAvailable?: unknown }).teamRewardsAvailable === "number"
+    ) {
+      total = Number((balanceDoc as { teamRewardsAvailable?: number }).teamRewardsAvailable ?? 0)
+    }
+  }
   return roundPlatform(total)
 }
 
@@ -399,7 +483,7 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
 
   if (tx.type === "teamReward") {
     if (source === "daily_team_earning") {
-      return "daily_team_earning"
+      return tx.claimable ? "daily_profit" : "daily_team_earning"
     }
 
     const teamRewardSources = new Set([
@@ -491,9 +575,10 @@ export async function listTeamRewardHistory(
 ): Promise<RewardHistoryEntry[]> {
   const limit = Math.max(1, Math.min(options.limit ?? 100, 200))
   const userIdString = normalizeUserId(userId)
+  const candidates = buildUserIdCandidates(userIdString)
 
   const transactions = await Transaction.find({
-    userId: userIdString,
+    userId: { $in: candidates },
     $or: [
       { type: "teamReward" },
       { type: "bonus", "meta.source": { $in: ["team_override", "monthly_policy_bonus"] } },

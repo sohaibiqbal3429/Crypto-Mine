@@ -5,6 +5,7 @@ import Balance from "@/models/Balance"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import LedgerEntry from "@/models/LedgerEntry"
 import { emitAuditLog } from "@/lib/observability/audit"
 import { getTeamDailyProfitPercent } from "@/lib/services/settings"
 
@@ -48,6 +49,12 @@ function normalizeId(
   } catch {
     throw new Error("Invalid ObjectId value")
   }
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const code = (error as { code?: unknown }).code
+  return code === 11000
 }
 
 // 2-decimal (half-up)
@@ -156,7 +163,13 @@ async function aggregateProfits(start: Date, end: Date): Promise<Map<string, Agg
   // 2) (Optional) Any other explicit profit EARN tx (strict allow-list on meta.source)
   //    This keeps us aligned with: "Daily earnings = net profit or mining/trading income only
   //    (exclude deposits, bonuses, airdrops)."
-  const ALLOWED_PROFIT_SOURCES = ["mining", "trading", "profit", "roi"] as const
+  const ALLOWED_PROFIT_SOURCES = [
+    "mining",
+    "trading",
+    "profit",
+    "roi",
+    "daily_mining_profit",
+  ] as const
 
   const earnTx = await Transaction.find({
     type: "earn",
@@ -205,6 +218,7 @@ async function creditTeamReward({
   reward,
   member,
   memberActive,
+  ratePct,
 }: {
   sponsor: CachedUser
   team: "A" | "B"
@@ -213,6 +227,7 @@ async function creditTeamReward({
   reward: number
   member: CachedUser
   memberActive: boolean
+  ratePct: number
 }): Promise<string | null> {
   const uniqueEventId = `DTE:${dayKey}:${member.id}:${sponsor.id}:${team}`
   const exists = await hasExistingEvent(sponsor.id, uniqueEventId)
@@ -221,11 +236,12 @@ async function creditTeamReward({
     return null
   }
 
-  const sponsorObjectId = ensureObjectId(sponsor.id)
+  const sponsorIdCandidates = buildUserIdCandidates(sponsor.id)
+  const sponsorPrimaryId = sponsorIdCandidates[0]
 
   await Balance.updateOne(
-    { userId: sponsorObjectId },
-    { $inc: { teamRewardsAvailable: reward }, $setOnInsert: { userId: sponsorObjectId } },
+    { userId: { $in: sponsorIdCandidates } },
+    { $inc: { teamRewardsAvailable: reward }, $setOnInsert: { userId: sponsorPrimaryId } },
     { upsert: true },
   )
 
@@ -237,7 +253,7 @@ async function creditTeamReward({
     memberName: member.name,
     fromUserId: member.id,
     fromUserName: member.name,
-    ratePct: 1, // 1% per level
+    ratePct,
     baseProfit: baseProfit,
     baseProfitRounded: round2(baseProfit),
     teamProfit: baseProfit,
@@ -248,13 +264,39 @@ async function creditTeamReward({
   }
 
   const created = await Transaction.create({
-    userId: sponsorObjectId,
+    userId: sponsorPrimaryId,
     type: "teamReward",
     amount: reward,
     status: "approved",
     claimable: true,
     meta: { ...meta, uniqueKey: uniqueEventId },
   } as any)
+
+  const ledgerKey = `daily_team_commission:${dayKey}:${team}:${member.id}:${sponsor.id}`
+
+  try {
+    await LedgerEntry.create({
+      userId: ensureObjectId(sponsor.id),
+      beneficiaryId: ensureObjectId(sponsor.id),
+      sourceUserId: ensureObjectId(member.id),
+      type: "daily_team_commission",
+      amount: reward,
+      rate: ratePct,
+      meta: {
+        uniqueKey: ledgerKey,
+        date: dayKey,
+        team,
+        memberId: member.id,
+        memberName: member.name,
+        baseProfit: round2(baseProfit),
+        transactionId: created?._id?.toString() ?? null,
+      },
+    })
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error
+    }
+  }
 
   return created?._id ? created._id.toString() : null
 }
@@ -318,6 +360,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           reward,
           member,
           memberActive: aggregated.wasActive,
+          ratePct: ratePct,
         })
         if (createdA) {
           l1TxnId = createdA
@@ -326,7 +369,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           receivers.add(sponsorA.id)
         }
 
-        if (sponsorA.referredBy && aggregated.wasActive) {
+        if (sponsorA.referredBy) {
           const sponsorB = await loadUserCached(userCache, sponsorA.referredBy)
           if (sponsorB) {
             l2Id = sponsorB.id
@@ -338,6 +381,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
               reward,
               member,
               memberActive: aggregated.wasActive,
+              ratePct: ratePct,
             })
             if (createdB) {
               l2TxnId = createdB

@@ -11,6 +11,7 @@ import Balance from "@/models/Balance"
 import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
+import LedgerEntry from "@/models/LedgerEntry"
 
 const toId = (value: unknown) => {
   if (typeof value === "string") return value
@@ -69,6 +70,8 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
   const leader = await createUser({ referredBy: leaderLeader._id })
   const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
 
+  await LedgerEntry.deleteMany({})
+
   const depositAmount = 200
 
   const deposit = await Transaction.create({
@@ -95,7 +98,7 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
   const expectedOverride = Number((depositAmount * 0.03).toFixed(4))
 
   assert.equal(outcome.directCommission?.amount, expectedDirect)
-  assert.equal(outcome.directCommission?.commissionPct, 15)
+  assert.equal(outcome.directCommission?.pct, 15)
   assert.equal(outcome.overrideCommission?.amount, expectedOverride)
   assert.equal(outcome.overrideCommission?.commissionPct, 3)
 
@@ -103,37 +106,43 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
 
   const leaderTransactions = allTransactions.filter(
     (tx) =>
-      tx.type === "teamReward" &&
-      tx.meta?.source === "activation_direct" &&
+      tx.type === "commission" &&
+      tx.meta?.source === "direct_referral" &&
       toId(tx.userId) === toId(leader._id),
   )
   assert.equal(leaderTransactions.length, 1)
   assert.equal(Number(leaderTransactions[0]?.amount ?? 0), expectedDirect)
-  assert.equal(Number(leaderTransactions[0]?.meta?.commissionBase ?? 0), depositAmount)
-  assert.equal(leaderTransactions[0]?.meta?.activationId, activationId)
-  assert.equal(leaderTransactions[0]?.claimable, true)
+  assert.equal(Number(leaderTransactions[0]?.meta?.depositAmount ?? 0), depositAmount)
+  assert.equal(leaderTransactions[0]?.meta?.depositTransactionId, activationId)
+  assert.equal(leaderTransactions[0]?.claimable ?? false, false)
 
   const leaderLeaderTransactions = allTransactions.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "commission" &&
       tx.meta?.source === "activation_level2_override" &&
       toId(tx.userId) === toId(leaderLeader._id),
   )
   assert.equal(leaderLeaderTransactions.length, 1)
   assert.equal(Number(leaderLeaderTransactions[0]?.amount ?? 0), expectedOverride)
-  assert.equal(Number(leaderLeaderTransactions[0]?.meta?.commissionBase ?? 0), depositAmount)
-  assert.equal(leaderLeaderTransactions[0]?.meta?.activationId, activationId)
-  assert.equal(leaderLeaderTransactions[0]?.claimable, true)
+  assert.equal(Number(leaderLeaderTransactions[0]?.meta?.depositAmount ?? 0), depositAmount)
+  assert.equal(leaderLeaderTransactions[0]?.meta?.depositTransactionId, activationId)
+  assert.equal(leaderLeaderTransactions[0]?.claimable ?? false, false)
 
   const memberTransactions = allTransactions.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "bonus" &&
       tx.meta?.source === "self_deposit_bonus" &&
       toId(tx.userId) === toId(member._id),
   )
-  assert.equal(memberTransactions.length, 1)
-  assert.equal(Number(memberTransactions[0]?.amount ?? 0), Number((depositAmount * 0.05).toFixed(4)))
-  assert.equal(memberTransactions[0]?.claimable, true)
+  assert.equal(memberTransactions.length, 0)
+
+  const ledgerEntries = await LedgerEntry.find({ type: "deposit_commission" }).lean()
+  assert.equal(ledgerEntries.length, 1)
+  assert.equal(Number(ledgerEntries[0]?.amount ?? 0), expectedDirect)
+  assert.equal(Number(ledgerEntries[0]?.rate ?? 0), 15)
+  assert.equal(toId(ledgerEntries[0]?.beneficiaryId), toId(leader._id))
+  assert.equal(toId(ledgerEntries[0]?.sourceUserId), toId(member._id))
+  assert.equal(ledgerEntries[0]?.meta?.deposit_id, activationId)
 
   // Running again should not duplicate payouts
   await applyDepositRewards(
@@ -150,15 +159,15 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
 
   const duplicateDirect = afterDuplicate.filter(
     (tx) =>
-      tx.type === "teamReward" &&
-      tx.meta?.source === "activation_direct" &&
+      tx.type === "commission" &&
+      tx.meta?.source === "direct_referral" &&
       toId(tx.userId) === toId(leader._id),
   )
   assert.equal(duplicateDirect.length, 1)
 
   const duplicateOverride = afterDuplicate.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "commission" &&
       tx.meta?.source === "activation_level2_override" &&
       toId(tx.userId) === toId(leaderLeader._id),
   )
@@ -166,15 +175,15 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
 
   const duplicateSelf = afterDuplicate.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "bonus" &&
       tx.meta?.source === "self_deposit_bonus" &&
       toId(tx.userId) === toId(member._id),
   )
-  assert.equal(duplicateSelf.length, 1)
+  assert.equal(duplicateSelf.length, 0)
 })
 
 test("self-deposit bonus credits 5% once per deposit", async () => {
-  const member = await createUser({ status: "inactive", isActive: false })
+  const member = await createUser({ status: "active", isActive: true, depositTotal: 80 })
 
   const depositAmount = 100
   const deposit = await Transaction.create({
@@ -201,13 +210,13 @@ test("self-deposit bonus credits 5% once per deposit", async () => {
 
   const selfUniqueKey = `${toId(member._id)}|${depositId}|self5`
   const reward = await Transaction.findOne({
-    type: "teamReward",
+    type: "bonus",
     "meta.uniqueEventId": selfUniqueKey,
   })
 
   assert.ok(reward)
   assert.equal(Number(toPlain<any>(reward)?.amount ?? 0), Number((depositAmount * 0.05).toFixed(4)))
-  assert.equal(toPlain<any>(reward)?.claimable, true)
+  assert.equal(toPlain<any>(reward)?.claimable, false)
 
   await applyDepositRewards(
     toId(member._id),
@@ -220,7 +229,7 @@ test("self-deposit bonus credits 5% once per deposit", async () => {
   )
 
   const rewardAfter = await Transaction.find({
-    type: "teamReward",
+    type: "bonus",
     "meta.uniqueEventId": selfUniqueKey,
   })
 
@@ -276,24 +285,34 @@ test("top-ups do not trigger additional activation commissions", async () => {
     } as any,
   )
 
-  assert.equal(topUpOutcome.directCommission, null)
-  assert.equal(topUpOutcome.overrideCommission, null)
+  assert.equal(Number(topUpOutcome.directCommission?.amount ?? 0), Number((150 * 0.15).toFixed(4)))
+  assert.equal(Number(topUpOutcome.overrideCommission?.amount ?? 0), Number((150 * 0.03).toFixed(4)))
   assert.equal(topUpOutcome.activated, false)
 
-  const allCommissionTx = (await Transaction.find({ type: "teamReward" })).map((tx) => toPlain<any>(tx))
+  const allCommissionTx = (await Transaction.find({ type: "commission" })).map((tx) => toPlain<any>(tx))
   const leaderDirects = allCommissionTx.filter(
-    (tx) => tx.meta?.source === "activation_direct" && toId(tx.userId) === toId(leader._id),
+    (tx) => tx.meta?.source === "direct_referral" && toId(tx.userId) === toId(leader._id),
   )
 
-  assert.equal(leaderDirects.length, 1)
-  assert.equal(Number(leaderDirects[0]?.meta?.commissionBase ?? 0), 120)
+  assert.equal(leaderDirects.length, 2)
+  assert.deepEqual(
+    leaderDirects
+      .map((tx) => Number(tx.meta?.depositAmount ?? 0))
+      .sort((a, b) => a - b),
+    [120, 150],
+  )
 
   const level2Overrides = allCommissionTx.filter(
     (tx) => tx.meta?.source === "activation_level2_override" && toId(tx.userId) === toId(leaderLeader._id),
   )
 
-  assert.equal(level2Overrides.length, 1)
-  assert.equal(Number(level2Overrides[0]?.meta?.commissionBase ?? 0), 120)
+  assert.equal(level2Overrides.length, 2)
+  assert.deepEqual(
+    level2Overrides
+      .map((tx) => Number(tx.meta?.depositAmount ?? 0))
+      .sort((a, b) => a - b),
+    [120, 150],
+  )
 })
 
 test("level-2 override requires activation threshold", async () => {
@@ -323,7 +342,7 @@ test("level-2 override requires activation threshold", async () => {
   const allAfter79 = (await Transaction.find()).map((tx) => toPlain<any>(tx))
   const l2After79 = allAfter79.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "commission" &&
       tx.meta?.source === "activation_level2_override" &&
       toId(tx.userId) === toId(leaderLeader._id),
   )
@@ -355,7 +374,7 @@ test("level-2 override requires activation threshold", async () => {
   const allAfter80 = (await Transaction.find()).map((tx) => toPlain<any>(tx))
   const l2After80 = allAfter80.filter(
     (tx) =>
-      tx.type === "teamReward" &&
+      tx.type === "commission" &&
       tx.meta?.source === "activation_level2_override" &&
       toId(tx.userId) === toId(leaderLeader2._id),
   )
