@@ -483,7 +483,7 @@ function inferHistoryCategory(tx: any): RewardHistoryCategory {
 
   if (tx.type === "teamReward") {
     if (source === "daily_team_earning") {
-      return tx.claimable ? "daily_profit" : "daily_team_earning"
+      return "daily_team_earning"
     }
 
     const teamRewardSources = new Set([

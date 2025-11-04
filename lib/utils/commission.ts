@@ -372,6 +372,7 @@ interface ReferralCommissionOptions {
   adjustmentReason?: string
   dryRun?: boolean
   qualifiesForActivation?: boolean
+  referredUserWasActiveBeforeDeposit?: boolean
 }
 
 /**
@@ -402,6 +403,7 @@ export async function processReferralCommission(
     options.depositTransactionId ?? `manual:${referredUserId}:${occurredAt.toISOString()}`
   const sponsorIdStr = toObjectIdString(payout.sponsor._id)
   const directUniqueKey = `${sponsorIdStr}|${activationId}|L1_15`
+  const activationEventId = `activation:${activationId}:l2`
 
   if (options.dryRun) return { ...payout, overrideResult: null }
 
@@ -493,6 +495,14 @@ export async function processReferralCommission(
   })
 
   // --- L2 3% override (activation) ---
+  if (options.referredUserWasActiveBeforeDeposit === false) {
+    console.info("[commission] activation_override_skipped", {
+      event_id: activationEventId,
+      reason: "referred_user_inactive_before_deposit",
+    })
+    return { ...payout, overrideResult: null }
+  }
+
   const qualifiesForActivation =
     depositAmount >= requiredDeposit || Boolean(options.qualifiesForActivation)
   let overrideResult: OverrideCommissionComputation | null = null
@@ -500,7 +510,7 @@ export async function processReferralCommission(
     const l2Id = payout.sponsor?.referredBy
     if (!l2Id) {
       console.info("[commission] activation_override_skipped", {
-        event_id: `activation:${activationId}:l2`,
+        event_id: activationEventId,
         reason: "missing_level2",
       })
       return { ...payout, overrideResult: null }
@@ -508,7 +518,7 @@ export async function processReferralCommission(
     const leader2 = await User.findById(l2Id)
     if (!leader2) {
       console.info("[commission] activation_override_skipped", {
-        event_id: `activation:${activationId}:l2`,
+        event_id: activationEventId,
         reason: "missing_level2",
       })
       return { ...payout, overrideResult: null }
@@ -1219,6 +1229,7 @@ export async function applyDepositRewards(
       adjustmentReason: options.adjustmentReason,
       dryRun: options.dryRun,
       qualifiesForActivation,
+      referredUserWasActiveBeforeDeposit: isActiveBeforeDeposit,
     },
   )
   if (directResult) {

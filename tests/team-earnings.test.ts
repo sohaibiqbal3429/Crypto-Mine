@@ -257,6 +257,20 @@ test("listTeamRewardHistory categorises transactions", async () => {
     },
     {
       userId: user._id,
+      type: "bonus",
+      amount: 0.75,
+      status: "approved",
+      meta: {
+        source: "team_override",
+        overrideKind: "daily_override",
+        overridePct: 1,
+        team: "B",
+        teamProfit: 75,
+        fromUserName: "Charlie",
+      },
+    },
+    {
+      userId: user._id,
       type: "teamReward",
       amount: 10,
       status: "approved",
@@ -282,13 +296,20 @@ test("listTeamRewardHistory categorises transactions", async () => {
   assert.equal(rewardEntry?.team, "A")
   assert.equal(rewardEntry?.rate, 2)
 
-  const dailyTeamEntry = history.find((entry) => entry.category === "daily_team_earning")
-  assert.deepEqual(dailyTeamEntry?.teams, ["A", "B"])
-  assert.equal(dailyTeamEntry?.rate, 2)
-  assert.equal(dailyTeamEntry?.level, 3)
+  const dailyTeamEntries = history.filter((entry) => entry.category === "daily_team_earning")
+  const aggregatedDailyTeamEntry = dailyTeamEntries.find((entry) => entry.teams?.length)
+  assert.ok(aggregatedDailyTeamEntry)
+  assert.deepEqual(aggregatedDailyTeamEntry?.teams, ["A", "B"])
+  assert.equal(aggregatedDailyTeamEntry?.rate, 2)
+  assert.equal(aggregatedDailyTeamEntry?.level, 3)
 
-  const dailyRewardEntry = history.find((entry) => entry.category === "daily_profit")
-  assert.equal(dailyRewardEntry?.rate, 1)
-  assert.equal(dailyRewardEntry?.amount, 0.012)
+  const claimableDailyTeamEntry = dailyTeamEntries.find((entry) => Math.abs(entry.amount - 0.012) < 1e-9)
+  assert.ok(claimableDailyTeamEntry)
+  assert.equal(claimableDailyTeamEntry?.rate, 1)
+
+  const dailyProfitEntry = history.find((entry) => entry.category === "daily_profit")
+  assert.equal(dailyProfitEntry?.rate, 1)
+  assert.equal(dailyProfitEntry?.amount, 0.75)
+  assert.equal(dailyProfitEntry?.team, "B")
 })
 
