@@ -68,8 +68,9 @@ test.before(async () => {
 test("direct referral pays 15% and second-level override pays 3% once", async () => {
   const leaderLeader = await createUser()
   const leader = await createUser({ referredBy: leaderLeader._id })
-  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false })
+  const member = await createUser({ referredBy: leader._id, status: "active", isActive: true, depositTotal: 80 })
 
+  await Transaction.deleteMany({})
   await LedgerEntry.deleteMany({})
 
   const depositAmount = 200
@@ -134,7 +135,11 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
       tx.meta?.source === "self_deposit_bonus" &&
       toId(tx.userId) === toId(member._id),
   )
-  assert.equal(memberTransactions.length, 0)
+  assert.equal(memberTransactions.length, 1)
+  assert.equal(
+    Number(memberTransactions[0]?.amount ?? 0),
+    Number((depositAmount * 0.05).toFixed(4)),
+  )
 
   const ledgerEntries = await LedgerEntry.find({ type: "deposit_commission" }).lean()
   assert.equal(ledgerEntries.length, 1)
@@ -179,7 +184,57 @@ test("direct referral pays 15% and second-level override pays 3% once", async ()
       tx.meta?.source === "self_deposit_bonus" &&
       toId(tx.userId) === toId(member._id),
   )
-  assert.equal(duplicateSelf.length, 0)
+  assert.equal(duplicateSelf.length, 1)
+  assert.equal(
+    Number(duplicateSelf[0]?.amount ?? 0),
+    Number((depositAmount * 0.05).toFixed(4)),
+  )
+})
+
+test("inactive member deposit pays only level-1 commission", async () => {
+  const leaderLeader = await createUser()
+  const leader = await createUser({ referredBy: leaderLeader._id })
+  const member = await createUser({ referredBy: leader._id, status: "inactive", isActive: false, depositTotal: 0 })
+
+  await Transaction.deleteMany({})
+  await LedgerEntry.deleteMany({})
+
+  const depositAmount = 100
+
+  const deposit = await Transaction.create({
+    userId: member._id,
+    type: "deposit",
+    amount: depositAmount,
+    status: "approved",
+  } as any)
+
+  await User.updateOne({ _id: member._id }, { $inc: { depositTotal: depositAmount } })
+
+  const activationId = toId(deposit._id)
+  const outcome: any = await applyDepositRewards(
+    toId(member._id),
+    depositAmount,
+    {
+      depositTransactionId: activationId,
+      depositAt: deposit.createdAt,
+      activationId,
+    } as any,
+  )
+
+  const expectedDirect = Number((depositAmount * 0.15).toFixed(4))
+
+  assert.equal(outcome.directCommission?.amount, expectedDirect)
+  assert.equal(outcome.overrideCommission, null)
+
+  const allTransactions = (await Transaction.find()).map((tx) => toPlain<any>(tx))
+  const level2Overrides = allTransactions.filter(
+    (tx) => tx.type === "commission" && tx.meta?.source === "activation_level2_override",
+  )
+  assert.equal(level2Overrides.length, 0)
+
+  const ledgerEntries = await LedgerEntry.find({ type: "deposit_commission" }).lean()
+  assert.equal(ledgerEntries.length, 1)
+  assert.equal(Number(ledgerEntries[0]?.amount ?? 0), expectedDirect)
 })
 
 test("self-deposit bonus credits 5% once per deposit", async () => {
@@ -263,7 +318,7 @@ test("top-ups do not trigger additional activation commissions", async () => {
   )
 
   assert.equal(Number(activationOutcome.directCommission?.amount ?? 0), Number((120 * 0.15).toFixed(4)))
-  assert.equal(Number(activationOutcome.overrideCommission?.amount ?? 0), Number((120 * 0.03).toFixed(4)))
+  assert.equal(activationOutcome.overrideCommission, null)
 
   const topUpDeposit = await Transaction.create({
     userId: member._id,
@@ -306,12 +361,10 @@ test("top-ups do not trigger additional activation commissions", async () => {
     (tx) => tx.meta?.source === "activation_level2_override" && toId(tx.userId) === toId(leaderLeader._id),
   )
 
-  assert.equal(level2Overrides.length, 2)
+  assert.equal(level2Overrides.length, 1)
   assert.deepEqual(
-    level2Overrides
-      .map((tx) => Number(tx.meta?.depositAmount ?? 0))
-      .sort((a, b) => a - b),
-    [120, 150],
+    level2Overrides.map((tx) => Number(tx.meta?.depositAmount ?? 0)),
+    [150],
   )
 })
 
@@ -350,7 +403,7 @@ test("level-2 override requires activation threshold", async () => {
 
   const leaderLeader2 = await createUser()
   const leader2 = await createUser({ referredBy: leaderLeader2._id })
-  const member2 = await createUser({ referredBy: leader2._id, status: "inactive", isActive: false })
+  const member2 = await createUser({ referredBy: leader2._id, status: "active", isActive: true, depositTotal: 80 })
 
   const activation80 = await Transaction.create({
     userId: member2._id,

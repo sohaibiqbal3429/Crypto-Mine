@@ -6,6 +6,7 @@ import TeamDailyProfit from "@/models/TeamDailyProfit"
 import Transaction from "@/models/Transaction"
 import User from "@/models/User"
 import LedgerEntry from "@/models/LedgerEntry"
+import Payout from "@/models/Payout"
 import { emitAuditLog } from "@/lib/observability/audit"
 import { getTeamDailyProfitPercent } from "@/lib/services/settings"
 
@@ -214,6 +215,7 @@ async function creditTeamReward({
   sponsor,
   team,
   dayKey,
+  payoutDate,
   baseProfit,
   reward,
   member,
@@ -223,6 +225,7 @@ async function creditTeamReward({
   sponsor: CachedUser
   team: "A" | "B"
   dayKey: string
+  payoutDate: Date
   baseProfit: number
   reward: number
   member: CachedUser
@@ -263,13 +266,36 @@ async function creditTeamReward({
     uniqueEventId,
   }
 
+  let payoutId: string | null = null
+  const payoutPayload = {
+    userId: ensureObjectId(sponsor.id),
+    type: "daily_team_earning" as const,
+    sourceId: ensureObjectId(member.id),
+    amount: reward,
+    status: "completed" as const,
+    date: payoutDate,
+    uniqueKey: uniqueEventId,
+    meta,
+  }
+
+  try {
+    const createdPayout = await Payout.create(payoutPayload)
+    payoutId = createdPayout?._id ? createdPayout._id.toString() : null
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) {
+      throw error
+    }
+    const existingPayout = await Payout.findOne({ uniqueKey: uniqueEventId }, { _id: 1 }).lean()
+    payoutId = existingPayout?._id ? existingPayout._id.toString() : null
+  }
+
   const created = await Transaction.create({
     userId: sponsorPrimaryId,
     type: "teamReward",
     amount: reward,
     status: "approved",
     claimable: true,
-    meta: { ...meta, uniqueKey: uniqueEventId },
+    meta: { ...meta, uniqueKey: uniqueEventId, payoutId },
   } as any)
 
   const ledgerKey = `daily_team_commission:${dayKey}:${team}:${member.id}:${sponsor.id}`
@@ -290,6 +316,7 @@ async function creditTeamReward({
         memberName: member.name,
         baseProfit: round2(baseProfit),
         transactionId: created?._id?.toString() ?? null,
+        payoutId,
       },
     })
   } catch (error) {
@@ -356,6 +383,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
           sponsor: sponsorA,
           team: "A",
           dayKey,
+          payoutDate: end,
           baseProfit: baseProfitRaw,
           reward,
           member,
@@ -377,6 +405,7 @@ export async function runDailyTeamEarnings(now = new Date()): Promise<DailyTeamE
               sponsor: sponsorB,
               team: "B",
               dayKey,
+              payoutDate: end,
               baseProfit: baseProfitRaw,
               reward,
               member,

@@ -11,6 +11,7 @@ import Transaction from "@/models/Transaction"
 import User from "@/models/User"
 import { runDailyTeamEarnings } from "@/lib/services/daily-team-earnings"
 import LedgerEntry from "@/models/LedgerEntry"
+import Payout from "@/models/Payout"
 
 async function createUser(overrides: Record<string, unknown> = {}) {
   await dbConnect()
@@ -42,6 +43,7 @@ test("runDailyTeamEarnings pays team A and B for active members", { concurrency:
   await Balance.deleteMany({})
   await TeamDailyProfit.deleteMany({})
   await LedgerEntry.deleteMany({})
+  await Payout.deleteMany({})
 
   await TeamDailyProfit.create({
     memberId: member._id,
@@ -61,6 +63,11 @@ test("runDailyTeamEarnings pays team A and B for active members", { concurrency:
     "meta.source": "daily_team_earning",
   }).lean()
   assert.equal(transactions.length, 2)
+
+  const payouts = await Payout.find({ type: "daily_team_earning" }).lean()
+  assert.equal(payouts.length, 2)
+  const payoutAmounts = payouts.map((doc) => Number(doc.amount ?? 0)).sort()
+  assert.deepEqual(payoutAmounts, [1, 1])
 
   const teamATx = transactions.find((tx) => toId(tx.userId) === toId(leader._id))
   const teamBTx = transactions.find((tx) => toId(tx.userId) === toId(leaderLeader._id))
@@ -89,6 +96,9 @@ test("runDailyTeamEarnings pays team A and B for active members", { concurrency:
   const repeat = await runDailyTeamEarnings(new Date("2025-01-03T00:00:00Z"))
   assert.equal(repeat.postedCount, 0)
   assert.equal(repeat.totalReward, 0)
+
+  const repeatPayouts = await Payout.find({ type: "daily_team_earning" }).lean()
+  assert.equal(repeatPayouts.length, 2)
 })
 
 test("runDailyTeamEarnings skips team B when member inactive", { concurrency: false }, async () => {
@@ -100,6 +110,7 @@ test("runDailyTeamEarnings skips team B when member inactive", { concurrency: fa
   await Balance.deleteMany({})
   await TeamDailyProfit.deleteMany({})
   await LedgerEntry.deleteMany({})
+  await Payout.deleteMany({})
 
   await TeamDailyProfit.create({
     memberId: member._id,
@@ -126,6 +137,9 @@ test("runDailyTeamEarnings skips team B when member inactive", { concurrency: fa
   assert.equal(inactiveATx?.meta?.memberActive, false)
   assert.equal(inactiveBTx?.meta?.memberActive, false)
 
+  const inactivePayouts = await Payout.find({ type: "daily_team_earning" }).lean()
+  assert.equal(inactivePayouts.length, 2)
+
   const inactiveLedger = await LedgerEntry.find({ type: "daily_team_commission" }).lean()
   assert.equal(inactiveLedger.length, 2)
 })
@@ -138,6 +152,7 @@ test("runDailyTeamEarnings handles missing uplines", { concurrency: false }, asy
   await Balance.deleteMany({})
   await TeamDailyProfit.deleteMany({})
   await LedgerEntry.deleteMany({})
+  await Payout.deleteMany({})
 
   await TeamDailyProfit.create({
     memberId: member._id,
@@ -167,6 +182,7 @@ test("runDailyTeamEarnings credits fallback mining profit sources", { concurrenc
   await Balance.deleteMany({})
   await TeamDailyProfit.deleteMany({})
   await LedgerEntry.deleteMany({})
+  await Payout.deleteMany({})
 
   const profitAt = new Date("2025-02-02T12:00:00Z")
 
@@ -212,6 +228,9 @@ test("runDailyTeamEarnings credits fallback mining profit sources", { concurrenc
   const rerun = await runDailyTeamEarnings(new Date("2025-02-03T00:00:00Z"))
   assert.equal(rerun.postedCount, 0)
   assert.equal(rerun.totalReward, 0)
+
+  const payoutDocs = await Payout.find({ type: "daily_team_earning" }).lean()
+  assert.equal(payoutDocs.length, 2)
 })
 function toId(value: unknown): string {
   if (!value) return ""
