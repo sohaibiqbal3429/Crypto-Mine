@@ -142,6 +142,52 @@ test("user activates at lifetime deposit threshold", async () => {
   assert.equal(Number(selfBonusPayouts[0]?.payoutAmount ?? 0), expectedBonus)
 })
 
+test("referral payouts use depositor's updated activation status", async () => {
+  const { member, l1, l2 } = await setupReferralChain()
+
+  const first = await approveDeposit(member._id as mongoose.Types.ObjectId, 50)
+  assert.equal(first.outcome.depositorActive, false)
+
+  const firstPayouts = await BonusPayout.find({
+    sourceTxId: toHex(first.transaction._id),
+  })
+    .sort({ createdAt: 1 })
+    .lean()
+
+  assert.equal(firstPayouts.length, 1)
+  assert.equal(firstPayouts[0]?.type, "DEPOSIT_L1")
+  assert.equal(
+    Number((firstPayouts[0]?.payoutAmount ?? 0).toFixed(4)),
+    Number((50 * DEPOSIT_L1_PERCENT).toFixed(4)),
+  )
+
+  const second = await approveDeposit(member._id as mongoose.Types.ObjectId, 30)
+  assert.equal(second.outcome.depositorActive, true)
+
+  const secondPayouts = await BonusPayout.find({
+    sourceTxId: toHex(second.transaction._id),
+  })
+    .sort({ createdAt: 1, type: 1 })
+    .lean()
+
+  const secondTypes = secondPayouts.map((payout) => payout?.type)
+  assert.deepEqual(secondTypes.sort(), ["DEPOSIT_BONUS_SELF", "DEPOSIT_L1", "DEPOSIT_L2"].sort())
+
+  const byType = Object.fromEntries(
+    secondPayouts.map((payout) => [payout.type, Number((payout.payoutAmount ?? 0).toFixed(4))]),
+  ) as Record<string, number>
+
+  assert.equal(byType.DEPOSIT_BONUS_SELF, Number((30 * DEPOSIT_SELF_PERCENT_ACTIVE).toFixed(4)))
+  assert.equal(byType.DEPOSIT_L1, Number((30 * DEPOSIT_L1_PERCENT).toFixed(4)))
+  assert.equal(byType.DEPOSIT_L2, Number((30 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)))
+
+  const l1Total = await sumPayouts({ type: "DEPOSIT_L1", receiverUserId: l1._id })
+  assert.equal(Number(l1Total.toFixed(4)), Number(((50 + 30) * DEPOSIT_L1_PERCENT).toFixed(4)))
+
+  const l2Total = await sumPayouts({ type: "DEPOSIT_L2", receiverUserId: l2._id })
+  assert.equal(Number(l2Total.toFixed(4)), Number((30 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)))
+})
+
 async function setupReferralChain() {
   const l2 = await createUser({ name: "L2", email: `l2-${Date.now()}@example.com` })
   const l1 = await createUser({ name: "L1", email: `l1-${Date.now()}@example.com`, referredBy: l2._id })
@@ -177,19 +223,44 @@ test("inactive depositor pays only L1 referral", async () => {
 
 test("active depositor generates full referral bonuses", async () => {
   const { member, l1, l2 } = await setupReferralChain()
-  await approveDeposit(member._id as mongoose.Types.ObjectId, ACTIVE_DEPOSIT_THRESHOLD)
-  const { outcome } = await approveDeposit(member._id as mongoose.Types.ObjectId, 200)
+  const activation = await approveDeposit(member._id as mongoose.Types.ObjectId, ACTIVE_DEPOSIT_THRESHOLD)
+  const second = await approveDeposit(member._id as mongoose.Types.ObjectId, 200)
 
-  assert.equal(outcome.depositorActive, true)
+  assert.equal(second.outcome.depositorActive, true)
 
-  const selfBonus = await sumPayouts({ type: "DEPOSIT_BONUS_SELF", receiverUserId: member._id })
-  assert.equal(Number(selfBonus.toFixed(2)), Number((200 * DEPOSIT_SELF_PERCENT_ACTIVE).toFixed(2)))
+  const activationPayouts = await BonusPayout.find({
+    sourceTxId: toHex(activation.transaction._id),
+  })
+    .sort({ type: 1 })
+    .lean()
 
-  const l1Bonus = await sumPayouts({ type: "DEPOSIT_L1", receiverUserId: l1._id })
-  assert.equal(Number(l1Bonus.toFixed(2)), Number((200 * DEPOSIT_L1_PERCENT).toFixed(2)))
+  const activationMap = Object.fromEntries(
+    activationPayouts.map((payout) => [payout.type, Number((payout.payoutAmount ?? 0).toFixed(4))]),
+  ) as Record<string, number>
 
-  const l2Bonus = await sumPayouts({ type: "DEPOSIT_L2", receiverUserId: l2._id })
-  assert.equal(Number(l2Bonus.toFixed(2)), Number((200 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(2)))
+  assert.equal(
+    activationMap.DEPOSIT_BONUS_SELF,
+    Number((ACTIVE_DEPOSIT_THRESHOLD * DEPOSIT_SELF_PERCENT_ACTIVE).toFixed(4)),
+  )
+  assert.equal(activationMap.DEPOSIT_L1, Number((ACTIVE_DEPOSIT_THRESHOLD * DEPOSIT_L1_PERCENT).toFixed(4)))
+  assert.equal(
+    activationMap.DEPOSIT_L2,
+    Number((ACTIVE_DEPOSIT_THRESHOLD * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)),
+  )
+
+  const secondPayouts = await BonusPayout.find({
+    sourceTxId: toHex(second.transaction._id),
+  })
+    .sort({ type: 1 })
+    .lean()
+
+  const secondMap = Object.fromEntries(
+    secondPayouts.map((payout) => [payout.type, Number((payout.payoutAmount ?? 0).toFixed(4))]),
+  ) as Record<string, number>
+
+  assert.equal(secondMap.DEPOSIT_BONUS_SELF, Number((200 * DEPOSIT_SELF_PERCENT_ACTIVE).toFixed(4)))
+  assert.equal(secondMap.DEPOSIT_L1, Number((200 * DEPOSIT_L1_PERCENT).toFixed(4)))
+  assert.equal(secondMap.DEPOSIT_L2, Number((200 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)))
 })
 
 test("active depositor with no uplines receives only self bonus", async () => {
