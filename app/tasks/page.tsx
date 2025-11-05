@@ -31,6 +31,7 @@ interface Task {
   progress: number
   target: number
   rewardClaimed?: boolean
+  level?: number
 }
 
 const iconMap: Record<Task["type"], LucideIcon> = {
@@ -175,6 +176,11 @@ export default function TasksPage() {
                           <Icon className="w-5 h-5 text-white" />
                         </div>
                         <div>
+                          {typeof task.level === "number" && (
+                            <Badge variant="outline" className="mb-1 text-xs uppercase tracking-wide">
+                              Level {task.level}
+                            </Badge>
+                          )}
                           <CardTitle className="text-lg">{task.title}</CardTitle>
                           <CardDescription>{task.description}</CardDescription>
                         </div>

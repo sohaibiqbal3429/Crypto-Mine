@@ -23,6 +23,7 @@ export interface UserTask {
   target: number
   completed: boolean
   rewardClaimed: boolean
+  level?: number
 }
 
 export class TaskRewardError extends Error {
@@ -334,6 +335,7 @@ function buildLevelTasks(
       target: definition.target,
       completed: isCompleted,
       rewardClaimed: claimedTaskIds.has(definition.id),
+      level,
     }
   })
 }
@@ -467,10 +469,27 @@ export async function getTasksForUser(userId: string): Promise<UserTask[]> {
 
   const userLevel = Number(user.level ?? 0)
   if (userLevel > 0) {
-    const levelTasks = buildLevelTasks(userLevel, context, claimedTaskIds)
+    const definedLevels = Object.keys(LEVEL_TASK_DEFINITIONS)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => a - b)
+
+    const accessibleLevels = definedLevels.filter((level) => level <= userLevel)
+
+    const levelTasks = accessibleLevels.flatMap((level) => buildLevelTasks(level, context, claimedTaskIds))
+
     if (levelTasks.length > 0) {
       return levelTasks
     }
+
+    const highestDefinedLevel = definedLevels.at(-1)
+    if (highestDefinedLevel) {
+      const fallbackTasks = buildLevelTasks(highestDefinedLevel, context, claimedTaskIds)
+      if (fallbackTasks.length > 0) {
+        return fallbackTasks
+      }
+    }
+
     return []
   }
 
