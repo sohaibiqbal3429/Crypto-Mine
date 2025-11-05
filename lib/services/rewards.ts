@@ -175,8 +175,9 @@ export async function applyDepositRewards(
     const lifetimeBefore = Math.max(0, lifetimeAfter - baseAmount)
     const wasActive = lifetimeBefore >= ACTIVE_DEPOSIT_THRESHOLD
     const depositorActive = lifetimeAfter >= ACTIVE_DEPOSIT_THRESHOLD
-    const qualifiesForSelfBonus = depositorActive && (wasActive || lifetimeBefore > 0)
-    const qualifiesForL1 = wasActive || !depositorActive
+    const selfPercent = depositorActive ? DEPOSIT_SELF_PERCENT_ACTIVE : 0
+    const l1Percent = DEPOSIT_L1_PERCENT
+    const l2Percent = depositorActive ? DEPOSIT_L2_PERCENT_ACTIVE : 0
 
     let selfBonus = 0
     let l1Bonus = 0
@@ -192,7 +193,7 @@ export async function applyDepositRewards(
         receiverUserId: depositorObjectId,
         type: "DEPOSIT_BONUS_SELF",
         baseAmount,
-        percent: qualifiesForSelfBonus ? DEPOSIT_SELF_PERCENT_ACTIVE : 0,
+        percent: selfPercent,
         sourceTxId: options.depositTransactionId,
         occurredAt,
         session,
@@ -210,7 +211,7 @@ export async function applyDepositRewards(
             receiverUserId: l1ObjectId,
             type: "DEPOSIT_L1",
             baseAmount,
-            percent: qualifiesForL1 ? DEPOSIT_L1_PERCENT : 0,
+            percent: l1Percent,
             sourceTxId: options.depositTransactionId,
             occurredAt,
             session,
@@ -229,7 +230,7 @@ export async function applyDepositRewards(
                 receiverUserId: l2ObjectId,
                 type: "DEPOSIT_L2",
                 baseAmount,
-                percent: wasActive ? DEPOSIT_L2_PERCENT_ACTIVE : 0,
+                percent: l2Percent,
                 sourceTxId: options.depositTransactionId,
                 occurredAt,
                 session,
