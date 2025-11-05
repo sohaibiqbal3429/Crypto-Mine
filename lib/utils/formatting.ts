@@ -32,6 +32,10 @@ export function formatLargeNumber(num: number): string {
 export function formatDate(date: Date | string, format: "short" | "long" | "relative" = "short"): string {
   const d = typeof date === "string" ? new Date(date) : date
 
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return "Date unavailable"
+  }
+
   if (format === "relative") {
     const now = new Date()
     const diff = now.getTime() - d.getTime()
@@ -65,6 +69,9 @@ export function formatDate(date: Date | string, format: "short" | "long" | "rela
 
 export function formatTime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) {
+    return "Time unavailable"
+  }
   return d.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",

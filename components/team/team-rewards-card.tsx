@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
+import { ensureDate } from "@/lib/utils/safe-parsing"
 
 interface TeamRewardsCardProps {
   available: number
@@ -17,7 +18,10 @@ interface TeamRewardsCardProps {
 
 export function TeamRewardsCard({ available, claimedTotal, lastClaimedAt, isClaiming, onClaim }: TeamRewardsCardProps) {
   const canClaim = available > 0 && !isClaiming
-  const formattedLastClaim = lastClaimedAt ? `${formatDate(lastClaimedAt, "long")} at ${formatTime(lastClaimedAt)}` : null
+  const lastClaimedDate = ensureDate(lastClaimedAt)
+  const formattedLastClaim = lastClaimedDate
+    ? `${formatDate(lastClaimedDate, "long")} at ${formatTime(lastClaimedDate)}`
+    : null
 
   return (
     <Card className="border-primary/20">
