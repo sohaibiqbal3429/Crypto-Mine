@@ -27,6 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
 
+    const amount = Number(transaction.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json({ error: "Invalid transaction amount" }, { status: 400 })
+    }
+
+    const transactionHash = typeof txHash === "string" && txHash.trim().length > 0 ? txHash.trim() : `tx_${Date.now()}`
+
     await Transaction.updateOne(
       { _id: transactionId },
       {
@@ -35,19 +42,19 @@ export async function POST(request: NextRequest) {
           ...transaction.meta,
           approvedAt: new Date(),
           approvedBy: userPayload.userId,
-          transactionHash: txHash || `tx_${Date.now()}`,
+          transactionHash: transactionHash,
         },
       },
     )
 
     // Update user withdraw total and balance
     await Promise.all([
-      User.updateOne({ _id: transaction.userId }, { $inc: { withdrawTotal: transaction.amount } }),
+      User.updateOne({ _id: transaction.userId }, { $inc: { withdrawTotal: amount } }),
       Balance.updateOne(
         { userId: transaction.userId },
         {
           $inc: {
-            pendingWithdraw: -transaction.amount,
+            pendingWithdraw: -amount,
           },
         },
       ),
@@ -58,12 +65,12 @@ export async function POST(request: NextRequest) {
       userId: transaction.userId,
       kind: "withdraw-approved",
       title: "Withdrawal Approved",
-      body: `Your withdrawal of $${transaction.amount.toFixed(2)} has been approved and processed.${txHash ? ` Transaction hash: ${txHash}` : ""}`,
+      body: `Your withdrawal of $${amount.toFixed(2)} has been approved and processed.${transactionHash ? ` Transaction hash: ${transactionHash}` : ""}`,
     })
 
     return NextResponse.json({
       success: true,
-      transactionHash: txHash || `tx_${Date.now()}`,
+      transactionHash,
     })
   } catch (error) {
     console.error("Approve withdrawal error:", error)
