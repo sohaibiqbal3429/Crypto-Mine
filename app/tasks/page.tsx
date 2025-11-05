@@ -6,7 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { CheckCircle2, Clock, Users, DollarSign, Loader2 } from "lucide-react"
+import {
+  CheckCircle2,
+  Clock,
+  Users,
+  DollarSign,
+  Loader2,
+  UserCheck,
+  Share2,
+  Wallet,
+  Sitemap,
+} from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { formatCurrency } from "@/lib/utils/formatting"
 import type { LucideIcon } from "lucide-react"
@@ -16,11 +26,12 @@ interface Task {
   title: string
   description: string
   reward: number
-  type: "daily" | "referral" | "deposit" | "mining"
+  type: "daily" | "referral" | "deposit" | "mining" | "profile" | "social" | "team" | "balance"
   completed: boolean
   progress: number
   target: number
   rewardClaimed?: boolean
+  level?: number
 }
 
 const iconMap: Record<Task["type"], LucideIcon> = {
@@ -28,7 +39,13 @@ const iconMap: Record<Task["type"], LucideIcon> = {
   referral: Users,
   deposit: DollarSign,
   mining: CheckCircle2,
+  profile: UserCheck,
+  social: Share2,
+  team: Sitemap,
+  balance: Wallet,
 }
+
+const currencyTaskTypes = new Set<Task["type"]>(["deposit", "team"])
 
 export default function TasksPage() {
   const [user, setUser] = useState<any>(null)
@@ -145,6 +162,10 @@ export default function TasksPage() {
             {tasks.map((task) => {
               const Icon = iconMap[task.type] ?? CheckCircle2
               const progressPercentage = task.target > 0 ? (task.progress / task.target) * 100 : 0
+              const isCurrencyTask = currencyTaskTypes.has(task.type)
+              const formattedProgress = isCurrencyTask
+                ? `$${task.progress.toFixed(2)} / $${task.target.toFixed(2)}`
+                : `${task.progress} / ${task.target}`
 
               return (
                 <Card key={task.id} className="relative">
@@ -155,6 +176,11 @@ export default function TasksPage() {
                           <Icon className="w-5 h-5 text-white" />
                         </div>
                         <div>
+                          {typeof task.level === "number" && (
+                            <Badge variant="outline" className="mb-1 text-xs uppercase tracking-wide">
+                              Level {task.level}
+                            </Badge>
+                          )}
                           <CardTitle className="text-lg">{task.title}</CardTitle>
                           <CardDescription>{task.description}</CardDescription>
                         </div>
@@ -171,11 +197,7 @@ export default function TasksPage() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-sm">
                         <span>Progress</span>
-                        <span>
-                          {task.type === "deposit"
-                            ? `$${task.progress.toFixed(2)} / $${task.target.toFixed(2)}`
-                            : `${task.progress} / ${task.target}`}
-                        </span>
+                        <span>{formattedProgress}</span>
                       </div>
                       <Progress value={progressPercentage} className="h-2" />
                       {task.completed ? (
