@@ -30,6 +30,7 @@ import {
 import type { SerializableUser } from "@/lib/serializers/user"
 import { formatPhoneDisplay } from "@/lib/utils/formatting"
 import { PROFILE_AVATAR_OPTIONS } from "@/lib/constants/avatars"
+import { ACTIVE_DEPOSIT_THRESHOLD } from "@/lib/constants/bonuses"
 
 type StatusMessage = { success?: string; error?: string }
 
@@ -79,6 +80,9 @@ export default function ProfilePage() {
     kycStatus === "verified" ? "default" : kycStatus === "rejected" ? "destructive" : "secondary"
   const selectedAvatar = user?.profileAvatar || PROFILE_AVATAR_OPTIONS[0]?.value || "avatar-01"
   const isBlocked = Boolean(user?.isBlocked)
+  const isActiveAccount = Boolean(user?.isActive)
+  const lifetimeDeposits = Number(user?.depositTotal ?? 0)
+  const remainingToActivate = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeDeposits)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -361,11 +365,20 @@ export default function ProfilePage() {
                 <CardDescription>{user?.email}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-center">
-                  <Badge variant="secondary" className="mb-2">
-                    Level {user?.level || 1}
-                  </Badge>
-                  <div className="mt-2 flex items-center justify-center gap-2">
+                <div className="text-center space-y-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Badge variant={isActiveAccount ? "default" : "outline"}>
+                      {isActiveAccount ? "Active" : "Inactive"}
+                    </Badge>
+                    <Badge variant="secondary">Level {user?.level || 1}</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Lifetime deposits: ${lifetimeDeposits.toFixed(2)} / ${ACTIVE_DEPOSIT_THRESHOLD.toFixed(2)}
+                    {!isActiveAccount && remainingToActivate > 0
+                      ? ` • Deposit ${remainingToActivate.toFixed(2)} more to activate`
+                      : ""}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
                     <Badge variant={kycBadgeVariant}>KYC: {kycLabel}</Badge>
                     {isBlocked && <Badge variant="destructive">Blocked</Badge>}
                   </div>
