@@ -1,277 +1,185 @@
-import { type NextRequest, NextResponse } from "next/server"
-import mongoose from "mongoose"
+import { type NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 
-import dbConnect from "@/lib/mongodb"
-import User from "@/models/User"
-import Balance from "@/models/Balance"
-import Transaction from "@/models/Transaction"
-import Notification from "@/models/Notification"
-import { getUserFromRequest } from "@/lib/auth"
-import { applyDepositRewards, isUserActiveFromDeposits } from "@/lib/services/rewards"
-import { ACTIVE_DEPOSIT_THRESHOLD, DEPOSIT_L1_PERCENT, DEPOSIT_L2_PERCENT_ACTIVE, DEPOSIT_SELF_PERCENT_ACTIVE } from "@/lib/constants/bonuses"
-import { isTransactionNotSupportedError } from "@/lib/utils/mongo-errors"
+import dbConnect from "@/lib/mongodb";
+import User from "@/models/User";
+import Balance from "@/models/Balance";
+import Transaction from "@/models/Transaction";
+import Notification from "@/models/Notification";
+import { getUserFromRequest } from "@/lib/auth";
+import { applyDepositRewards, isUserActiveFromDeposits } from "@/lib/services/rewards";
+import { ACTIVE_DEPOSIT_THRESHOLD, DEPOSIT_L1_PERCENT, DEPOSIT_L2_PERCENT_ACTIVE, DEPOSIT_SELF_PERCENT_ACTIVE } from "@/lib/constants/bonuses";
 
-class InvalidTransactionError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "InvalidTransactionError"
-  }
+function badRequest(msg: string, code = 400) {
+  return NextResponse.json({ error: msg }, { status: code });
+}
+
+function toObjectId(id: unknown) {
+  const s = String(id ?? "");
+  return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const userPayload = getUserFromRequest(request)
-    if (!userPayload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const userPayload = getUserFromRequest(request);
+    if (!userPayload) return badRequest("Unauthorized", 401);
+
+    await dbConnect();
+
+    const adminUser = await User.findById(userPayload.userId).lean();
+    if (!adminUser || adminUser.role !== "admin") return badRequest("Unauthorized", 401);
+
+    const body = (await request.json().catch(() => null)) as { transactionId?: unknown } | null;
+    const transactionId = typeof body?.transactionId === "string" ? body.transactionId.trim() : "";
+    if (!transactionId) return badRequest("Transaction ID is required");
+
+    // Validate id early
+    const txOid = toObjectId(transactionId);
+    if (!txOid) return badRequest("Invalid transaction id");
+
+    // 1) ATOMIC approval to avoid races (returns null if already processed)
+    const approvedTx = await Transaction.findOneAndUpdate(
+      { _id: txOid, type: "deposit", status: "pending" },
+      { $set: { status: "approved" } },
+      { new: true }
+    );
+
+    if (!approvedTx) {
+      // It might not exist, be a different type/status, or already approved/rejected
+      const existing = await Transaction.findById(txOid).lean();
+      if (!existing) return badRequest("Transaction not found", 404);
+      if (existing.type !== "deposit") return badRequest("Invalid transaction type");
+      if (existing.status === "approved") return badRequest("Transaction already approved", 409);
+      return badRequest("Transaction not pending");
     }
 
-    await dbConnect()
+    // 2) Validate amount & user
+    const amountNum = Number(approvedTx.amount ?? 0);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) return badRequest("Invalid deposit amount");
 
-    const adminUser = await User.findById(userPayload.userId)
-    if (!adminUser || adminUser.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const depositorId = toObjectId(approvedTx.userId);
+    if (!depositorId) return badRequest("Transaction user missing");
 
-    const body = (await request.json().catch(() => null)) as
-      | {
-          transactionId?: unknown
-        }
-      | null
+    // 3) Load user, compute activation + lifetime totals
+    const user = await User.findById(depositorId);
+    if (!user) return badRequest("User not found", 404);
 
-    const transactionId = typeof body?.transactionId === "string" ? body.transactionId.trim() : ""
-    if (!transactionId) {
-      return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 })
-    }
+    const lifetimeBefore = Number(user.depositTotal ?? 0);
+    const lifetimeAfter = lifetimeBefore + amountNum;
 
-    const pendingTransaction = await Transaction.findById(transactionId)
-    if (!pendingTransaction || pendingTransaction.type !== "deposit" || pendingTransaction.status !== "pending") {
-      return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
-    }
+    const wasActive = isUserActiveFromDeposits(lifetimeBefore);
+    const nowActive = isUserActiveFromDeposits(lifetimeAfter);
+    const activated = !wasActive && nowActive;
 
-    let activated = false
-    let depositorActive = false
-    let rewardBreakdown: {
-      selfBonus: number
-      l1Bonus: number
-      l2Bonus: number
-      l1UserId: string | null
-      l2UserId: string | null
-    } | null = null
-    let depositAmount = 0
-    let userId: mongoose.Types.ObjectId | null = null
-    let transactionCreatedAt: Date | null = null
-    let lifetimeBefore = 0
-    let lifetimeAfter = 0
+    user.depositTotal = lifetimeAfter;
+    user.isActive = nowActive;
+    user.status = nowActive ? "active" : "inactive";
+    await user.save();
 
-    const processApproval = async (session: mongoose.ClientSession | null) => {
-      const sessionOptions = session ? { session } : undefined
-      const transaction = await Transaction.findById(transactionId, null, sessionOptions)
-      if (!transaction || transaction.type !== "deposit" || transaction.status !== "pending") {
-        throw new InvalidTransactionError("Invalid transaction")
-      }
-
-      transaction.status = "approved"
-      if (session) {
-        await transaction.save({ session })
-      } else {
-        await transaction.save()
-      }
-
-      transactionCreatedAt = transaction.createdAt ?? null
-      depositAmount = Number(transaction.amount ?? 0)
-      if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
-        throw new InvalidTransactionError("Invalid deposit amount")
-      }
-
-      const rawTransactionUserId = transaction.userId
-      if (!rawTransactionUserId) {
-        throw new InvalidTransactionError("Transaction user missing")
-      }
-
-      const normalizedTransactionUserId =
-        rawTransactionUserId instanceof mongoose.Types.ObjectId
-          ? rawTransactionUserId
-          : mongoose.Types.ObjectId.isValid(String(rawTransactionUserId))
-            ? new mongoose.Types.ObjectId(String(rawTransactionUserId))
-            : null
-
-      const userLookupId = normalizedTransactionUserId
-        ? normalizedTransactionUserId.toHexString()
-        : String(rawTransactionUserId)
-      const user = await User.findById(userLookupId, null, sessionOptions)
-      if (!user) {
-        throw new InvalidTransactionError("User not found")
-      }
-
-      const resolvedUserId =
-        normalizedTransactionUserId ??
-        (user._id instanceof mongoose.Types.ObjectId
-          ? user._id
-          : mongoose.Types.ObjectId.isValid(String(user._id))
-            ? new mongoose.Types.ObjectId(String(user._id))
-            : null)
-
-      if (!resolvedUserId) {
-        throw new InvalidTransactionError("User has invalid identifier")
-      }
-
-      userId = resolvedUserId
-
-      lifetimeBefore = Number(user.depositTotal ?? 0)
-      lifetimeAfter = lifetimeBefore + depositAmount
-      const wasActive = isUserActiveFromDeposits(lifetimeBefore)
-      const nowActive = isUserActiveFromDeposits(lifetimeAfter)
-
-      user.depositTotal = lifetimeAfter
-      user.isActive = nowActive
-      user.status = nowActive ? "active" : "inactive"
-      if (session) {
-        await user.save({ session })
-      } else {
-        await user.save()
-      }
-
-      depositorActive = nowActive
-      activated = !wasActive && nowActive
-
-      const balanceOptions = session ? { upsert: true, session } : { upsert: true }
-      await Balance.updateOne(
-        { userId: resolvedUserId },
-        {
-          $inc: {
-            current: depositAmount,
-            totalBalance: depositAmount,
-          },
-          $setOnInsert: {
-            totalEarning: 0,
-            staked: 0,
-            pendingWithdraw: 0,
-            teamRewardsAvailable: 0,
-            teamRewardsClaimed: 0,
-          },
+    // 4) Credit balance (upsert) — cannot fail on missing doc
+    await Balance.updateOne(
+      { userId: depositorId },
+      {
+        $inc: { current: amountNum, totalBalance: amountNum },
+        $setOnInsert: {
+          totalEarning: 0,
+          staked: 0,
+          pendingWithdraw: 0,
+          teamRewardsAvailable: 0,
+          teamRewardsClaimed: 0,
         },
-        balanceOptions,
-      )
+      },
+      { upsert: true }
+    );
 
-      const rewardOptions = {
-        depositTransactionId:
-          transaction._id instanceof mongoose.Types.ObjectId
-            ? transaction._id.toHexString()
-            : String(transaction._id ?? transactionId),
-        depositAt: transaction.createdAt ?? new Date(),
-      } as const
+    // 5) Rewards — best-effort (never fail the whole request)
+    let rewardBreakdown: {
+      selfBonus: number;
+      l1Bonus: number;
+      l2Bonus: number;
+      l1UserId: string | null;
+      l2UserId: string | null;
+    } | null = null;
 
-      const rewardOutcome = await applyDepositRewards(
-        resolvedUserId.toHexString(),
-        depositAmount,
-        session ? { ...rewardOptions, session } : { ...rewardOptions, transactional: false },
-      )
+    try {
+      const outcome = await applyDepositRewards(depositorId.toHexString(), amountNum, {
+        depositTransactionId: approvedTx._id.toString(),
+        depositAt: approvedTx.createdAt ?? new Date(),
+        transactional: false,
+      });
 
       rewardBreakdown = {
-        selfBonus: rewardOutcome.selfBonus,
-        l1Bonus: rewardOutcome.l1Bonus,
-        l2Bonus: rewardOutcome.l2Bonus,
-        l1UserId: rewardOutcome.l1UserId,
-        l2UserId: rewardOutcome.l2UserId,
-      }
+        selfBonus: outcome.selfBonus,
+        l1Bonus: outcome.l1Bonus,
+        l2Bonus: outcome.l2Bonus,
+        l1UserId: outcome.l1UserId,
+        l2UserId: outcome.l2UserId,
+      };
 
-      transaction.meta = {
-        ...(transaction.meta ?? {}),
+      // add meta (best-effort)
+      approvedTx.meta = {
+        ...(approvedTx.meta ?? {}),
         bonusBreakdown: {
-          selfPercent: depositorActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
+          selfPercent: nowActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
           l1Percent: DEPOSIT_L1_PERCENT * 100,
-          l2Percent: depositorActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
-          selfAmount: rewardOutcome.selfBonus,
-          l1Amount: rewardOutcome.l1Bonus,
-          l2Amount: rewardOutcome.l2Bonus,
-          l1UserId: rewardOutcome.l1UserId,
-          l2UserId: rewardOutcome.l2UserId,
+          l2Percent: nowActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
+          selfAmount: outcome.selfBonus,
+          l1Amount: outcome.l1Bonus,
+          l2Amount: outcome.l2Bonus,
+          l1UserId: outcome.l1UserId,
+          l2UserId: outcome.l2UserId,
         },
         qualifiesForActivation: activated,
-      }
-
-      if (session) {
-        await transaction.save({ session })
-      } else {
-        await transaction.save()
-      }
+      };
+      await approvedTx.save().catch(() => null);
+    } catch (e) {
+      // Rewards failed — log, but do not break approval
+      console.error("applyDepositRewards failed:", e);
     }
 
-    let session: mongoose.ClientSession | null = null
+    // 6) Notification — best-effort
     try {
-      session = await mongoose.startSession()
-    } catch (error) {
-      if (!isTransactionNotSupportedError(error)) {
-        throw error
+      const msg: string[] = [
+        `Your deposit of $${amountNum.toFixed(2)} has been approved and credited to your account.`,
+      ];
+      if (activated) {
+        msg.push(
+          `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(
+            2
+          )} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(2)} activation threshold.`
+        );
+      } else if (nowActive) {
+        msg.push("Your account remains Active.");
+      } else {
+        const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter);
+        msg.push(`Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`);
       }
-      session = null
+
+      await Notification.create({
+        userId: depositorId,
+        kind: "deposit-approved",
+        title: "Deposit Approved",
+        body: msg.join(" "),
+      }).catch(() => null);
+    } catch (e) {
+      console.error("Notification.create failed:", e);
     }
 
-    if (session) {
-      try {
-        await session.withTransaction(async () => {
-          await processApproval(session)
-        })
-      } catch (error) {
-        if (isTransactionNotSupportedError(error)) {
-          await processApproval(null)
-        } else {
-          throw error
-        }
-      } finally {
-        session.endSession().catch(() => null)
-      }
-    } else {
-      await processApproval(null)
-    }
-
-    if (!userId) {
-      throw new InvalidTransactionError("Invalid transaction")
-    }
-
-    const notificationBodyParts = [
-      `Your deposit of $${depositAmount.toFixed(2)} has been approved and credited to your account.`,
-    ]
-
-    if (activated) {
-      notificationBodyParts.push(
-        `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(2)} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(
-          2,
-        )} activation threshold.`,
-      )
-    } else if (depositorActive) {
-      notificationBodyParts.push("Your account remains Active.")
-    } else {
-      const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter)
-      notificationBodyParts.push(
-        `Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`,
-      )
-    }
-
-    await Notification.create({
-      userId,
-      kind: "deposit-approved",
-      title: "Deposit Approved",
-      body: notificationBodyParts.join(" "),
-    })
-
-    const transactionCreatedAtIso = transactionCreatedAt ? (transactionCreatedAt as Date).toISOString() : null
-
+    // 7) Success response — never 500 from here
     return NextResponse.json({
       success: true,
       activated,
-      depositorActive,
+      depositorActive: nowActive,
       lifetimeBefore,
       lifetimeAfter,
       rewardBreakdown,
-      transactionCreatedAt: transactionCreatedAtIso,
-    })
-  } catch (error) {
-    if (error instanceof InvalidTransactionError) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
-
-    console.error("Approve deposit error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+      transactionCreatedAt: approvedTx.createdAt ? new Date(approvedTx.createdAt).toISOString() : null,
+    });
+  } catch (err: any) {
+    // Convert common Mongoose errors to 4xx
+    if (err?.name === "CastError") return badRequest("Invalid identifier");
+    if (err?.code === 11000) return badRequest("Duplicate key error");
+    console.error("Approve deposit (unexpected):", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
