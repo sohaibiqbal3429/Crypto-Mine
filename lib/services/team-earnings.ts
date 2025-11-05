@@ -1,594 +1,200 @@
 import mongoose from "mongoose"
 
+import BonusPayout from "@/models/Payout"
+import User from "@/models/User"
 import Balance from "@/models/Balance"
-import CommissionRule, { type CommissionTeamCode } from "@/models/CommissionRule"
-import Transaction, { type ITransaction } from "@/models/Transaction"
-import Notification from "@/models/Notification"
-import { calculateUserLevel } from "@/lib/utils/commission"
+import {
+  claimTeamEarningPayouts,
+  getPendingTeamEarnings,
+  getClaimedTeamEarnings,
+} from "@/lib/services/rewards"
 
-function normalizeUserId(id: string | mongoose.Types.ObjectId): string {
-  return typeof id === "string" ? id : id.toString()
+const TEAM_EARNING_TYPES = ["TEAM_EARN_L1", "TEAM_EARN_L2"] as const
+
+type TeamEarningType = (typeof TEAM_EARNING_TYPES)[number]
+
+interface UserLookupEntry {
+  id: string
+  name: string | null
+  email: string | null
 }
 
-function buildUserIdCandidates(id: string): (string | mongoose.Types.ObjectId)[] {
-  const normalized = normalizeUserId(id)
-  const candidates: (string | mongoose.Types.ObjectId)[] = [normalized]
-  if (mongoose.Types.ObjectId.isValid(normalized)) {
-    candidates.push(new mongoose.Types.ObjectId(normalized))
-  }
-  return candidates
-}
+async function fetchUserLookup(ids: string[]): Promise<Record<string, UserLookupEntry>> {
+  if (ids.length === 0) return {}
+  const objectIds = ids
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id))
 
-function normalizeDocumentId(value: unknown): string | null {
-  if (!value) return null
-  if (typeof value === "string") {
-    if (mongoose.Types.ObjectId.isValid(value)) {
-      return new mongoose.Types.ObjectId(value).toHexString()
-    }
-    return value
-  }
-  if (value instanceof mongoose.Types.ObjectId) {
-    return value.toHexString()
-  }
-  if (typeof (value as { toHexString?: () => string }).toHexString === "function") {
-    try {
-      return (value as { toHexString: () => string }).toHexString()
-    } catch {
-      // ignore fallthrough to buffer handling
-    }
-  }
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>
-    if (record._id) {
-      return normalizeDocumentId(record._id)
-    }
-    if (record.buffer && typeof record.buffer === "object") {
-      const raw = record.buffer as Record<string, unknown>
-      const bytes = Object.keys(raw)
-        .sort((a, b) => Number(a) - Number(b))
-        .map((key) => Number(raw[key] ?? 0))
-      if (bytes.length === 12) {
-        return Buffer.from(bytes).toString("hex")
-      }
+  const users = await User.find({ _id: { $in: objectIds } })
+    .select({ name: 1, email: 1 })
+    .lean()
+
+  const lookup: Record<string, UserLookupEntry> = {}
+  for (const user of users) {
+    const id = user._id?.toString()
+    if (!id) continue
+    lookup[id] = {
+      id,
+      name: typeof user.name === "string" ? user.name : null,
+      email: typeof user.email === "string" ? user.email : null,
     }
   }
-  if (typeof (value as { toString?: () => string }).toString === "function") {
-    const str = (value as { toString: () => string }).toString()
-    if (str && str !== "[object Object]") {
-      if (mongoose.Types.ObjectId.isValid(str)) {
-        return new mongoose.Types.ObjectId(str).toHexString()
-      }
-      return str
-    }
-  }
-  return null
+  return lookup
 }
 
-function toObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
-  if (id instanceof mongoose.Types.ObjectId) {
-    return id
-  }
-
-  if (typeof id === "string" && mongoose.Types.ObjectId.isValid(id)) {
-    return new mongoose.Types.ObjectId(id)
-  }
-
-  throw new Error("Invalid ObjectId value")
+export interface PendingTeamEarning {
+  id: string
+  type: TeamEarningType
+  amount: number
+  percent: number
+  baseAmount: number
+  createdAt: Date
+  payer: UserLookupEntry | null
+  sourceTxId: string
 }
 
-function roundPlatform(amount: number): number {
-  return Math.round(amount * 10000) / 10000
+export interface ClaimedTeamEarning extends PendingTeamEarning {
+  claimedAt: Date
 }
 
-function roundCurrency(amount: number): number {
-  return Math.round(amount * 100) / 100
-}
-
-interface RewardCoverageDetail {
-  team: CommissionTeamCode
-  rate: number
-}
-
-interface RewardProfile {
-  level: number
-  rate: number
-  coverage: CommissionTeamCode[]
-  coverageDetails: RewardCoverageDetail[]
-}
-
-interface TeamRewardsPreview {
+export interface TeamRewardsPreview {
   available: number
   claimedTotal: number
   lastClaimedAt: Date | null
-  level: number
-  rate: number
-  coverage: CommissionTeamCode[]
-  coverageDetails: RewardCoverageDetail[]
-  windowStart: Date | null
-  windowEnd: Date
-  dgpCount: number
-  totalDgp: number
+  pending: PendingTeamEarning[]
 }
 
-interface ClaimResult extends TeamRewardsPreview {
-  claimed: number
-  message?: string
-}
+export async function previewTeamEarnings(userId: string): Promise<TeamRewardsPreview> {
+  const [pendingRaw, claimedRaw] = await Promise.all([
+    getPendingTeamEarnings(userId),
+    BonusPayout.find({
+      receiverUserId: new mongoose.Types.ObjectId(userId),
+      status: "CLAIMED",
+      type: { $in: TEAM_EARNING_TYPES },
+    })
+      .select({ payoutAmount: 1, claimedAt: 1 })
+      .lean(),
+  ])
 
-function buildClaimableRewardsQuery(userId: string) {
-  const userIdString = normalizeUserId(userId)
-  const candidates: (string | mongoose.Types.ObjectId)[] = [userIdString]
-  if (mongoose.Types.ObjectId.isValid(userIdString)) {
-    candidates.push(new mongoose.Types.ObjectId(userIdString))
+  const payerIds = Array.from(new Set(pendingRaw.map((entry) => entry.payerUserId)))
+  const payerLookup = await fetchUserLookup(payerIds)
+
+  const pending = pendingRaw.map<PendingTeamEarning>((entry) => ({
+    id: entry.id,
+    type: entry.type as TeamEarningType,
+    amount: entry.payoutAmount,
+    percent: entry.percent,
+    baseAmount: entry.baseAmount,
+    createdAt: entry.createdAt,
+    sourceTxId: entry.sourceTxId,
+    payer: payerLookup[entry.payerUserId] ?? null,
+  }))
+
+  const available = pending.reduce((total, entry) => total + entry.amount, 0)
+  let claimedTotal = 0
+  let lastClaimedAt: Date | null = null
+
+  for (const entry of claimedRaw) {
+    const amount = Number(entry.payoutAmount ?? 0)
+    claimedTotal += amount
+    const claimedAt = entry.claimedAt instanceof Date ? entry.claimedAt : null
+    if (claimedAt && (!lastClaimedAt || claimedAt > lastClaimedAt)) {
+      lastClaimedAt = claimedAt
+    }
   }
-  return Transaction.find({
-    userId: { $in: candidates },
-    type: "teamReward",
-    status: "approved",
-    claimable: true,
-  }).sort({ createdAt: 1, _id: 1 })
+
+  return { available, claimedTotal, lastClaimedAt, pending }
+}
+
+export interface ClaimTeamRewardsResult {
+  claimed: number
+  items: ClaimedTeamEarning[]
+  claimedTotal: number
+  lastClaimedAt: Date | null
+}
+
+export async function claimTeamEarnings(userId: string): Promise<ClaimTeamRewardsResult> {
+  const outcome = await claimTeamEarningPayouts(userId)
+  if (outcome.claimedCount === 0) {
+    return { claimed: 0, items: [], claimedTotal: 0, lastClaimedAt: null }
+  }
+
+  const payerIds = Array.from(new Set(outcome.items.map((item) => item.payerUserId)))
+  const payerLookup = await fetchUserLookup(payerIds)
+
+  const items: ClaimedTeamEarning[] = outcome.items.map((item) => ({
+    id: item.id,
+    type: item.type as TeamEarningType,
+    amount: item.amount,
+    percent: item.percent,
+    baseAmount: item.baseAmount,
+    createdAt: item.createdAt,
+    claimedAt: item.claimedAt,
+    sourceTxId: item.sourceTxId,
+    payer: payerLookup[item.payerUserId] ?? null,
+  }))
+
+  const claimedTotal = items.reduce((total, item) => total + item.amount, 0)
+  const lastClaimedAt = items.reduce<Date | null>((latest, item) => {
+    return !latest || item.claimedAt > latest ? item.claimedAt : latest
+  }, null)
+
+  return { claimed: outcome.claimedTotal, items, claimedTotal, lastClaimedAt }
+}
+
+export async function listTeamRewardHistory(userId: string): Promise<ClaimedTeamEarning[]> {
+  const claimedRaw = await getClaimedTeamEarnings(userId)
+  const payerIds = Array.from(new Set(claimedRaw.map((entry) => entry.payerUserId)))
+  const payerLookup = await fetchUserLookup(payerIds)
+
+  return claimedRaw.map<ClaimedTeamEarning>((entry) => ({
+    id: entry.id,
+    type: entry.type as TeamEarningType,
+    amount: entry.payoutAmount,
+    percent: entry.percent,
+    baseAmount: entry.baseAmount,
+    createdAt: entry.createdAt,
+    claimedAt: entry.claimedAt,
+    sourceTxId: entry.sourceTxId,
+    payer: payerLookup[entry.payerUserId] ?? null,
+  }))
 }
 
 export async function getClaimableTeamRewardTotal(userId: string): Promise<number> {
-  const claimable = await buildClaimableRewardsQuery(userId).select({ amount: 1, userId: 1 }).lean()
-  let total = claimable.reduce((sum, tx) => sum + Number(tx?.amount ?? 0), 0)
-  if (total <= 0 && claimable.length === 0) {
-    const normalizedTarget = normalizeDocumentId(userId) ?? normalizeUserId(userId)
-    const fallbackClaimable = await Transaction.find({
-      type: "teamReward",
-      status: "approved",
-      claimable: true,
-    })
-      .select({ amount: 1, userId: 1 })
-      .lean()
-    for (const tx of fallbackClaimable) {
-      const txUserId = normalizeDocumentId((tx as { userId?: unknown }).userId)
-      if (txUserId && txUserId === normalizedTarget) {
-        total += Number((tx as { amount?: unknown }).amount ?? 0)
-      }
-    }
-  }
-  if (total <= 0) {
-    const userIdString = normalizeUserId(userId)
-    const candidates: (string | mongoose.Types.ObjectId)[] = [userIdString]
-    if (mongoose.Types.ObjectId.isValid(userIdString)) {
-      candidates.push(new mongoose.Types.ObjectId(userIdString))
-    }
-    const balanceDoc = await Balance.findOne({ userId: { $in: candidates } })
-    if (
-      balanceDoc &&
-      typeof (balanceDoc as { teamRewardsAvailable?: unknown }).teamRewardsAvailable === "number"
-    ) {
-      total = Number((balanceDoc as { teamRewardsAvailable?: number }).teamRewardsAvailable ?? 0)
-    }
-  }
-  return roundPlatform(total)
+  const pending = await getPendingTeamEarnings(userId)
+  return pending.reduce((total, entry) => total + entry.payoutAmount, 0)
 }
 
-export type RewardHistoryCategory =
-  | "claim"
-  | "team_reward"
-  | "team_commission"
-  | "daily_profit"
-  | "daily_team_earning"
-  | "deposit_commission"
-  | "bonus"
-  | "salary"
-  | "other"
-
-export interface RewardHistoryEntry {
-  id: string
-  occurredAt: Date
-  amount: number
-  status: string
-  category: RewardHistoryCategory
-  description: string
-  team: CommissionTeamCode | null
-  teams: CommissionTeamCode[] | null
-  rate: number | null
-  level: number | null
-  sourceUserId: string | null
-  sourceUserName: string | null
-  transactionType: ITransaction["type"]
-  baseAmount: number | null
-}
-
-async function resolveRewardProfile(level: number): Promise<RewardProfile> {
-  if (level <= 0) {
-    return { level, rate: 0, coverage: [], coverageDetails: [] }
-  }
-
-  const ruleDoc = await CommissionRule.findOne({ level }).lean()
-  if (!ruleDoc) {
-    return { level, rate: 0, coverage: [], coverageDetails: [] }
-  }
-
-  const rewardOverrides = (ruleDoc.teamOverrides ?? []).filter((override) => override.payout === "reward")
-
-  if (rewardOverrides.length === 0) {
-    return { level: ruleDoc.level, rate: 0, coverage: [], coverageDetails: [] }
-  }
-
-  const coverageDetails: RewardCoverageDetail[] = rewardOverrides.map((override) => ({
-    team: override.team,
-    rate: override.pct,
-  }))
-
-  const uniqueTeams = Array.from(new Set(coverageDetails.map((detail) => detail.team)))
-  const nominalRate = coverageDetails.length > 0 ? coverageDetails[0]!.rate / 100 : 0
-
-  return {
-    level: ruleDoc.level,
-    rate: nominalRate,
-    coverage: uniqueTeams,
-    coverageDetails,
-  }
-}
-
-async function loadBalance(userId: string, session?: mongoose.ClientSession) {
-  const query = Balance.findOne({ userId: normalizeUserId(userId) })
-  if (session && typeof (query as any).session === "function") {
-    query.session(session)
-  }
-  const balance = await query
-  if (!balance) {
-    throw new Error("Balance not found")
-  }
-  return balance
-}
-
-export async function previewTeamEarnings(userId: string, now = new Date()): Promise<TeamRewardsPreview> {
-  const [level, balance, available] = await Promise.all([
-    calculateUserLevel(userId, { persist: false, notify: false }),
-    Balance.findOne({ userId: normalizeUserId(userId) }),
+export async function syncTeamRewardBalance(userId: string) {
+  const [available, claimedTotal] = await Promise.all([
     getClaimableTeamRewardTotal(userId),
+    BonusPayout.aggregate([
+      {
+        $match: {
+          receiverUserId: new mongoose.Types.ObjectId(userId),
+          status: "CLAIMED",
+          type: { $in: TEAM_EARNING_TYPES },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$payoutAmount" },
+        },
+      },
+    ]),
   ])
 
-  const rewardProfile = await resolveRewardProfile(level)
+  const claimed = Number(claimedTotal[0]?.total ?? 0)
 
-  const claimedTotal = roundCurrency(balance?.teamRewardsClaimed ?? 0)
-  const lastClaimedAt = balance?.teamRewardsLastClaimedAt ?? null
-
-  return {
-    available,
-    claimedTotal,
-    lastClaimedAt,
-    level: rewardProfile.level,
-    rate: rewardProfile.rate,
-    coverage: rewardProfile.coverage,
-    coverageDetails: rewardProfile.coverageDetails,
-    windowStart: lastClaimedAt,
-    windowEnd: now,
-    dgpCount: 0,
-    totalDgp: 0,
-  }
-}
-
-export async function claimTeamEarnings(userId: string, now = new Date()): Promise<ClaimResult> {
-  let session: mongoose.ClientSession | null = null
-  let result: ClaimResult | null = null
-
-  const executeClaim = async (activeSession?: mongoose.ClientSession) => {
-    const [level, balance, claimableTransactions] = await Promise.all([
-      calculateUserLevel(userId, { persist: false, notify: false }),
-      loadBalance(userId, activeSession),
-      (async () => {
-        const query = buildClaimableRewardsQuery(userId)
-        if (activeSession && typeof (query as any).session === "function") {
-          query.session(activeSession)
-        }
-        return query
-      })(),
-    ])
-
-    const rewardProfile = await resolveRewardProfile(level)
-    const claimableList = await claimableTransactions
-    const totalClaimableRaw = claimableList.reduce((sum, tx) => sum + Number(tx.amount ?? 0), 0)
-    const totalClaimable = roundPlatform(totalClaimableRaw)
-
-    if (totalClaimable <= 0) {
-      result = {
-        available: 0,
-        claimed: 0,
-        claimedTotal: roundCurrency(balance.teamRewardsClaimed ?? 0),
-        lastClaimedAt: balance.teamRewardsLastClaimedAt ?? null,
-        level: rewardProfile.level,
-        rate: rewardProfile.rate,
-        coverage: rewardProfile.coverage,
-        coverageDetails: rewardProfile.coverageDetails,
-        windowStart: balance.teamRewardsLastClaimedAt ?? null,
-        windowEnd: now,
-        dgpCount: 0,
-        totalDgp: 0,
-        message: "No rewards available",
-      }
-      return
-    }
-
-    balance.current = roundPlatform((balance.current ?? 0) + totalClaimable)
-    balance.totalBalance = roundPlatform((balance.totalBalance ?? 0) + totalClaimable)
-    balance.totalEarning = roundPlatform((balance.totalEarning ?? 0) + totalClaimable)
-    balance.teamRewardsClaimed = roundPlatform((balance.teamRewardsClaimed ?? 0) + totalClaimable)
-    balance.teamRewardsAvailable = roundPlatform(
-      Math.max(0, (balance.teamRewardsAvailable ?? 0) - totalClaimable),
-    )
-    balance.teamRewardsLastClaimedAt = now
-    await balance.save(activeSession ? { session: activeSession } : undefined)
-
-    const userObjectId = toObjectId(userId)
-    const userIdString = normalizeUserId(userId)
-    const createOptions: mongoose.SaveOptions | undefined = activeSession ? { session: activeSession } : undefined
-
-    const transactionDoc = {
-      userId: userIdString,
-      type: "teamReward" as const,
-      amount: totalClaimable,
-      status: "approved" as const,
-      meta: {
-        source: "team_rewards_claim",
-        level: rewardProfile.level,
-        coverage: rewardProfile.coverageDetails,
-        claimedAt: now.toISOString(),
-        previousAvailable: totalClaimable,
-        claimedEntryIds: claimableList.map((tx) => (tx._id as mongoose.Types.ObjectId).toString()),
+  await Balance.updateOne(
+    { userId: new mongoose.Types.ObjectId(userId) },
+    {
+      $set: {
+        teamRewardsAvailable: available,
+        teamRewardsClaimed: claimed,
       },
-    }
-
-    const claimableIds = claimableList.map((tx) => tx._id as mongoose.Types.ObjectId)
-
-    const claimTransactionDoc = (await Transaction.create(
-      {
-        ...transactionDoc,
-        claimable: false,
-        createdAt: now,
-        updatedAt: now,
-      } as any,
-      createOptions as any,
-    )) as unknown as mongoose.Document & ITransaction
-    const claimTransactionId = (claimTransactionDoc._id as mongoose.Types.ObjectId) ??
-      new mongoose.Types.ObjectId((claimTransactionDoc as any).id)
-
-    if (claimableIds.length > 0) {
-      await Transaction.updateMany(
-        { _id: { $in: claimableIds } },
-        {
-          $set: {
-            claimable: false,
-            claimedAt: now,
-            "meta.claimTransactionId": claimTransactionId,
-          },
-        },
-        activeSession ? { session: activeSession } : undefined,
-      )
-    }
-
-    const notificationDoc = {
-      userId: userObjectId,
-      kind: "team-reward-claimed" as const,
-      title: "Team rewards claimed",
-      body: `You claimed $${totalClaimable.toFixed(4)} from your team rewards wallet.`,
-    }
-
-    await Notification.create(notificationDoc as any, activeSession ? { session: activeSession } : undefined)
-
-    result = {
-      available: 0,
-      claimed: totalClaimable,
-      claimedTotal: roundCurrency(balance.teamRewardsClaimed),
-      lastClaimedAt: balance.teamRewardsLastClaimedAt ?? now,
-      level: rewardProfile.level,
-      rate: rewardProfile.rate,
-      coverage: rewardProfile.coverage,
-      coverageDetails: rewardProfile.coverageDetails,
-      windowStart: balance.teamRewardsLastClaimedAt,
-      windowEnd: now,
-      dgpCount: 0,
-      totalDgp: 0,
-    }
-  }
-
-  await executeClaim()
-
-  if (!result) {
-    throw new Error("Failed to resolve team earnings claim result")
-  }
-
-  return result
+    },
+    { upsert: true },
+  )
 }
-
-function describeHistoryEntry(entry: RewardHistoryEntry): string {
-  switch (entry.category) {
-    case "claim":
-      return "Claimed rewards"
-    case "team_reward":
-      return entry.sourceUserName
-        ? `Team reward from ${entry.sourceUserName}`
-        : entry.team
-          ? `Team reward from Team ${entry.team}`
-          : "Team reward"
-    case "team_commission":
-      return entry.sourceUserName
-        ? `Team commission from ${entry.sourceUserName}`
-        : entry.team
-          ? `Team commission from Team ${entry.team}`
-          : "Team commission"
-    case "daily_team_earning": {
-      const teamSummary =
-        entry.teams && entry.teams.length > 0
-          ? entry.teams.map((team) => `Team ${team}`).join(", ")
-          : entry.team
-            ? `Team ${entry.team}`
-            : null
-      return teamSummary ? `Daily team earning from ${teamSummary}` : "Daily team earning"
-    }
-    case "daily_profit":
-      return entry.sourceUserName
-        ? `Daily profit override from ${entry.sourceUserName}`
-        : entry.team
-          ? `Daily profit override from Team ${entry.team}`
-          : "Daily profit override"
-    case "deposit_commission":
-      return entry.sourceUserName
-        ? `Direct commission from ${entry.sourceUserName}`
-        : "Direct commission"
-    case "bonus":
-      return entry.sourceUserName ? `Monthly bonus (${entry.sourceUserName})` : "Monthly bonus"
-    case "salary":
-      return entry.sourceUserName ? `Monthly salary (${entry.sourceUserName})` : "Monthly salary"
-    default:
-      return entry.sourceUserName ?? "Team activity"
-  }
-}
-
-function inferHistoryCategory(tx: any): RewardHistoryCategory {
-  const source = tx.meta?.source
-  if (tx.type === "teamReward" && source === "team_rewards_claim") {
-    return "claim"
-  }
-
-  if (tx.type === "bonus") {
-    if (source === "self_deposit_bonus") {
-      return "bonus"
-    }
-
-    if (source === "team_override") {
-      switch (tx.meta?.overrideKind) {
-        case "team_reward":
-          return "team_reward"
-        case "team_commission":
-          return "team_commission"
-        case "daily_override":
-          return "daily_profit"
-        default:
-          return "other"
-      }
-    }
-
-    if (source === "monthly_policy_bonus") {
-      return tx.meta?.bonusType === "salary" ? "salary" : "bonus"
-    }
-
-    if (source === "daily_override") {
-      return "daily_profit"
-    }
-  }
-
-  if (tx.type === "commission" && source === "direct_referral") {
-    return "deposit_commission"
-  }
-
-  if (tx.type === "commission" && source === "activation_override") {
-    return "team_commission"
-  }
-
-  if (tx.type === "teamReward") {
-    if (source === "daily_team_earning") {
-      return "daily_team_earning"
-    }
-
-    const teamRewardSources = new Set([
-      "direct_referral",
-      "activation_level2_override",
-      "daily_team_earning",
-    ])
-
-    if (teamRewardSources.has(source)) {
-      return "team_reward"
-    }
-
-    return "team_reward"
-  }
-
-  return "other"
-}
-
-function toHistoryEntry(tx: any): RewardHistoryEntry {
-  const category = inferHistoryCategory(tx)
-  const rate =
-    typeof tx.meta?.overridePct === "number"
-      ? tx.meta.overridePct
-      : typeof tx.meta?.commissionPct === "number"
-        ? tx.meta.commissionPct
-        : typeof tx.meta?.teamProfitPct === "number"
-          ? tx.meta.teamProfitPct
-          : null
-
-  const baseAmount =
-    typeof tx.meta?.baseProfit === "number"
-      ? tx.meta.baseProfit
-      : typeof tx.meta?.teamProfit === "number"
-        ? tx.meta.teamProfit
-        : null
-
-  const teamsList = Array.isArray(tx.meta?.teams)
-    ? (tx.meta.teams.filter((team: unknown): team is CommissionTeamCode =>
-        typeof team === "string" && ["A", "B", "C", "D"].includes(team),
-      ) as CommissionTeamCode[])
-    : []
-
-  const status = category === "daily_team_earning" ? "posted" : tx.status ?? "approved"
-
-  const entry: RewardHistoryEntry = {
-    id: tx._id.toString(),
-    occurredAt: tx.createdAt instanceof Date ? tx.createdAt : new Date(tx.createdAt),
-    amount: Number(tx.amount ?? 0),
-    status,
-    category,
-    description: "",
-    team: (tx.meta?.team as CommissionTeamCode | undefined) ?? null,
-    teams: teamsList.length > 0 ? teamsList : null,
-    rate,
-    level:
-      typeof tx.meta?.level === "number"
-        ? tx.meta.level
-        : typeof tx.meta?.sponsorLevel === "number"
-          ? tx.meta.sponsorLevel
-          : null,
-    sourceUserId:
-      typeof tx.meta?.fromUserId === "string"
-        ? tx.meta.fromUserId
-        : typeof tx.meta?.referredUserId === "string"
-          ? tx.meta.referredUserId
-          : null,
-    sourceUserName:
-      typeof tx.meta?.fromUserName === "string"
-        ? tx.meta.fromUserName
-        : typeof tx.meta?.referredUserName === "string"
-          ? tx.meta.referredUserName
-          : tx.meta?.label ?? tx.meta?.month ?? null,
-    transactionType: tx.type,
-    baseAmount: baseAmount !== null ? Number(baseAmount) : null,
-  }
-
-  entry.description = describeHistoryEntry(entry)
-
-  return entry
-}
-
-interface ListHistoryOptions {
-  limit?: number
-}
-
-export async function listTeamRewardHistory(
-  userId: string,
-  options: ListHistoryOptions = {},
-): Promise<RewardHistoryEntry[]> {
-  const limit = Math.max(1, Math.min(options.limit ?? 100, 200))
-  const userIdString = normalizeUserId(userId)
-  const candidates = buildUserIdCandidates(userIdString)
-
-  const transactions = await Transaction.find({
-    userId: { $in: candidates },
-    $or: [
-      { type: "teamReward" },
-      { type: "bonus", "meta.source": { $in: ["team_override", "monthly_policy_bonus"] } },
-      { type: "commission", "meta.source": "direct_referral" },
-    ],
-  })
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit)
-    .lean()
-
-  return transactions.map((tx) => toHistoryEntry(tx))
-}
-

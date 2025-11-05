@@ -26,9 +26,9 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   notifications: { userId: { collection: "users" } },
   transactions: { userId: { collection: "users" } },
   walletAddresses: { userId: { collection: "users" } },
-  payouts: {
-    userId: { collection: "users" },
-    sourceId: { collection: "transactions" },
+  bonuspayouts: {
+    payerUserId: { collection: "users" },
+    receiverUserId: { collection: "users" },
   },
   luckyDrawDeposits: {
     userId: { collection: "users" },
@@ -240,11 +240,11 @@ class InMemoryCollection<T extends InMemoryDocument> {
     filter: QueryFilter,
     update: UpdateSpec,
     options: UpdateOptions = {},
-  ): Promise<{ acknowledged: boolean; modifiedCount: number; upsertedId?: string | null }> {
+  ): Promise<{ acknowledged: boolean; modifiedCount: number; upsertedId?: string | null; upsertedCount: number }> {
     const doc = this.documents.find((item) => matchesFilter(item, filter))
     if (!doc) {
       if (!options.upsert) {
-        return { acknowledged: true, modifiedCount: 0 }
+        return { acknowledged: true, modifiedCount: 0, upsertedCount: 0 }
       }
 
       const seed = extractEqualityFilter(filter)
@@ -259,12 +259,12 @@ class InMemoryCollection<T extends InMemoryDocument> {
       this.documents.push(newDoc)
       applyUpdateOperators(newDoc as unknown as Record<string, any>, update, { isUpsert: true })
       newDoc.updatedAt = new Date()
-      return { acknowledged: true, modifiedCount: 1, upsertedId: newDoc._id }
+      return { acknowledged: true, modifiedCount: 1, upsertedId: newDoc._id, upsertedCount: 1 }
     }
 
     applyUpdateOperators(doc, update)
     doc.updatedAt = new Date()
-    return { acknowledged: true, modifiedCount: 1 }
+    return { acknowledged: true, modifiedCount: 1, upsertedCount: 0 }
   }
 
   async updateMany(filter: QueryFilter, update: UpdateSpec): Promise<{ acknowledged: boolean; modifiedCount: number }> {
@@ -352,7 +352,7 @@ class InMemoryDatabase {
     this.collections.set("luckyDrawDeposits", new InMemoryCollection("luckyDrawDeposits", []))
     this.collections.set("ledgerEntries", new InMemoryCollection("ledgerEntries", []))
     this.collections.set("luckyDrawRounds", new InMemoryCollection("luckyDrawRounds", createLuckyDrawRounds(users)))
-    this.collections.set("payouts", new InMemoryCollection("payouts", []))
+    this.collections.set("bonuspayouts", new InMemoryCollection("bonuspayouts", []))
     this.collections.set("teamDailyProfits", new InMemoryCollection("teamDailyProfits", []))
     this.collections.set("teamDailyClaims", new InMemoryCollection("teamDailyClaims", []))
 
@@ -397,7 +397,7 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "LuckyDrawDeposit", collection: db.getCollection("luckyDrawDeposits") },
     { name: "LedgerEntry", collection: db.getCollection("ledgerEntries") },
     { name: "LuckyDrawRound", collection: db.getCollection("luckyDrawRounds") },
-    { name: "Payout", collection: db.getCollection("payouts") },
+    { name: "BonusPayout", collection: db.getCollection("bonuspayouts") },
     { name: "TeamDailyProfit", collection: db.getCollection("teamDailyProfits") },
     { name: "TeamDailyClaim", collection: db.getCollection("teamDailyClaims") },
   ] as const
@@ -405,6 +405,48 @@ function registerMongooseModels(db: InMemoryDatabase) {
   for (const { name, collection } of collections) {
     ;(mongoose.models as Record<string, any>)[name] = createModelProxy(collection)
   }
+
+  registerInMemorySessions()
+}
+
+class InMemoryClientSession {
+  public inMemory = true
+  private active = false
+
+  async startTransaction() {
+    this.active = true
+  }
+
+  async commitTransaction() {
+    this.active = false
+  }
+
+  async abortTransaction() {
+    this.active = false
+  }
+
+  async withTransaction<T>(fn: (session: InMemoryClientSession) => Promise<T>): Promise<T> {
+    await this.startTransaction()
+    try {
+      const result = await fn(this)
+      await this.commitTransaction()
+      return result
+    } catch (error) {
+      await this.abortTransaction().catch(() => null)
+      throw error
+    }
+  }
+
+  async endSession() {
+    this.active = false
+  }
+}
+
+function registerInMemorySessions() {
+  const factory = async () => new InMemoryClientSession()
+
+  ;(mongoose as unknown as { startSession: typeof factory }).startSession = factory
+  ;(mongoose.connection as unknown as { startSession: typeof factory }).startSession = factory
 }
 
 function createModelProxy<T extends InMemoryDocument>(collection: InMemoryCollection<T>) {
@@ -912,7 +954,27 @@ function removePath(target: any, path: string) {
 }
 
 function deepClone<T>(value: T): T {
-  return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value))
+  if (value instanceof mongoose.Types.ObjectId) {
+    return new mongoose.Types.ObjectId(value.toHexString()) as unknown as T
+  }
+
+  if (value instanceof Date) {
+    return new Date(value.getTime()) as unknown as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item)) as unknown as T
+  }
+
+  if (value && typeof value === "object") {
+    const clone: Record<string, any> = {}
+    for (const [key, entry] of Object.entries(value as Record<string, any>)) {
+      clone[key] = deepClone(entry)
+    }
+    return clone as unknown as T
+  }
+
+  return value
 }
 
 function generateObjectId(): string {

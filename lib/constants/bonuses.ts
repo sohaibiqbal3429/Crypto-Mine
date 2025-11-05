@@ -1,0 +1,6 @@
+export const ACTIVE_DEPOSIT_THRESHOLD = 80
+export const DEPOSIT_SELF_PERCENT_ACTIVE = 0.05
+export const DEPOSIT_L1_PERCENT = 0.15
+export const DEPOSIT_L2_PERCENT_ACTIVE = 0.03
+export const TEAM_EARN_L1_PERCENT = 0.02
+export const TEAM_EARN_L2_PERCENT = 0.01

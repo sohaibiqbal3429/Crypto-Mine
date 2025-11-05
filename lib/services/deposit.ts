@@ -10,7 +10,13 @@ import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { depositSchema } from "@/lib/validations/wallet"
-import { applyDepositRewards } from "@/lib/utils/commission"
+import { applyDepositRewards, isUserActiveFromDeposits } from "@/lib/services/rewards"
+import {
+  ACTIVE_DEPOSIT_THRESHOLD,
+  DEPOSIT_L1_PERCENT,
+  DEPOSIT_L2_PERCENT_ACTIVE,
+  DEPOSIT_SELF_PERCENT_ACTIVE,
+} from "@/lib/constants/bonuses"
 
 const FAKE_DEPOSIT_AMOUNT = 30
 const TEST_TRANSACTION_NUMBER = "FAKE-DEPOSIT-12345"
@@ -186,10 +192,21 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       },
     })
 
+    const lifetimeBefore = Number(user.depositTotal ?? 0)
+    const lifetimeAfter = lifetimeBefore + FAKE_DEPOSIT_AMOUNT
+    const wasActive = isUserActiveFromDeposits(lifetimeBefore)
+    const nowActive = isUserActiveFromDeposits(lifetimeAfter)
+
     await Promise.all([
       User.updateOne(
         { _id: input.userId },
-        { $inc: { depositTotal: FAKE_DEPOSIT_AMOUNT } },
+        {
+          $inc: { depositTotal: FAKE_DEPOSIT_AMOUNT },
+          $set: {
+            isActive: nowActive,
+            status: nowActive ? "active" : "inactive",
+          },
+        },
       ),
       Balance.updateOne(
         { userId: input.userId },
@@ -214,10 +231,11 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
       depositTransactionId: activationId,
       depositAt: transaction.createdAt,
-      activationId,
     })
 
-    if (rewardOutcome.activated) {
+    const activated = !wasActive && nowActive
+
+    if (activated) {
       await Transaction.updateOne(
         { _id: transaction._id },
         { $set: { "meta.qualifiesForActivation": true } },
@@ -229,15 +247,38 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       }
     }
 
+    transaction.meta = {
+      ...(transaction.meta ?? {}),
+      bonusBreakdown: {
+        selfPercent: nowActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
+        l1Percent: DEPOSIT_L1_PERCENT * 100,
+        l2Percent: nowActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
+        selfAmount: rewardOutcome.selfBonus,
+        l1Amount: rewardOutcome.l1Bonus,
+        l2Amount: rewardOutcome.l2Bonus,
+        l1UserId: rewardOutcome.l1UserId,
+        l2UserId: rewardOutcome.l2UserId,
+      },
+    }
+
+    await transaction.save()
+
     const notificationBodyParts = [
       `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
     ]
 
-    if (rewardOutcome.activated) {
+    if (activated) {
       notificationBodyParts.push(
-        `You've now satisfied the qualifying deposit requirement of $${rewardOutcome.activationThreshold.toFixed(
+        `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(2)} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(
           2,
-        )} and your account is fully activated.`,
+        )} activation threshold.`,
+      )
+    } else if (nowActive) {
+      notificationBodyParts.push("Your account remains Active.")
+    } else {
+      const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter)
+      notificationBodyParts.push(
+        `Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`,
       )
     }
 
@@ -252,10 +293,10 @@ export async function submitDeposit(input: DepositSubmissionInput) {
       status: "approved" as const,
       transaction,
       receiptMeta: receiptResult?.meta,
-      message: rewardOutcome.activated
+      message: activated
         ? "Deposit processed and account activated!"
         : "Fake deposit processed successfully!",
-      activated: rewardOutcome.activated,
+      activated,
     }
   }
 

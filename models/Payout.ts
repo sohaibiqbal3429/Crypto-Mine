@@ -2,53 +2,51 @@ import mongoose, { Schema, type Document } from "mongoose"
 
 import { createModelProxy } from "@/lib/in-memory/model-factory"
 
-export type PayoutType =
-  | "direct_deposit"
-  | "team_deposit"
-  | "team_profit"
-  | "monthly_bonus"
-  | "daily_team_earning"
+export type BonusPayoutType =
+  | "DEPOSIT_BONUS_SELF"
+  | "DEPOSIT_L1"
+  | "DEPOSIT_L2"
+  | "TEAM_EARN_L1"
+  | "TEAM_EARN_L2"
 
-export interface IPayout extends Document {
-  userId: mongoose.Types.ObjectId
-  type: PayoutType
-  sourceId?: mongoose.Types.ObjectId | null
-  amount: number
-  status: "pending" | "processing" | "completed" | "failed"
-  date: Date
-  uniqueKey: string
-  meta?: Record<string, unknown>
+export interface IBonusPayout extends Document {
+  payerUserId: mongoose.Types.ObjectId
+  receiverUserId: mongoose.Types.ObjectId
+  type: BonusPayoutType
+  baseAmount: number
+  percent: number
+  payoutAmount: number
+  sourceTxId: string
+  status: "PENDING" | "CLAIMED"
   createdAt: Date
   updatedAt: Date
+  claimedAt?: Date | null
 }
 
-const PayoutSchema = new Schema<IPayout>(
+const BonusPayoutSchema = new Schema<IBonusPayout>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    payerUserId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    receiverUserId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     type: {
       type: String,
-      enum: ["direct_deposit", "team_deposit", "team_profit", "monthly_bonus", "daily_team_earning"],
+      enum: ["DEPOSIT_BONUS_SELF", "DEPOSIT_L1", "DEPOSIT_L2", "TEAM_EARN_L1", "TEAM_EARN_L2"],
       required: true,
       index: true,
     },
-    sourceId: { type: Schema.Types.ObjectId },
-    amount: { type: Number, required: true },
-    status: {
-      type: String,
-      enum: ["pending", "processing", "completed", "failed"],
-      default: "pending",
-      index: true,
-    },
-    date: { type: Date, required: true, index: true },
-    uniqueKey: { type: String, required: true, unique: true },
-    meta: { type: Schema.Types.Mixed },
+    baseAmount: { type: Number, required: true },
+    percent: { type: Number, required: true },
+    payoutAmount: { type: Number, required: true },
+    sourceTxId: { type: String, required: true },
+    status: { type: String, enum: ["PENDING", "CLAIMED"], default: "PENDING", index: true },
+    claimedAt: { type: Date, default: null },
   },
-  { timestamps: true },
+  {
+    timestamps: true,
+  },
 )
 
-PayoutSchema.index({ userId: 1, createdAt: -1 })
-PayoutSchema.index({ status: 1, createdAt: -1 })
-PayoutSchema.index({ type: 1, date: -1 })
-PayoutSchema.index({ uniqueKey: 1 }, { unique: true })
+BonusPayoutSchema.index({ receiverUserId: 1, status: 1, createdAt: -1 })
+BonusPayoutSchema.index({ payerUserId: 1, type: 1, createdAt: -1 })
+BonusPayoutSchema.index({ sourceTxId: 1, type: 1, receiverUserId: 1 }, { unique: true })
 
-export default createModelProxy<IPayout>("Payout", PayoutSchema)
+export default createModelProxy<IBonusPayout>("BonusPayout", BonusPayoutSchema)

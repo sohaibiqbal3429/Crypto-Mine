@@ -17,8 +17,21 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       entries: history.map((entry) => ({
-        ...entry,
-        occurredAt: entry.occurredAt.toISOString(),
+        id: entry.id,
+        type: entry.type,
+        amount: entry.amount,
+        percent: entry.percent,
+        baseAmount: entry.baseAmount,
+        createdAt: entry.createdAt.toISOString(),
+        claimedAt: entry.claimedAt.toISOString(),
+        sourceTxId: entry.sourceTxId,
+        payer: entry.payer
+          ? {
+              id: entry.payer.id,
+              name: entry.payer.name,
+              email: entry.payer.email,
+            }
+          : null,
       })),
     })
   } catch (error) {

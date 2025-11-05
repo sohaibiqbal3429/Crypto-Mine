@@ -1,11 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
+import mongoose from "mongoose"
+
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import { getUserFromRequest } from "@/lib/auth"
-import { applyDepositRewards } from "@/lib/utils/commission"
+import { applyDepositRewards, isUserActiveFromDeposits } from "@/lib/services/rewards"
+import { ACTIVE_DEPOSIT_THRESHOLD, DEPOSIT_L1_PERCENT, DEPOSIT_L2_PERCENT_ACTIVE, DEPOSIT_SELF_PERCENT_ACTIVE } from "@/lib/constants/bonuses"
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,81 +26,154 @@ export async function POST(request: NextRequest) {
 
     const { transactionId } = await request.json()
 
-    const transaction = await Transaction.findById(transactionId)
-    if (!transaction || transaction.type !== "deposit" || transaction.status !== "pending") {
+    const pendingTransaction = await Transaction.findById(transactionId)
+    if (!pendingTransaction || pendingTransaction.type !== "deposit" || pendingTransaction.status !== "pending") {
       return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
 
-    // Update transaction status
-    await Transaction.updateOne(
-      { _id: transactionId },
-      { status: "approved" },
-    )
+    const session = await mongoose.startSession()
 
-    // Update user deposit total and balance
-    await User.updateOne(
-      { _id: transaction.userId },
-      { $inc: { depositTotal: transaction.amount } },
-    )
+    let activated = false
+    let depositorActive = false
+    let rewardBreakdown: {
+      selfBonus: number
+      l1Bonus: number
+      l2Bonus: number
+      l1UserId: string | null
+      l2UserId: string | null
+    } | null = null
+    let depositAmount = 0
+    let userId: mongoose.Types.ObjectId | null = null
+    let transactionCreatedAt: Date | null = null
+    let lifetimeBefore = 0
+    let lifetimeAfter = 0
 
-    await Balance.updateOne(
-      { userId: transaction.userId },
-      {
-        $inc: {
-          current: transaction.amount,
-          totalBalance: transaction.amount,
+    await session.withTransaction(async () => {
+      const transaction = await Transaction.findById(transactionId, null, { session })
+      if (!transaction || transaction.type !== "deposit" || transaction.status !== "pending") {
+        throw new Error("Invalid transaction")
+      }
+
+      transaction.status = "approved"
+      await transaction.save({ session })
+
+      transactionCreatedAt = transaction.createdAt
+      depositAmount = Number(transaction.amount)
+      userId = transaction.userId as mongoose.Types.ObjectId
+
+      const user = await User.findById(transaction.userId, null, { session })
+      if (!user) {
+        throw new Error("User not found")
+      }
+
+      lifetimeBefore = Number(user.depositTotal ?? 0)
+      lifetimeAfter = lifetimeBefore + depositAmount
+      const wasActive = isUserActiveFromDeposits(lifetimeBefore)
+      const nowActive = isUserActiveFromDeposits(lifetimeAfter)
+
+      user.depositTotal = lifetimeAfter
+      user.isActive = nowActive
+      user.status = nowActive ? "active" : "inactive"
+      await user.save({ session })
+
+      depositorActive = nowActive
+      activated = !wasActive && nowActive
+
+      await Balance.updateOne(
+        { userId: transaction.userId },
+        {
+          $inc: {
+            current: depositAmount,
+            totalBalance: depositAmount,
+          },
+          $setOnInsert: {
+            totalEarning: 0,
+            staked: 0,
+            pendingWithdraw: 0,
+            teamRewardsAvailable: 0,
+            teamRewardsClaimed: 0,
+          },
         },
-        $setOnInsert: {
-          totalEarning: 0,
-          staked: 0,
-          pendingWithdraw: 0,
-          teamRewardsAvailable: 0,
-          teamRewardsClaimed: 0,
-        },
-      },
-      { upsert: true },
-    )
-
-    // Apply deposit commissions and referral rewards
-    const activationId = transaction._id.toString()
-    const rewardOutcome = await applyDepositRewards(
-      transaction.userId.toString(),
-      transaction.amount,
-      {
-        depositTransactionId: activationId,
-        depositAt: transaction.createdAt,
-        activationId,
-      },
-    )
-
-    if (rewardOutcome.activated) {
-      await Transaction.updateOne(
-        { _id: transactionId },
-        { $set: { "meta.qualifiesForActivation": true } },
+        { upsert: true, session },
       )
+
+      const rewardOutcome = await applyDepositRewards(
+        transaction.userId.toString(),
+        depositAmount,
+        {
+          depositTransactionId: transaction._id.toString(),
+          depositAt: transaction.createdAt,
+          session,
+        },
+      )
+
+      rewardBreakdown = {
+        selfBonus: rewardOutcome.selfBonus,
+        l1Bonus: rewardOutcome.l1Bonus,
+        l2Bonus: rewardOutcome.l2Bonus,
+        l1UserId: rewardOutcome.l1UserId,
+        l2UserId: rewardOutcome.l2UserId,
+      }
+
+      transaction.meta = {
+        ...(transaction.meta ?? {}),
+        bonusBreakdown: {
+          selfPercent: depositorActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
+          l1Percent: DEPOSIT_L1_PERCENT * 100,
+          l2Percent: depositorActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
+          selfAmount: rewardOutcome.selfBonus,
+          l1Amount: rewardOutcome.l1Bonus,
+          l2Amount: rewardOutcome.l2Bonus,
+          l1UserId: rewardOutcome.l1UserId,
+          l2UserId: rewardOutcome.l2UserId,
+        },
+        qualifiesForActivation: activated,
+      }
+
+      await transaction.save({ session })
+    })
+
+    session.endSession().catch(() => null)
+
+    if (!userId) {
+      return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
 
-    // Create notification
     const notificationBodyParts = [
-      `Your deposit of $${transaction.amount.toFixed(2)} has been approved and credited to your account.`,
+      `Your deposit of $${depositAmount.toFixed(2)} has been approved and credited to your account.`,
     ]
 
-    if (rewardOutcome.activated) {
+    if (activated) {
       notificationBodyParts.push(
-        `You've now satisfied the qualifying deposit requirement of $${rewardOutcome.activationThreshold.toFixed(
+        `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(2)} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(
           2,
-        )} and your account is fully activated.`,
+        )} activation threshold.`,
+      )
+    } else if (depositorActive) {
+      notificationBodyParts.push("Your account remains Active.")
+    } else {
+      const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter)
+      notificationBodyParts.push(
+        `Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`,
       )
     }
 
     await Notification.create({
-      userId: transaction.userId,
+      userId,
       kind: "deposit-approved",
       title: "Deposit Approved",
       body: notificationBodyParts.join(" "),
     })
 
-    return NextResponse.json({ success: true, activated: rewardOutcome.activated })
+    return NextResponse.json({
+      success: true,
+      activated,
+      depositorActive,
+      lifetimeBefore,
+      lifetimeAfter,
+      rewardBreakdown,
+      transactionCreatedAt: transactionCreatedAt?.toISOString() ?? null,
+    })
   } catch (error) {
     console.error("Approve deposit error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
