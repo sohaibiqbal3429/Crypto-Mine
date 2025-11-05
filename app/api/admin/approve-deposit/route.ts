@@ -24,7 +24,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { transactionId } = await request.json()
+    const body = (await request.json().catch(() => null)) as
+      | {
+          transactionId?: unknown
+        }
+      | null
+
+    const transactionId = typeof body?.transactionId === "string" ? body.transactionId.trim() : ""
+    if (!transactionId) {
+      return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 })
+    }
 
     const pendingTransaction = await Transaction.findById(transactionId)
     if (!pendingTransaction || pendingTransaction.type !== "deposit" || pendingTransaction.status !== "pending") {
@@ -57,14 +66,45 @@ export async function POST(request: NextRequest) {
       transaction.status = "approved"
       await transaction.save({ session })
 
-      transactionCreatedAt = transaction.createdAt
-      depositAmount = Number(transaction.amount)
-      userId = transaction.userId as mongoose.Types.ObjectId
+      transactionCreatedAt = transaction.createdAt ?? null
+      depositAmount = Number(transaction.amount ?? 0)
+      if (!Number.isFinite(depositAmount) || depositAmount <= 0) {
+        throw new Error("Invalid deposit amount")
+      }
 
-      const user = await User.findById(transaction.userId, null, { session })
+      const rawTransactionUserId = transaction.userId
+      if (!rawTransactionUserId) {
+        throw new Error("Transaction user missing")
+      }
+
+      const normalizedTransactionUserId =
+        rawTransactionUserId instanceof mongoose.Types.ObjectId
+          ? rawTransactionUserId
+          : mongoose.Types.ObjectId.isValid(String(rawTransactionUserId))
+            ? new mongoose.Types.ObjectId(String(rawTransactionUserId))
+            : null
+
+      const userLookupId = normalizedTransactionUserId
+        ? normalizedTransactionUserId.toHexString()
+        : String(rawTransactionUserId)
+      const user = await User.findById(userLookupId, null, { session })
       if (!user) {
         throw new Error("User not found")
       }
+
+      const resolvedUserId =
+        normalizedTransactionUserId ??
+        (user._id instanceof mongoose.Types.ObjectId
+          ? user._id
+          : mongoose.Types.ObjectId.isValid(String(user._id))
+            ? new mongoose.Types.ObjectId(String(user._id))
+            : null)
+
+      if (!resolvedUserId) {
+        throw new Error("User has invalid identifier")
+      }
+
+      userId = resolvedUserId
 
       lifetimeBefore = Number(user.depositTotal ?? 0)
       lifetimeAfter = lifetimeBefore + depositAmount
@@ -80,7 +120,7 @@ export async function POST(request: NextRequest) {
       activated = !wasActive && nowActive
 
       await Balance.updateOne(
-        { userId: transaction.userId },
+        { userId: resolvedUserId },
         {
           $inc: {
             current: depositAmount,
@@ -98,11 +138,14 @@ export async function POST(request: NextRequest) {
       )
 
       const rewardOutcome = await applyDepositRewards(
-        transaction.userId.toString(),
+        resolvedUserId.toHexString(),
         depositAmount,
         {
-          depositTransactionId: transaction._id.toString(),
-          depositAt: transaction.createdAt,
+          depositTransactionId:
+            transaction._id instanceof mongoose.Types.ObjectId
+              ? transaction._id.toHexString()
+              : String(transaction._id ?? transactionId),
+          depositAt: transaction.createdAt ?? new Date(),
           session,
         },
       )
@@ -165,6 +208,8 @@ export async function POST(request: NextRequest) {
       body: notificationBodyParts.join(" "),
     })
 
+    const transactionCreatedAtIso = transactionCreatedAt ? (transactionCreatedAt as Date).toISOString() : null
+
     return NextResponse.json({
       success: true,
       activated,
@@ -172,7 +217,7 @@ export async function POST(request: NextRequest) {
       lifetimeBefore,
       lifetimeAfter,
       rewardBreakdown,
-      transactionCreatedAt: transactionCreatedAt?.toISOString() ?? null,
+      transactionCreatedAt: transactionCreatedAtIso,
     })
   } catch (error) {
     console.error("Approve deposit error:", error)
