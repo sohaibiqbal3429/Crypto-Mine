@@ -9,8 +9,11 @@ import { TeamRewardsHistory, type TeamRewardHistoryEntry } from "@/components/te
 import { LevelProgress } from "@/components/team/level-progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
-import { formatCurrency } from "@/lib/utils/formatting"
+import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
 
 import { TeamList } from "./TeamList"
 
@@ -26,11 +29,23 @@ const fetcher = async (url: string) => {
   return response.json()
 }
 
+interface PendingRewardItem {
+  id: string
+  type: "TEAM_EARN_L1" | "TEAM_EARN_L2"
+  amount: number
+  percent: number
+  baseAmount: number
+  createdAt: string
+  sourceTxId: string
+  payer: { id: string; name: string | null; email: string | null } | null
+}
+
 interface RewardsResponse {
   available?: number
   claimedTotal?: number
   lastClaimedAt?: string | null
   creditedAmount?: number
+  pending?: PendingRewardItem[]
 }
 
 interface HistoryResponse {
@@ -59,6 +74,91 @@ interface MeResponse {
     role?: string
     profileAvatar?: string
   }
+}
+
+interface AvailableToClaimCardProps {
+  items: PendingRewardItem[]
+  isLoading: boolean
+  onClaim: () => void
+  isClaiming: boolean
+}
+
+function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: AvailableToClaimCardProps) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle className="text-lg">Available to Claim</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Review unclaimed team earnings. Claiming will credit the payout amount to your wallet balance.
+          </p>
+        </div>
+        <Button onClick={onClaim} disabled={isClaiming || items.length === 0}>
+          {isClaiming ? "Claiming..." : "Claim all"}
+        </Button>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="whitespace-nowrap">Earned</TableHead>
+              <TableHead className="whitespace-nowrap">Source User</TableHead>
+              <TableHead className="whitespace-nowrap">Type</TableHead>
+              <TableHead className="whitespace-nowrap text-right">Base Amount</TableHead>
+              <TableHead className="whitespace-nowrap text-right">Percent</TableHead>
+              <TableHead className="whitespace-nowrap text-right">Payout</TableHead>
+              <TableHead className="whitespace-nowrap text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, index) => (
+                <TableRow key={`pending-skeleton-${index}`}>
+                  <TableCell><Skeleton className="h-4 w-36" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-20" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-16" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-24" /></TableCell>
+                  <TableCell className="text-right"><Skeleton className="ml-auto h-8 w-20" /></TableCell>
+                </TableRow>
+              ))
+            ) : items.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                  No team earnings are waiting to be claimed right now. New rewards will appear here when your team earns.
+                </TableCell>
+              </TableRow>
+            ) : (
+              items.map((item) => {
+                const createdDisplay = `${formatDate(item.createdAt, "long")} ${formatTime(item.createdAt)}`
+                const percentDisplay = `${item.percent.toFixed(2)}%`
+                const sourceDisplay = item.payer?.name ?? item.payer?.email ?? (item.payer?.id ? `User ${item.payer.id.slice(-6)}` : "Unknown")
+
+                return (
+                  <TableRow key={item.id}>
+                    <TableCell className="whitespace-nowrap">{createdDisplay}</TableCell>
+                    <TableCell className="whitespace-nowrap">{sourceDisplay}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {item.type === "TEAM_EARN_L1" ? "Team earning (L1)" : "Team earning (L2)"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(item.baseAmount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{percentDisplay}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(item.amount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">
+                      <Button variant="outline" size="sm" onClick={onClaim} disabled={isClaiming}>
+                        Claim
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function TeamPageShell() {
@@ -139,6 +239,7 @@ export default function TeamPageShell() {
         available: rewardsData.available ?? 0,
         claimedTotal: rewardsData.claimedTotal ?? 0,
         lastClaimedAt: rewardsData.lastClaimedAt ?? null,
+        pending: rewardsData.pending ?? [],
       }
     : null
 
@@ -221,6 +322,13 @@ export default function TeamPageShell() {
                   Unable to load rewards summary. Please refresh to try again.
                 </div>
               ) : null}
+
+              <AvailableToClaimCard
+                items={teamRewards?.pending ?? []}
+                isLoading={rewardsLoading}
+                onClaim={handleClaimRewards}
+                isClaiming={isClaiming}
+              />
 
               <TeamRewardsHistory
                 entries={historyData?.entries ?? []}

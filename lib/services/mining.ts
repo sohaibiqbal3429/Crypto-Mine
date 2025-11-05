@@ -5,26 +5,14 @@ import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
 import Notification from "@/models/Notification"
 import MiningSession from "@/models/MiningSession"
-import TeamDailyProfit from "@/models/TeamDailyProfit"
 import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
+import { createTeamEarningPayouts } from "@/lib/services/rewards"
 import { resolveDailyProfitPercent } from "@/lib/services/settings"
 import { calculatePercentFromAmounts } from "@/lib/utils/numeric"
 
 const DEFAULT_MINING_SETTINGS = {
   dailyProfitPercent: 1.5,
   roiCap: 3,
-}
-
-function startOfUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
-}
-
-function endOfUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999))
-}
-
-function roundDailyProfit(amount: number): number {
-  return Math.round(amount * 10000) / 10000
 }
 
 export class MiningActionError extends Error {
@@ -259,33 +247,10 @@ export async function performMiningClick(userId: string) {
     body: `You earned $${finalProfit.toFixed(2)} from mining! ${roiCapReached ? "ROI cap reached." : ""}`,
   })
 
-  const dayStart = startOfUtcDay(now)
-  const dayEnd = endOfUtcDay(now)
-  const existingDailyProfit = await TeamDailyProfit.findOne({
-    memberId: user._id,
-    profitDate: { $gte: dayStart, $lte: dayEnd },
+  await createTeamEarningPayouts(user._id.toString(), finalProfit, {
+    earningTransactionId: profitTransaction._id.toString(),
+    earningAt: now,
   })
-
-  const memberActive = Boolean((user as { isActive?: unknown }).isActive)
-
-  if (!existingDailyProfit) {
-    await TeamDailyProfit.create({
-      memberId: user._id,
-      profitDate: now,
-      profitAmount: roundDailyProfit(finalProfit),
-      activeOnDate: memberActive,
-    } as any)
-  } else {
-    const updatedAmount = roundDailyProfit(Number(existingDailyProfit.profitAmount ?? 0) + finalProfit)
-    existingDailyProfit.profitAmount = updatedAmount
-    if (memberActive && !existingDailyProfit.activeOnDate) {
-      existingDailyProfit.activeOnDate = true
-    }
-    if (existingDailyProfit.profitDate < dayStart || existingDailyProfit.profitDate > dayEnd) {
-      existingDailyProfit.profitDate = now
-    }
-    await existingDailyProfit.save()
-  }
 
   return {
     profit: finalProfit,
