@@ -12,6 +12,7 @@ import {
   TEAM_EARN_L1_PERCENT,
   TEAM_EARN_L2_PERCENT,
 } from "@/lib/constants/bonuses"
+import { isTransactionNotSupportedError } from "@/lib/utils/mongo-errors"
 
 function asObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.ObjectId {
   return typeof id === "string" ? new mongoose.Types.ObjectId(id) : id
@@ -29,7 +30,7 @@ interface CreatePayoutInput {
   percent: number
   sourceTxId: string
   occurredAt: Date
-  session: ClientSession
+  session?: ClientSession | null
   immediate?: boolean
   meta?: Record<string, unknown>
 }
@@ -46,6 +47,8 @@ async function createPayout({
   immediate = false,
   meta = {},
 }: CreatePayoutInput) {
+  const sessionRef = session ?? null
+
   if (percent <= 0 || baseAmount <= 0) {
     return { created: false, amount: 0 }
   }
@@ -56,6 +59,9 @@ async function createPayout({
   }
 
   const filter = { receiverUserId, type, sourceTxId }
+  const updateOptions = sessionRef
+    ? { upsert: true, session: sessionRef }
+    : { upsert: true }
   const upsertResult = await BonusPayout.updateOne(
     filter,
     {
@@ -73,7 +79,7 @@ async function createPayout({
         updatedAt: occurredAt,
       },
     },
-    { upsert: true, session },
+    updateOptions,
   )
 
   const inserted = Number(upsertResult.upsertedCount ?? 0) > 0
@@ -83,6 +89,7 @@ async function createPayout({
   }
 
   if (immediate) {
+    const balanceOptions = sessionRef ? { upsert: true, session: sessionRef } : { upsert: true }
     await Balance.updateOne(
       { userId: receiverUserId },
       {
@@ -101,10 +108,10 @@ async function createPayout({
           teamRewardsLastClaimedAt: null,
         },
       },
-      { upsert: true, session },
+      balanceOptions,
     )
 
-    const payoutDoc = await BonusPayout.findOne(filter, null, { session })
+    const payoutDoc = await BonusPayout.findOne(filter, null, sessionRef ? { session: sessionRef } : undefined)
     const payoutId = payoutDoc?._id ? payoutDoc._id.toString() : null
 
     await Transaction.create(
@@ -132,7 +139,7 @@ async function createPayout({
           updatedAt: occurredAt,
         },
       ],
-      { session },
+      sessionRef ? { session: sessionRef } : undefined,
     )
   }
 
@@ -143,6 +150,7 @@ interface DepositRewardsOptions {
   depositTransactionId: string
   depositAt?: Date
   session?: ClientSession
+  transactional?: boolean
 }
 
 export interface DepositRewardOutcome {
@@ -161,11 +169,11 @@ export async function applyDepositRewards(
   depositAmount: number,
   options: DepositRewardsOptions,
 ): Promise<DepositRewardOutcome> {
-  const session = options.session ?? (await mongoose.startSession())
   const occurredAt = options.depositAt ?? new Date()
 
-  const run = async () => {
-    const depositor = await User.findById(userId, null, { session })
+  const run = async (session: ClientSession | null) => {
+    const findOptions = session ? { session } : undefined
+    const depositor = await User.findById(userId, null, findOptions)
     if (!depositor) {
       throw new Error("Depositor not found")
     }
@@ -202,7 +210,7 @@ export async function applyDepositRewards(
       selfBonus = selfResult.amount
 
       if (depositor.referredBy) {
-        const l1User = await User.findById(depositor.referredBy, null, { session })
+        const l1User = await User.findById(depositor.referredBy, null, findOptions)
         if (l1User) {
           const l1ObjectId = asObjectId(l1User._id as mongoose.Types.ObjectId)
           l1UserId = l1ObjectId.toHexString()
@@ -221,7 +229,7 @@ export async function applyDepositRewards(
           l1Bonus = l1Result.amount
 
           if (l1User.referredBy) {
-            const l2User = await User.findById(l1User.referredBy, null, { session })
+            const l2User = await User.findById(l1User.referredBy, null, findOptions)
             if (l2User) {
               const l2ObjectId = asObjectId(l2User._id as mongoose.Types.ObjectId)
               l2UserId = l2ObjectId.toHexString()
@@ -259,20 +267,48 @@ export async function applyDepositRewards(
   }
 
   if (options.session) {
-    return run()
+    return run(options.session)
   }
 
+  const shouldUseTransactions = options.transactional ?? true
+  if (!shouldUseTransactions) {
+    return run(null)
+  }
+
+  let session: ClientSession | null = null
   try {
-    let outcome: DepositRewardOutcome | null = null
-    await session.withTransaction(async () => {
-      outcome = await run()
-    })
-    if (!outcome) {
-      throw new Error("Deposit reward outcome missing")
+    try {
+      session = await mongoose.startSession()
+    } catch (error) {
+      if (isTransactionNotSupportedError(error)) {
+        return run(null)
+      }
+      throw error
     }
-    return outcome
+
+    if (!session) {
+      return run(null)
+    }
+
+    try {
+      let outcome: DepositRewardOutcome | null = null
+      await session.withTransaction(async () => {
+        outcome = await run(session)
+      })
+      if (!outcome) {
+        throw new Error("Deposit reward outcome missing")
+      }
+      return outcome
+    } catch (error) {
+      if (isTransactionNotSupportedError(error)) {
+        return run(null)
+      }
+      throw error
+    }
   } finally {
-    session.endSession().catch(() => null)
+    if (session) {
+      session.endSession().catch(() => null)
+    }
   }
 }
 

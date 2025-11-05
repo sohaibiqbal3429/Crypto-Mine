@@ -25,15 +25,7 @@ async function reset() {
   ])
 }
 
-test.before(async () => {
-  await dbConnect()
-})
-
-test.beforeEach(async () => {
-  await reset()
-})
-
-test("admin can approve deposit without error", async () => {
+async function buildApproveRequest() {
   const admin = await User.create({
     email: "admin@example.com",
     passwordHash: "hash",
@@ -86,6 +78,56 @@ test("admin can approve deposit without error", async () => {
     json: async () => ({ transactionId }),
   } as unknown as NextRequest
 
+  return { request, transactionId }
+}
+
+test.before(async () => {
+  await dbConnect()
+})
+
+test.beforeEach(async () => {
+  await reset()
+})
+
+test("admin can approve deposit without error", async () => {
+  const { request, transactionId } = await buildApproveRequest()
+
   const response = await approveDeposit(request)
   assert.equal(response.status, 200)
+
+  const updated = await Transaction.findById(transactionId)
+  assert.ok(updated)
+  assert.equal(updated?.status, "approved")
+})
+
+test("approving deposit falls back when transactions are unsupported", async () => {
+  const { request, transactionId } = await buildApproveRequest()
+
+  const replicaError = Object.assign(
+    new Error("Transaction numbers are only allowed on a replica set member or mongos"),
+    { code: 20 },
+  )
+
+  const sessionMock = {
+    async withTransaction() {
+      throw replicaError
+    },
+    async endSession() {
+      return
+    },
+  } as unknown as mongoose.ClientSession
+
+  const originalStartSession = mongoose.startSession
+  ;(mongoose.startSession as unknown) = async () => sessionMock
+
+  try {
+    const response = await approveDeposit(request)
+    assert.equal(response.status, 200)
+
+    const updated = await Transaction.findById(transactionId)
+    assert.ok(updated)
+    assert.equal(updated?.status, "approved")
+  } finally {
+    ;(mongoose.startSession as unknown) = originalStartSession
+  }
 })
