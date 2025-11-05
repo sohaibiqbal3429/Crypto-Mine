@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import mongoose from "mongoose"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
@@ -20,9 +21,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { transactionId, txHash } = await request.json()
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch (error) {
+      console.error("Approve withdrawal body parse error:", error)
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    }
 
-    const transaction = await Transaction.findById(transactionId)
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    }
+
+    const { transactionId, txHash } = body as {
+      transactionId?: unknown
+      txHash?: unknown
+    }
+
+    if (typeof transactionId !== "string" || transactionId.trim().length === 0) {
+      return NextResponse.json({ error: "Transaction ID is required" }, { status: 400 })
+    }
+
+    const normalizedTransactionId = transactionId.trim()
+
+    if (!mongoose.Types.ObjectId.isValid(normalizedTransactionId)) {
+      return NextResponse.json({ error: "Invalid transaction ID" }, { status: 400 })
+    }
+
+    if (typeof txHash !== "undefined" && typeof txHash !== "string") {
+      return NextResponse.json({ error: "Invalid transaction hash" }, { status: 400 })
+    }
+
+    const transaction = await Transaction.findById(normalizedTransactionId)
     if (!transaction || transaction.type !== "withdraw" || transaction.status !== "pending") {
       return NextResponse.json({ error: "Invalid transaction" }, { status: 400 })
     }
@@ -35,7 +65,7 @@ export async function POST(request: NextRequest) {
     const transactionHash = typeof txHash === "string" && txHash.trim().length > 0 ? txHash.trim() : `tx_${Date.now()}`
 
     await Transaction.updateOne(
-      { _id: transactionId },
+      { _id: normalizedTransactionId },
       {
         status: "approved",
         meta: {
