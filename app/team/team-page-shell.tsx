@@ -14,30 +14,54 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
 import { TeamList } from "./TeamList"
 
-const fetcher = async (url: string) => {
-  const response = await fetch(url, { credentials: "include" })
+async function fetcher<T>(url: string): Promise<T> {
+  try {
+    const response = await fetch(url, { credentials: "include" })
+    const contentType = response.headers.get("content-type") ?? ""
+    let payload: unknown = null
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    const message = typeof error.error === "string" ? error.error : "Request failed"
-    throw new Error(message)
+    if (contentType.includes("application/json")) {
+      try {
+        payload = await response.json()
+      } catch (parseError) {
+        console.error(`Failed to parse JSON response from ${url}`, parseError)
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && payload !== null && "error" in payload &&
+        typeof (payload as { error?: unknown }).error === "string"
+          ? ((payload as { error: string }).error || "Request failed")
+          : response.statusText || "Request failed"
+
+      throw new Error(message || "Request failed")
+    }
+
+    if (payload && typeof payload === "object") {
+      return payload as T
+    }
+
+    return {} as T
+  } catch (error) {
+    console.error(`Network error while fetching ${url}`, error)
+    throw error instanceof Error ? error : new Error("Network request failed")
   }
-
-  return response.json()
 }
 
 interface PendingRewardItem {
-  id: string
-  type: "TEAM_EARN_L1" | "TEAM_EARN_L2"
-  amount: number
-  percent: number
-  baseAmount: number
-  createdAt: string
-  sourceTxId: string
-  payer: { id: string; name: string | null; email: string | null } | null
+  id?: string
+  type?: "TEAM_EARN_L1" | "TEAM_EARN_L2"
+  amount?: number
+  percent?: number
+  baseAmount?: number
+  createdAt?: string
+  sourceTxId?: string
+  payer?: { id?: string | null; name?: string | null; email?: string | null } | null
 }
 
 interface RewardsResponse {
@@ -45,35 +69,47 @@ interface RewardsResponse {
   claimedTotal?: number
   lastClaimedAt?: string | null
   creditedAmount?: number
-  pending?: PendingRewardItem[]
+  pending?: PendingRewardItem[] | null
 }
 
 interface HistoryResponse {
-  entries?: TeamRewardHistoryEntry[]
+  entries?: TeamRewardHistoryEntry[] | null
 }
 
 interface LevelResponse {
-  currentLevel: number
-  currentRule: any
-  nextRule: any
-  levelProgress: any
-  teamStats: any
-  allRules: any[]
-  directActiveCount: number
-  totalActiveDirects: number
-  lastLevelUpAt: string | null
-  message: string
+  currentLevel?: number
+  currentRule?: any
+  nextRule?: any
+  levelProgress?: {
+    currentActive?: number
+    requiredActive?: number
+    progress?: number
+    nextLevel?: number
+  } | null
+  teamStats?: {
+    totalMembers?: number
+    activeMembers?: number
+    directReferrals?: number
+    directActive?: number
+    totalTeamDeposits?: number
+    totalTeamEarnings?: number
+  } | null
+  allRules?: any[]
+  directActiveCount?: number
+  totalActiveDirects?: number
+  lastLevelUpAt?: string | null
+  message?: string
 }
 
 interface MeResponse {
   user?: {
-    id: string
-    name: string
-    email: string
-    referralCode: string
+    id?: string
+    name?: string
+    email?: string
+    referralCode?: string
     role?: string
     profileAvatar?: string
-  }
+  } | null
 }
 
 interface AvailableToClaimCardProps {
@@ -81,6 +117,21 @@ interface AvailableToClaimCardProps {
   isLoading: boolean
   onClaim: () => void
   isClaiming: boolean
+}
+
+function buildSourceLabel(payer: PendingRewardItem["payer"]): string {
+  if (!payer) return "Unknown"
+
+  if (typeof payer.name === "string" && payer.name.trim().length > 0) {
+    return payer.name
+  }
+
+  if (typeof payer.email === "string" && payer.email.trim().length > 0) {
+    return payer.email
+  }
+
+  const payerId = typeof payer.id === "string" ? payer.id : null
+  return payerId ? `User ${payerId.slice(-6)}` : "Unknown"
 }
 
 function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: AvailableToClaimCardProps) {
@@ -130,21 +181,32 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((item) => {
-                const createdDisplay = `${formatDate(item.createdAt, "long")} ${formatTime(item.createdAt)}`
-                const percentDisplay = `${item.percent.toFixed(2)}%`
-                const sourceDisplay = item.payer?.name ?? item.payer?.email ?? (item.payer?.id ? `User ${item.payer.id.slice(-6)}` : "Unknown")
+              items.map((item, index) => {
+                const createdAt = ensureDate(item.createdAt)
+                const createdDisplay = createdAt
+                  ? `${formatDate(createdAt, "long")} ${formatTime(createdAt)}`
+                  : "Date unavailable"
+                const percentValue = ensureNumber(item.percent, Number.NaN)
+                const percentDisplay = Number.isFinite(percentValue) ? `${percentValue.toFixed(2)}%` : "N/A"
+                const baseAmount = ensureNumber(item.baseAmount, 0)
+                const amount = ensureNumber(item.amount, 0)
+                const sourceDisplay = buildSourceLabel(item.payer ?? null)
+                const typeLabel =
+                  item.type === "TEAM_EARN_L1"
+                    ? "Team earning (L1)"
+                    : item.type === "TEAM_EARN_L2"
+                      ? "Team earning (L2)"
+                      : "Team earning"
+                const rowKey = typeof item.id === "string" && item.id.length > 0 ? item.id : `pending-${index}`
 
                 return (
-                  <TableRow key={item.id}>
+                  <TableRow key={rowKey}>
                     <TableCell className="whitespace-nowrap">{createdDisplay}</TableCell>
                     <TableCell className="whitespace-nowrap">{sourceDisplay}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {item.type === "TEAM_EARN_L1" ? "Team earning (L1)" : "Team earning (L2)"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(item.baseAmount)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{typeLabel}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(baseAmount)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">{percentDisplay}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(item.amount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(amount)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       <Button variant="outline" size="sm" onClick={onClaim} disabled={isClaiming}>
                         Claim
@@ -169,7 +231,21 @@ export default function TeamPageShell() {
     revalidateOnFocus: false,
   })
 
-  const user = meData?.user
+  const user = meData?.user ?? null
+  const userId = typeof user?.id === "string" && user.id.length > 0 ? user.id : undefined
+  const sidebarUser =
+    user &&
+    typeof user.name === "string" &&
+    typeof user.email === "string" &&
+    typeof user.referralCode === "string"
+      ? {
+          name: user.name,
+          email: user.email,
+          referralCode: user.referralCode,
+          role: typeof user.role === "string" ? user.role : undefined,
+          profileAvatar: typeof user.profileAvatar === "string" ? user.profileAvatar : undefined,
+        }
+      : undefined
 
   const {
     data: rewardsData,
@@ -205,13 +281,28 @@ export default function TeamPageShell() {
     setIsClaiming(true)
     try {
       const response = await fetch("/api/team/rewards", { method: "POST", credentials: "include" })
-      const data = (await response.json().catch(() => ({}))) as RewardsResponse & { error?: string }
+      const contentType = response.headers.get("content-type") ?? ""
+      let payload: unknown = null
+
+      if (contentType.includes("application/json")) {
+        try {
+          payload = await response.json()
+        } catch (parseError) {
+          console.error("Failed to parse claim rewards response", parseError)
+        }
+      }
 
       if (!response.ok) {
+        const errorMessage =
+          payload && typeof payload === "object" && payload !== null && "error" in payload &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : "Please try again in a moment."
+
         toast({
           variant: "destructive",
           title: "Unable to claim rewards",
-          description: data.error || "Please try again in a moment.",
+          description: errorMessage,
         })
         return
       }
@@ -220,7 +311,9 @@ export default function TeamPageShell() {
 
       toast({
         title: "Rewards added to balance",
-        description: `Successfully claimed ${formatCurrency(data.creditedAmount ?? 0)}.`,
+        description: `Successfully claimed ${formatCurrency(
+          ensureNumber((payload as RewardsResponse | null)?.creditedAmount, 0),
+        )}.`,
       })
     } catch (error) {
       console.error("Claim rewards error", error)
@@ -236,10 +329,10 @@ export default function TeamPageShell() {
 
   const teamRewards = rewardsData
     ? {
-        available: rewardsData.available ?? 0,
-        claimedTotal: rewardsData.claimedTotal ?? 0,
+        available: ensureNumber(rewardsData.available, 0),
+        claimedTotal: ensureNumber(rewardsData.claimedTotal, 0),
         lastClaimedAt: rewardsData.lastClaimedAt ?? null,
-        pending: rewardsData.pending ?? [],
+        pending: Array.isArray(rewardsData.pending) ? rewardsData.pending : [],
       }
     : null
 
@@ -260,8 +353,8 @@ export default function TeamPageShell() {
       return (
         <LevelProgress
           currentLevel={levelData.currentLevel}
-          levelProgress={levelData.levelProgress}
-          teamStats={levelData.teamStats}
+          levelProgress={levelData.levelProgress ?? null}
+          teamStats={levelData.teamStats ?? null}
           currentRule={levelData.currentRule}
           nextRule={levelData.nextRule}
           directActiveCount={levelData.directActiveCount}
@@ -281,7 +374,7 @@ export default function TeamPageShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
-      <Sidebar user={user ?? undefined} />
+      <Sidebar user={sidebarUser} />
 
       <main className="flex-1 overflow-auto md:ml-64">
         <div className="space-y-6 p-5 sm:p-6 lg:p-8">
@@ -341,7 +434,7 @@ export default function TeamPageShell() {
                 </div>
               ) : null}
 
-              <TeamList userId={user?.id} />
+              <TeamList userId={userId} />
             </TabsContent>
 
             <TabsContent value="levels" className="space-y-6">

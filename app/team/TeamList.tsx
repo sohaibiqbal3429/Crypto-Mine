@@ -8,23 +8,24 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/utils/formatting"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
 interface TeamMember {
-  _id: string
+  _id?: string
   name?: string
   level?: number
   qualified?: boolean
   depositTotal?: number
   referredBy?: string
-  createdAt?: string
+  createdAt?: string | null
 }
 
 interface TeamListResponse {
-  items: TeamMember[]
-  page: number
-  limit: number
-  total: number
-  hasMore: boolean
+  items?: TeamMember[] | null
+  page?: number
+  limit?: number
+  total?: number
+  hasMore?: boolean
 }
 
 interface TeamListProps {
@@ -32,15 +33,38 @@ interface TeamListProps {
 }
 
 const fetcher = async (url: string) => {
-  const response = await fetch(url, { credentials: "include" })
+  try {
+    const response = await fetch(url, { credentials: "include" })
+    const contentType = response.headers.get("content-type") ?? ""
+    let payload: unknown = null
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    const message = typeof error.error === "string" ? error.error : "Unable to load team members"
-    throw new Error(message)
+    if (contentType.includes("application/json")) {
+      try {
+        payload = await response.json()
+      } catch (parseError) {
+        console.error(`Failed to parse team list response from ${url}`, parseError)
+      }
+    }
+
+    if (!response.ok) {
+      const message =
+        payload && typeof payload === "object" && payload !== null && "error" in payload &&
+        typeof (payload as { error?: unknown }).error === "string"
+          ? ((payload as { error: string }).error || "Unable to load team members")
+          : "Unable to load team members"
+
+      throw new Error(message)
+    }
+
+    if (payload && typeof payload === "object") {
+      return payload as TeamListResponse
+    }
+
+    return { items: [] }
+  } catch (error) {
+    console.error(`Team list fetch error for ${url}`, error)
+    throw error instanceof Error ? error : new Error("Unable to load team members")
   }
-
-  return (await response.json()) as TeamListResponse
 }
 
 const PAGE_SIZE = 20
@@ -51,7 +75,9 @@ export function TeamList({ userId }: TeamListProps) {
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
 
-  const key = userId ? `/api/team?userId=${userId}&page=${page}&limit=${PAGE_SIZE}` : null
+  const key = userId
+    ? `/api/team?userId=${encodeURIComponent(userId)}&page=${page}&limit=${PAGE_SIZE}`
+    : null
 
   const { data, error, isLoading, isValidating, mutate } = useSWR<TeamListResponse>(key, fetcher, {
     revalidateOnFocus: false,
@@ -69,19 +95,47 @@ export function TeamList({ userId }: TeamListProps) {
       return
     }
 
-    setTotal(data.total)
-    setHasMore(data.hasMore)
+    const rawItems = Array.isArray(data.items) ? data.items : []
+    const normalizedItems = rawItems
+      .filter((member): member is TeamMember => member !== null && typeof member === "object")
+      .map((member, index) => ({
+        ...member,
+        _id: typeof member._id === "string" && member._id.length > 0 ? member._id : `member-${page}-${index}`,
+        createdAt: typeof member.createdAt === "string" ? member.createdAt : null,
+      }))
 
     setMembers((previous) => {
       if (page === 1) {
-        return data.items
+        return normalizedItems
       }
 
-      const merged = new Map(previous.map((member) => [member._id, member]))
-      for (const member of data.items) {
-        merged.set(member._id, member)
-      }
+      const merged = new Map(
+        previous.map((member, index) => [member._id ?? `existing-${index}`, member]),
+      )
+
+      normalizedItems.forEach((member, index) => {
+        const key = member._id ?? `incoming-${page}-${index}`
+        merged.set(key, member)
+      })
+
       return Array.from(merged.values())
+    })
+
+    setTotal((previousTotal) => {
+      if (typeof data.total === "number" && Number.isFinite(data.total)) {
+        return data.total
+      }
+
+      const baseline = page === 1 ? 0 : previousTotal
+      return Math.max(baseline, (page - 1) * PAGE_SIZE + normalizedItems.length)
+    })
+
+    setHasMore(() => {
+      if (typeof data.hasMore === "boolean") {
+        return data.hasMore
+      }
+
+      return normalizedItems.length === PAGE_SIZE
     })
   }, [data, page])
 
@@ -130,15 +184,24 @@ export function TeamList({ userId }: TeamListProps) {
           </div>
         ) : (
           <ul className="divide-y divide-border/60">
-            {members.map((member) => {
-              const joinedLabel = member.createdAt
-                ? `Joined ${formatDistanceToNow(new Date(member.createdAt), { addSuffix: true })}`
+            {members.map((member, index) => {
+              const createdAt = ensureDate(member.createdAt)
+              const joinedLabel = createdAt
+                ? `Joined ${formatDistanceToNow(createdAt, { addSuffix: true })}`
                 : "Joined date unavailable"
-              const levelLabel = typeof member.level === "number" ? `Level L${member.level}` : "Level N/A"
+              const levelValue = ensureNumber(member.level, Number.NaN)
+              const levelLabel = Number.isFinite(levelValue) ? `Level L${levelValue}` : "Level N/A"
+              const depositTotal = ensureNumber(member.depositTotal, 0)
+              const memberId = member._id ?? `member-${index}`
+              const idSuffix =
+                typeof member._id === "string" && member._id.length >= 6
+                  ? member._id.slice(-6)
+                  : "N/A"
+              const isQualified = Boolean(member.qualified)
 
               return (
                 <li
-                  key={member._id}
+                  key={memberId}
                   className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="space-y-1">
@@ -148,16 +211,14 @@ export function TeamList({ userId }: TeamListProps) {
                       <span className="hidden h-1 w-1 rounded-full bg-border/70 sm:block" aria-hidden />
                       <span>{levelLabel}</span>
                       <span className="hidden h-1 w-1 rounded-full bg-border/70 sm:block" aria-hidden />
-                      <span>{formatCurrency(member.depositTotal ?? 0)} deposited</span>
+                      <span>{formatCurrency(depositTotal)} deposited</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Badge variant={member.qualified ? "default" : "secondary"}>
-                      {member.qualified ? "Qualified" : "Not qualified"}
+                    <Badge variant={isQualified ? "default" : "secondary"}>
+                      {isQualified ? "Qualified" : "Not qualified"}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      ID ending in {member._id.slice(-6)}
-                    </span>
+                    <span className="text-xs text-muted-foreground">ID ending in {idSuffix}</span>
                   </div>
                 </li>
               )

@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
+import { formatCurrency } from "@/lib/utils/formatting"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 import { Trophy, Users, Target } from "lucide-react"
 
 type OverrideKind = "daily_override" | "team_commission" | "team_reward"
@@ -68,27 +70,27 @@ function buildOverrideSummaries(rule: any): OverrideSummary[] {
 }
 
 interface LevelProgressProps {
-  currentLevel: number
-  levelProgress: {
-    currentActive: number
-    requiredActive: number
-    progress: number
-    nextLevel: number
+  currentLevel?: number
+  levelProgress?: {
+    currentActive?: number
+    requiredActive?: number
+    progress?: number
+    nextLevel?: number
   } | null
-  teamStats: {
-    totalMembers: number
-    activeMembers: number
-    directReferrals: number
-    directActive: number
-    totalTeamDeposits: number
-    totalTeamEarnings: number
-  }
-  currentRule: any
-  nextRule: any
-  directActiveCount: number
-  totalActiveDirects: number
-  lastLevelUpAt: string | null
-  message: string
+  teamStats?: {
+    totalMembers?: number
+    activeMembers?: number
+    directReferrals?: number
+    directActive?: number
+    totalTeamDeposits?: number
+    totalTeamEarnings?: number
+  } | null
+  currentRule?: any
+  nextRule?: any
+  directActiveCount?: number
+  totalActiveDirects?: number
+  lastLevelUpAt?: string | null
+  message?: string | null
 }
 
 export function LevelProgress({
@@ -102,26 +104,62 @@ export function LevelProgress({
   lastLevelUpAt,
   message,
 }: LevelProgressProps) {
+  const safeCurrentLevel = ensureNumber(currentLevel, 0)
+  const safeLevelProgress =
+    levelProgress && typeof levelProgress === "object"
+      ? {
+          currentActive: ensureNumber(levelProgress.currentActive, 0),
+          requiredActive: Math.max(ensureNumber(levelProgress.requiredActive, 0), 0),
+          progress: Math.min(Math.max(ensureNumber(levelProgress.progress, 0), 0), 100),
+          nextLevel: ensureNumber(levelProgress.nextLevel, safeCurrentLevel + 1),
+        }
+      : null
+  const safeTeamStats = {
+    totalMembers: ensureNumber(teamStats?.totalMembers, 0),
+    activeMembers: ensureNumber(teamStats?.activeMembers, 0),
+    directReferrals: ensureNumber(teamStats?.directReferrals, 0),
+    directActive: ensureNumber(teamStats?.directActive, 0),
+    totalTeamDeposits: ensureNumber(teamStats?.totalTeamDeposits, 0),
+    totalTeamEarnings: ensureNumber(teamStats?.totalTeamEarnings, 0),
+  }
+  const safeDirectActiveCount = ensureNumber(directActiveCount, 0)
+  const safeTotalActiveDirects = ensureNumber(totalActiveDirects, 0)
+  const lastLevelUpDate = ensureDate(lastLevelUpAt)
+  const safeMessage =
+    typeof message === "string" && message.trim().length > 0
+      ? message
+      : "Keep engaging your team to unlock the next level."
+
   const currentOverrides = buildOverrideSummaries(currentRule)
   const nextOverrides = buildOverrideSummaries(nextRule)
+  const currentDirectPct = ensureNumber(currentRule?.directPct, Number.NaN)
+  const currentTeamRewardPct = ensureNumber(currentRule?.teamRewardPct, Number.NaN)
+  const nextDirectPct = ensureNumber(nextRule?.directPct, Number.NaN)
+  const directPctDelta =
+    Number.isFinite(nextDirectPct) && Number.isFinite(currentDirectPct)
+      ? Number.parseFloat((nextDirectPct - currentDirectPct).toFixed(2))
+      : null
+  const monthlyBonus = ensureNumber(nextRule?.monthlyTargets?.bonus, Number.NaN)
+  const monthlySalary = ensureNumber(nextRule?.monthlyTargets?.salary, Number.NaN)
+
   const [levelHighlight, setLevelHighlight] = useState(false)
   const [progressHighlight, setProgressHighlight] = useState(false)
-  const previousLevelRef = useRef(currentLevel)
-  const previousProgressRef = useRef(levelProgress?.currentActive ?? 0)
+  const previousLevelRef = useRef(safeCurrentLevel)
+  const previousProgressRef = useRef(safeLevelProgress?.currentActive ?? 0)
 
   useEffect(() => {
-    if (previousLevelRef.current === currentLevel) {
+    if (previousLevelRef.current === safeCurrentLevel) {
       return
     }
 
-    previousLevelRef.current = currentLevel
+    previousLevelRef.current = safeCurrentLevel
     setLevelHighlight(true)
     const timeout = window.setTimeout(() => setLevelHighlight(false), 900)
     return () => window.clearTimeout(timeout)
-  }, [currentLevel])
+  }, [safeCurrentLevel])
 
   useEffect(() => {
-    const currentActive = levelProgress?.currentActive ?? 0
+    const currentActive = safeLevelProgress?.currentActive ?? 0
     if (previousProgressRef.current === currentActive) {
       return
     }
@@ -130,7 +168,7 @@ export function LevelProgress({
     setProgressHighlight(true)
     const timeout = window.setTimeout(() => setProgressHighlight(false), 700)
     return () => window.clearTimeout(timeout)
-  }, [levelProgress?.currentActive])
+  }, [safeLevelProgress?.currentActive])
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -151,9 +189,9 @@ export function LevelProgress({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-2xl font-bold">Level {currentLevel}</span>
-            <Badge variant={currentLevel > 0 ? "default" : "secondary"} className="text-lg px-3 py-1">
-              {currentLevel === 0 ? "Starter" : `Level ${currentLevel}`}
+            <span className="text-2xl font-bold">Level {safeCurrentLevel}</span>
+            <Badge variant={safeCurrentLevel > 0 ? "default" : "secondary"} className="text-lg px-3 py-1">
+              {safeCurrentLevel === 0 ? "Starter" : `Level ${safeCurrentLevel}`}
             </Badge>
           </div>
 
@@ -161,7 +199,9 @@ export function LevelProgress({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Direct Commission:</span>
-                <span className="font-medium">{currentRule.directPct}%</span>
+                <span className="font-medium">
+                  {Number.isFinite(currentDirectPct) ? `${currentDirectPct}%` : "—"}
+                </span>
               </div>
               {currentOverrides.map((summary) => (
                 <div key={`${summary.kind}-${summary.pct}`} className="flex justify-between">
@@ -173,10 +213,10 @@ export function LevelProgress({
                   </span>
                 </div>
               ))}
-              {currentOverrides.length === 0 && currentRule.teamRewardPct > 0 && (
+              {currentOverrides.length === 0 && Number.isFinite(currentTeamRewardPct) && currentTeamRewardPct > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Team Reward:</span>
-                  <span className="font-medium">{currentRule.teamRewardPct}%</span>
+                  <span className="font-medium">{currentTeamRewardPct}%</span>
                 </div>
               )}
             </div>
@@ -193,18 +233,18 @@ export function LevelProgress({
             >
               <p className="text-muted-foreground">Direct active referrals (current cycle)</p>
               <p className="text-lg font-semibold">
-                {directActiveCount}
-                {levelProgress ? ` / ${levelProgress.requiredActive}` : ""}
+                {safeDirectActiveCount}
+                {safeLevelProgress ? ` / ${safeLevelProgress.requiredActive}` : ""}
               </p>
             </div>
             <div className="rounded-lg border bg-muted/40 p-3">
               <p className="text-muted-foreground">Total qualified direct referrals</p>
-              <p className="text-lg font-semibold">{totalActiveDirects}</p>
+              <p className="text-lg font-semibold">{safeTotalActiveDirects}</p>
             </div>
             <div className="rounded-lg border bg-muted/40 p-3 sm:col-span-2">
               <p className="text-muted-foreground">Last level up</p>
               <p className="text-lg font-semibold">
-                {lastLevelUpAt ? new Date(lastLevelUpAt).toLocaleString() : "No level ups yet"}
+                {lastLevelUpDate ? lastLevelUpDate.toLocaleString() : "No level ups yet"}
               </p>
             </div>
           </div>
@@ -212,7 +252,7 @@ export function LevelProgress({
       </Card>
 
       {/* Next Level Progress */}
-      {levelProgress && (
+      {safeLevelProgress && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -222,37 +262,49 @@ export function LevelProgress({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-lg font-semibold">Level {levelProgress.nextLevel}</span>
+              <span className="text-lg font-semibold">Level {safeLevelProgress.nextLevel}</span>
               <span className="text-sm text-muted-foreground">
-                {levelProgress.currentActive} / {levelProgress.requiredActive} Active Members
+                {safeLevelProgress.currentActive} / {safeLevelProgress.requiredActive} Active Members
               </span>
             </div>
 
-            <Progress value={levelProgress.progress} className="h-3" />
+            <Progress value={safeLevelProgress.progress} className="h-3" />
 
             <div className="text-sm text-center text-muted-foreground">
-              {levelProgress.progress >= 100 ? (
+              {safeLevelProgress.progress >= 100 ? (
                 <span className="text-green-600 font-medium">Requirements met! Level will update soon.</span>
               ) : (
-                <span>{levelProgress.requiredActive - levelProgress.currentActive} more active members needed</span>
+                <span>
+                  {Math.max(safeLevelProgress.requiredActive - safeLevelProgress.currentActive, 0)} more active members
+                  needed
+                </span>
               )}
             </div>
 
             <Alert variant="secondary" className="text-left">
-              <AlertDescription>{message}</AlertDescription>
+              <AlertDescription>{safeMessage}</AlertDescription>
             </Alert>
 
             {nextRule && (
               <div className="space-y-2 text-sm border-t pt-3">
-                <h4 className="font-medium">Level {levelProgress.nextLevel} Benefits:</h4>
+                <h4 className="font-medium">Level {safeLevelProgress.nextLevel} Benefits:</h4>
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Direct Commission:</span>
                     <span className="font-medium text-green-600">
-<span className="inline-flex items-baseline gap-1 font-medium text-green-600">
-  15%
-  <span className="text-xs font-semibold text-green-700">( +3% )</span>
-</span>
+                      {Number.isFinite(nextDirectPct) ? (
+                        <span className="inline-flex items-baseline gap-1 font-medium text-green-600">
+                          {`${nextDirectPct}%`}
+                          {directPctDelta !== null && directPctDelta !== 0 ? (
+                            <span className="text-xs font-semibold text-green-700">
+                              ({directPctDelta > 0 ? "+" : ""}
+                              {directPctDelta}% )
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </span>
                   </div>
                   {nextOverrides.map((summary) => (
@@ -265,16 +317,16 @@ export function LevelProgress({
                       </span>
                     </div>
                   ))}
-                  {nextRule.monthlyTargets?.bonus > 0 && (
+                  {Number.isFinite(monthlyBonus) && monthlyBonus > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Monthly Bonus:</span>
-                      <span className="font-medium text-green-600">${nextRule.monthlyTargets.bonus}</span>
+                      <span className="font-medium text-green-600">{formatCurrency(monthlyBonus)}</span>
                     </div>
                   )}
-                  {nextRule.monthlyTargets?.salary > 0 && (
+                  {Number.isFinite(monthlySalary) && monthlySalary > 0 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Monthly Salary:</span>
-                      <span className="font-medium text-green-600">${nextRule.monthlyTargets.salary}</span>
+                      <span className="font-medium text-green-600">{formatCurrency(monthlySalary)}</span>
                     </div>
                   )}
                 </div>
@@ -295,19 +347,19 @@ export function LevelProgress({
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{teamStats.totalMembers}</div>
+              <div className="text-2xl font-bold text-blue-600">{safeTeamStats.totalMembers}</div>
               <div className="text-sm text-muted-foreground">Total Members</div>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{teamStats.activeMembers}</div>
+              <div className="text-2xl font-bold text-green-600">{safeTeamStats.activeMembers}</div>
               <div className="text-sm text-muted-foreground">Active Members</div>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">{teamStats.directReferrals}</div>
+              <div className="text-2xl font-bold text-purple-600">{safeTeamStats.directReferrals}</div>
               <div className="text-sm text-muted-foreground">Direct Referrals</div>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">
-              <div className="text-2xl font-bold text-amber-600">${teamStats.totalTeamDeposits.toFixed(0)}</div>
+              <div className="text-2xl font-bold text-amber-600">{formatCurrency(safeTeamStats.totalTeamDeposits)}</div>
               <div className="text-sm text-muted-foreground">Team Deposits</div>
             </div>
           </div>

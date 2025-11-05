@@ -4,17 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
+import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
 export interface TeamRewardHistoryEntry {
-  id: string
-  type: "TEAM_EARN_L1" | "TEAM_EARN_L2"
-  amount: number
-  percent: number
-  baseAmount: number
-  createdAt: string
-  claimedAt: string
-  sourceTxId: string
-  payer: { id: string; name: string | null; email: string | null } | null
+  id?: string
+  type?: "TEAM_EARN_L1" | "TEAM_EARN_L2"
+  amount?: number
+  percent?: number
+  baseAmount?: number
+  createdAt?: string
+  claimedAt?: string
+  sourceTxId?: string
+  payer?: { id?: string | null; name?: string | null; email?: string | null } | null
 }
 
 interface TeamRewardsHistoryProps {
@@ -23,19 +24,28 @@ interface TeamRewardsHistoryProps {
 }
 
 function formatPayer(entry: TeamRewardHistoryEntry) {
-  if (entry.payer?.name) return entry.payer.name
-  if (entry.payer?.email) return entry.payer.email
-  if (entry.payer?.id) return `User ${entry.payer.id.slice(-6)}`
+  const payer = entry.payer ?? null
+  if (!payer) return "Unknown"
+
+  if (typeof payer.name === "string" && payer.name.trim().length > 0) return payer.name
+  if (typeof payer.email === "string" && payer.email.trim().length > 0) return payer.email
+  if (typeof payer.id === "string" && payer.id.length > 0) return `User ${payer.id.slice(-6)}`
   return "Unknown"
 }
 
 function formatPercent(value: number) {
-  const rounded = Number.parseFloat(value.toFixed(2))
-  return `${rounded}%`
+  const rounded = ensureNumber(value, Number.NaN)
+  if (!Number.isFinite(rounded)) {
+    return "N/A"
+  }
+
+  return `${Number.parseFloat(rounded.toFixed(2))}%`
 }
 
 function formatType(type: TeamRewardHistoryEntry["type"]) {
-  return type === "TEAM_EARN_L1" ? "Team Earning (L1)" : "Team Earning (L2)"
+  if (type === "TEAM_EARN_L1") return "Team Earning (L1)"
+  if (type === "TEAM_EARN_L2") return "Team Earning (L2)"
+  return "Team Earning"
 }
 
 export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryProps) {
@@ -78,16 +88,24 @@ export function TeamRewardsHistory({ entries, isLoading }: TeamRewardsHistoryPro
                 </TableCell>
               </TableRow>
             ) : (
-              entries.map((entry) => {
-                const claimedDate = `${formatDate(entry.claimedAt, "long")} ${formatTime(entry.claimedAt)}`
+              entries.map((entry, index) => {
+                const claimedAt = ensureDate(entry.claimedAt)
+                const claimedDate = claimedAt
+                  ? `${formatDate(claimedAt, "long")} ${formatTime(claimedAt)}`
+                  : "Date unavailable"
+                const baseAmount = ensureNumber(entry.baseAmount, 0)
+                const amount = ensureNumber(entry.amount, 0)
+                const percentDisplay = formatPercent(entry.percent ?? Number.NaN)
+                const rowKey = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : `history-${index}`
+
                 return (
-                  <TableRow key={entry.id}>
+                  <TableRow key={rowKey}>
                     <TableCell className="whitespace-nowrap">{claimedDate}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatPayer(entry)}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatType(entry.type)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(entry.baseAmount)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{formatPercent(entry.percent)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(entry.amount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(baseAmount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{percentDisplay}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{formatCurrency(amount)}</TableCell>
                   </TableRow>
                 )
               })
