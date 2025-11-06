@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -105,42 +105,74 @@ export function LevelProgress({
   message,
 }: LevelProgressProps) {
   const safeCurrentLevel = ensureNumber(currentLevel, 0)
-  const safeLevelProgress =
-    levelProgress && typeof levelProgress === "object"
-      ? {
-          currentActive: ensureNumber(levelProgress.currentActive, 0),
-          requiredActive: Math.max(ensureNumber(levelProgress.requiredActive, 0), 0),
-          progress: Math.min(Math.max(ensureNumber(levelProgress.progress, 0), 0), 100),
-          nextLevel: ensureNumber(levelProgress.nextLevel, safeCurrentLevel + 1),
-        }
-      : null
-  const safeTeamStats = {
-    totalMembers: ensureNumber(teamStats?.totalMembers, 0),
-    activeMembers: ensureNumber(teamStats?.activeMembers, 0),
-    directReferrals: ensureNumber(teamStats?.directReferrals, 0),
-    directActive: ensureNumber(teamStats?.directActive, 0),
-    totalTeamDeposits: ensureNumber(teamStats?.totalTeamDeposits, 0),
-    totalTeamEarnings: ensureNumber(teamStats?.totalTeamEarnings, 0),
-  }
-  const safeDirectActiveCount = ensureNumber(directActiveCount, 0)
-  const safeTotalActiveDirects = ensureNumber(totalActiveDirects, 0)
-  const lastLevelUpDate = ensureDate(lastLevelUpAt)
-  const safeMessage =
-    typeof message === "string" && message.trim().length > 0
-      ? message
-      : "Keep engaging your team to unlock the next level."
+  const safeLevelProgress = useMemo(() => {
+    if (levelProgress && typeof levelProgress === "object") {
+      return {
+        currentActive: ensureNumber(levelProgress.currentActive, 0),
+        requiredActive: Math.max(ensureNumber(levelProgress.requiredActive, 0), 0),
+        progress: Math.min(Math.max(ensureNumber(levelProgress.progress, 0), 0), 100),
+        nextLevel: ensureNumber(levelProgress.nextLevel, safeCurrentLevel + 1),
+      }
+    }
 
-  const currentOverrides = buildOverrideSummaries(currentRule)
-  const nextOverrides = buildOverrideSummaries(nextRule)
-  const currentDirectPct = ensureNumber(currentRule?.directPct, Number.NaN)
-  const currentTeamRewardPct = ensureNumber(currentRule?.teamRewardPct, Number.NaN)
-  const nextDirectPct = ensureNumber(nextRule?.directPct, Number.NaN)
-  const directPctDelta =
-    Number.isFinite(nextDirectPct) && Number.isFinite(currentDirectPct)
-      ? Number.parseFloat((nextDirectPct - currentDirectPct).toFixed(2))
-      : null
-  const monthlyBonus = ensureNumber(nextRule?.monthlyTargets?.bonus, Number.NaN)
-  const monthlySalary = ensureNumber(nextRule?.monthlyTargets?.salary, Number.NaN)
+    return null
+  }, [levelProgress, safeCurrentLevel])
+
+  const safeTeamStats = useMemo(
+    () => ({
+      totalMembers: ensureNumber(teamStats?.totalMembers, 0),
+      activeMembers: ensureNumber(teamStats?.activeMembers, 0),
+      directReferrals: ensureNumber(teamStats?.directReferrals, 0),
+      directActive: ensureNumber(teamStats?.directActive, 0),
+      totalTeamDeposits: ensureNumber(teamStats?.totalTeamDeposits, 0),
+      totalTeamEarnings: ensureNumber(teamStats?.totalTeamEarnings, 0),
+    }),
+    [teamStats],
+  )
+
+  const safeDirectActiveCount = useMemo(() => ensureNumber(directActiveCount, 0), [directActiveCount])
+  const safeTotalActiveDirects = useMemo(
+    () => ensureNumber(totalActiveDirects, 0),
+    [totalActiveDirects],
+  )
+  const lastLevelUpDate = useMemo(() => ensureDate(lastLevelUpAt), [lastLevelUpAt])
+  const safeMessage = useMemo(
+    () =>
+      typeof message === "string" && message.trim().length > 0
+        ? message
+        : "Keep engaging your team to unlock the next level.",
+    [message],
+  )
+
+  const currentOverrides = useMemo(() => buildOverrideSummaries(currentRule), [currentRule])
+  const nextOverrides = useMemo(() => buildOverrideSummaries(nextRule), [nextRule])
+  const currentDirectPct = useMemo(
+    () => ensureNumber(currentRule?.directPct, Number.NaN),
+    [currentRule],
+  )
+  const currentTeamRewardPct = useMemo(
+    () => ensureNumber(currentRule?.teamRewardPct, Number.NaN),
+    [currentRule],
+  )
+  const nextDirectPct = useMemo(
+    () => ensureNumber(nextRule?.directPct, Number.NaN),
+    [nextRule],
+  )
+  const directPctDelta = useMemo(() => {
+    if (Number.isFinite(nextDirectPct) && Number.isFinite(currentDirectPct)) {
+      return Number.parseFloat((nextDirectPct - currentDirectPct).toFixed(2))
+    }
+
+    return null
+  }, [currentDirectPct, nextDirectPct])
+  const monthlyBonus = useMemo(
+    () => ensureNumber(nextRule?.monthlyTargets?.bonus, Number.NaN),
+    [nextRule],
+  )
+  const monthlySalary = useMemo(
+    () => ensureNumber(nextRule?.monthlyTargets?.salary, Number.NaN),
+    [nextRule],
+  )
 
   const [levelHighlight, setLevelHighlight] = useState(false)
   const [progressHighlight, setProgressHighlight] = useState(false)

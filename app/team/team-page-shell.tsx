@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
 import { Sidebar } from "@/components/layout/sidebar"
@@ -17,6 +17,30 @@ import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
 import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
 import { TeamList } from "./TeamList"
+
+const LEVEL_CACHE_KEY = "team-level-progress-cache-v1"
+
+function readCachedLevelData(): LevelResponse | null {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(LEVEL_CACHE_KEY)
+    if (!raw) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw) as unknown
+    if (parsed && typeof parsed === "object") {
+      return parsed as LevelResponse
+    }
+  } catch (error) {
+    console.error("Failed to read cached level progress", error)
+  }
+
+  return null
+}
 
 async function fetcher<T>(url: string): Promise<T> {
   try {
@@ -231,7 +255,9 @@ export default function TeamPageShell() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState("structure")
 
-  const { data: meData } = useSWR<MeResponse>("/api/auth/me", fetcher, {
+  const [cachedLevelData, setCachedLevelData] = useState<LevelResponse | null>(() => readCachedLevelData())
+
+  const { data: meData, isLoading: meLoading } = useSWR<MeResponse>("/api/auth/me", fetcher, {
     revalidateOnFocus: false,
   })
 
@@ -273,9 +299,45 @@ export default function TeamPageShell() {
     data: levelData,
     isLoading: levelLoading,
     error: levelError,
-  } = useSWR<LevelResponse>(user ? "/api/levels/eligibility" : null, fetcher, {
+    mutate: mutateLevels,
+    isValidating: levelValidating,
+  } = useSWR<LevelResponse>("/api/levels/eligibility", fetcher, {
     revalidateOnFocus: false,
+    fallbackData: cachedLevelData ?? undefined,
   })
+
+  const previousTabRef = useRef(activeTab)
+
+  useEffect(() => {
+    if (!levelData) {
+      return
+    }
+
+    setCachedLevelData(levelData)
+
+    if (typeof window === "undefined") {
+      return
+    }
+
+    try {
+      window.sessionStorage.setItem(LEVEL_CACHE_KEY, JSON.stringify(levelData))
+    } catch (error) {
+      console.error("Failed to cache level progress", error)
+    }
+  }, [levelData])
+
+  useEffect(() => {
+    const previousTab = previousTabRef.current
+    previousTabRef.current = activeTab
+
+    if (meLoading) {
+      return
+    }
+
+    if (activeTab === "levels" && previousTab !== "levels") {
+      void mutateLevels()
+    }
+  }, [activeTab, meLoading, mutateLevels])
 
   const [isClaiming, setIsClaiming] = useState(false)
 
@@ -340,12 +402,12 @@ export default function TeamPageShell() {
       }
     : null
 
-  const levelContent = (() => {
-    if (levelLoading) {
+  const levelContent = useMemo(() => {
+    if (levelLoading && !levelData) {
       return <LevelProgressSkeleton />
     }
 
-    if (levelError) {
+    if (levelError && !levelData) {
       return (
         <div className="rounded-xl border border-border/60 bg-card p-6 text-sm text-destructive">
           Unable to load level progress right now. Please try again shortly.
@@ -374,7 +436,7 @@ export default function TeamPageShell() {
         No level progress data is available yet. Engage your team to start tracking progress.
       </div>
     )
-  })()
+  }, [levelData, levelError, levelLoading])
 
   return (
     <div className="flex min-h-screen flex-col bg-background md:flex-row">
@@ -443,6 +505,16 @@ export default function TeamPageShell() {
 
             <TabsContent value="levels" className="space-y-6">
               {levelContent}
+              {activeTab === "levels" && levelValidating && levelData ? (
+                <div className="text-xs text-muted-foreground">
+                  Updating level details...
+                </div>
+              ) : null}
+              {activeTab === "levels" && levelError && levelData ? (
+                <div className="text-xs text-destructive">
+                  Unable to refresh level progress right now. Showing your last available data.
+                </div>
+              ) : null}
             </TabsContent>
           </Tabs>
         </div>
