@@ -57,7 +57,7 @@ interface PendingRewardItem {
   id?: string
   type?: "TEAM_EARN_L1" | "TEAM_EARN_L2"
   amount?: number
-  percent?: number
+  percent?: number // NOTE: fractional (e.g., 0.02 for 2%)
   baseAmount?: number
   createdAt?: string
   sourceTxId?: string
@@ -121,20 +121,26 @@ interface AvailableToClaimCardProps {
 
 function buildSourceLabel(payer: PendingRewardItem["payer"]): string {
   if (!payer) return "Unknown"
-
-  if (typeof payer.name === "string" && payer.name.trim().length > 0) {
-    return payer.name
-  }
-
-  if (typeof payer.email === "string" && payer.email.trim().length > 0) {
-    return payer.email
-  }
-
+  if (typeof payer.name === "string" && payer.name.trim().length > 0) return payer.name
+  if (typeof payer.email === "string" && payer.email.trim().length > 0) return payer.email
   const payerId = typeof payer.id === "string" ? payer.id : null
   return payerId ? `User ${payerId.slice(-6)}` : "Unknown"
 }
 
+const toPercentDisplay = (fractional: unknown): string => {
+  const value = ensureNumber(fractional, Number.NaN)
+  if (!Number.isFinite(value)) return "N/A"
+  return `${(value * 100).toFixed(2)}%`
+}
+
 function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: AvailableToClaimCardProps) {
+  const hasItems = items.length > 0
+  const sorted = [...items].sort((a, b) => {
+    const da = ensureDate(a.createdAt)?.getTime() ?? 0
+    const db = ensureDate(b.createdAt)?.getTime() ?? 0
+    return db - da // newest first
+  })
+
   return (
     <Card>
       <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -144,7 +150,7 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
             Review unclaimed team earnings. Claiming will credit the payout amount to your wallet balance.
           </p>
         </div>
-        <Button onClick={onClaim} disabled={isClaiming || items.length === 0}>
+        <Button onClick={onClaim} disabled={isClaiming || !hasItems}>
           {isClaiming ? "Claiming..." : "Claim all"}
         </Button>
       </CardHeader>
@@ -174,20 +180,18 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
                   <TableCell className="text-right"><Skeleton className="ml-auto h-8 w-20" /></TableCell>
                 </TableRow>
               ))
-            ) : items.length === 0 ? (
+            ) : !hasItems ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   No team earnings are waiting to be claimed right now. New rewards will appear here when your team earns.
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((item, index) => {
+              sorted.map((item, index) => {
                 const createdAt = ensureDate(item.createdAt)
                 const createdDisplay = createdAt
                   ? `${formatDate(createdAt, "long")} ${formatTime(createdAt)}`
                   : "Date unavailable"
-                const percentValue = ensureNumber(item.percent, Number.NaN)
-                const percentDisplay = Number.isFinite(percentValue) ? `${percentValue.toFixed(2)}%` : "N/A"
                 const baseAmount = ensureNumber(item.baseAmount, 0)
                 const amount = ensureNumber(item.amount, 0)
                 const sourceDisplay = buildSourceLabel(item.payer ?? null)
@@ -205,7 +209,7 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
                     <TableCell className="whitespace-nowrap">{sourceDisplay}</TableCell>
                     <TableCell className="whitespace-nowrap">{typeLabel}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">{formatCurrency(baseAmount)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-right">{percentDisplay}</TableCell>
+                    <TableCell className="whitespace-nowrap text-right">{toPercentDisplay(item.percent)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">{formatCurrency(amount)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
                       <Button variant="outline" size="sm" onClick={onClaim} disabled={isClaiming}>
@@ -309,11 +313,11 @@ export default function TeamPageShell() {
 
       await Promise.all([mutateRewards(), mutateHistory()])
 
+      const credited = ensureNumber((payload as RewardsResponse | null)?.creditedAmount, 0)
+
       toast({
         title: "Rewards added to balance",
-        description: `Successfully claimed ${formatCurrency(
-          ensureNumber((payload as RewardsResponse | null)?.creditedAmount, 0),
-        )}.`,
+        description: `Successfully claimed ${formatCurrency(credited)}.`,
       })
     } catch (error) {
       console.error("Claim rewards error", error)
