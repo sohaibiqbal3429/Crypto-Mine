@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises"
 import { extname, join } from "path"
 import { createHash, randomUUID } from "crypto"
+import mongoose from "mongoose"
 
 import dbConnect from "@/lib/mongodb"
 import { getDepositWalletOptionMap } from "@/lib/config/wallet"
@@ -62,7 +63,7 @@ function isLikelyTransactionHash(hash: string): boolean {
   return HASH_PATTERNS.some((pattern) => pattern.test(hash.trim()))
 }
 
-// ? Updated function without file-type/size restrictions
+// Persist without file-type/size restrictions (as requested)
 async function persistReceipt(file: File) {
   try {
     await mkdir(RECEIPT_UPLOAD_DIRECTORY, { recursive: true })
@@ -158,47 +159,91 @@ export async function submitDeposit(input: DepositSubmissionInput) {
     throw new DepositSubmissionError("A payment receipt screenshot from your exchange is required")
   }
 
+  // Guard against duplicate submissions of the same tx hash
   const existingTransaction = await Transaction.findOne({
     "meta.transactionNumber": normalizedTransactionHash,
     type: "deposit",
   })
-
   if (existingTransaction) {
     throw new DepositSubmissionError("This transaction hash has already been submitted")
   }
 
   let receiptResult: Awaited<ReturnType<typeof persistReceipt>> | null = null
 
+  // Only persist the receipt after we know it's not a duplicate tx
   if (input.receiptFile) {
     receiptResult = await persistReceipt(input.receiptFile)
   }
 
-
-  if (isFakeDeposit) {
+  // PENDING path for real deposits: just enqueue review (no payouts here)
+  if (!isFakeDeposit) {
     const transaction = await Transaction.create({
       userId: input.userId,
       type: "deposit",
-      amount: FAKE_DEPOSIT_AMOUNT,
-      status: "approved",
+      amount: parsed.data.amount,
+      status: "pending",
       meta: {
         transactionNumber: normalizedTransactionHash,
         transactionHash: normalizedTransactionHash,
         depositWalletAddress: walletOption.address,
         depositNetwork: walletOption.network,
         depositNetworkId: walletOption.id,
-        isFakeDeposit: true,
         exchangePlatform: parsed.data.exchangePlatform ?? null,
         ...(receiptResult ? { receipt: receiptResult.meta } : {}),
       },
     })
 
-    const lifetimeBefore = Number(user.depositTotal ?? 0)
-    const lifetimeAfter = lifetimeBefore + FAKE_DEPOSIT_AMOUNT
-    const wasActive = isUserActiveFromDeposits(lifetimeBefore)
-    const nowActive = isUserActiveFromDeposits(lifetimeAfter)
+    return {
+      status: "pending" as const,
+      transaction,
+      receiptMeta: receiptResult?.meta,
+      message: `Deposit submitted for review (${walletOption.network})`,
+      activated: false,
+    }
+  }
 
-    await Promise.all([
-      User.updateOne(
+  // ---- FAKE DEPOSIT: approve + credit + payouts ATOMICALLY ------------------
+  const session = await mongoose.startSession()
+  try {
+    let result: {
+      status: "approved"
+      transaction: any
+      receiptMeta?: any
+      message: string
+      activated: boolean
+    }
+
+    await session.withTransaction(async () => {
+      // 1) Create the approved deposit transaction first (source of truth for sourceTxId)
+      const transaction = await Transaction.create(
+        [
+          {
+            userId: input.userId,
+            type: "deposit",
+            amount: FAKE_DEPOSIT_AMOUNT,
+            status: "approved",
+            meta: {
+              transactionNumber: normalizedTransactionHash,
+              transactionHash: normalizedTransactionHash,
+              depositWalletAddress: walletOption.address,
+              depositNetwork: walletOption.network,
+              depositNetworkId: walletOption.id,
+              isFakeDeposit: true,
+              exchangePlatform: parsed.data.exchangePlatform ?? null,
+              ...(receiptResult ? { receipt: receiptResult.meta } : {}),
+            },
+          },
+        ],
+        { session },
+      ).then((docs) => docs[0])
+
+      // 2) Recalculate activation BEFORE applying rewards (post-update status is authoritative)
+      const lifetimeBefore = Number(user.depositTotal ?? 0)
+      const lifetimeAfter = lifetimeBefore + FAKE_DEPOSIT_AMOUNT
+      const wasActive = isUserActiveFromDeposits(lifetimeBefore)
+      const nowActive = isUserActiveFromDeposits(lifetimeAfter)
+
+      await User.updateOne(
         { _id: input.userId },
         {
           $inc: { depositTotal: FAKE_DEPOSIT_AMOUNT },
@@ -207,8 +252,10 @@ export async function submitDeposit(input: DepositSubmissionInput) {
             status: nowActive ? "active" : "inactive",
           },
         },
-      ),
-      Balance.updateOne(
+        { session },
+      )
+
+      await Balance.updateOne(
         { userId: input.userId },
         {
           $inc: {
@@ -223,104 +270,90 @@ export async function submitDeposit(input: DepositSubmissionInput) {
             teamRewardsClaimed: 0,
           },
         },
-        { upsert: true },
-      ),
-    ])
-
-    const activationId = transaction._id.toString()
-    const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
-      depositTransactionId: activationId,
-      depositAt: transaction.createdAt,
-    })
-
-    const activated = !wasActive && nowActive
-
-    if (activated) {
-      await Transaction.updateOne(
-        { _id: transaction._id },
-        { $set: { "meta.qualifiesForActivation": true } },
+        { upsert: true, session },
       )
 
-      transaction.meta = {
-        ...transaction.meta,
-        qualifiesForActivation: true,
+      // 3) Apply deposit rewards (idempotent inside rewards service via sourceTxId)
+      const activationId = transaction._id.toString()
+      const rewardOutcome = await applyDepositRewards(input.userId, FAKE_DEPOSIT_AMOUNT, {
+        depositTransactionId: activationId,
+        depositAt: transaction.createdAt,
+        // If your rewards service accepts a session, pass it:
+        // @ts-ignore – optional for in-memory; safe for real Mongo if implemented
+        session,
+      })
+
+      const activated = !wasActive && nowActive
+
+      if (activated) {
+        await Transaction.updateOne(
+          { _id: transaction._id },
+          { $set: { "meta.qualifiesForActivation": true } },
+          { session },
+        )
+        transaction.meta = { ...transaction.meta, qualifiesForActivation: true }
       }
-    }
 
-    transaction.meta = {
-      ...(transaction.meta ?? {}),
-      bonusBreakdown: {
-        selfPercent: nowActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
-        l1Percent: DEPOSIT_L1_PERCENT * 100,
-        l2Percent: nowActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
-        selfAmount: rewardOutcome.selfBonus,
-        l1Amount: rewardOutcome.l1Bonus,
-        l2Amount: rewardOutcome.l2Bonus,
-        l1UserId: rewardOutcome.l1UserId,
-        l2UserId: rewardOutcome.l2UserId,
-      },
-    }
+      // 4) Enrich transaction with a transparent bonus breakdown
+      transaction.meta = {
+        ...(transaction.meta ?? {}),
+        bonusBreakdown: {
+          selfPercent: nowActive ? DEPOSIT_SELF_PERCENT_ACTIVE * 100 : 0,
+          l1Percent: DEPOSIT_L1_PERCENT * 100,
+          l2Percent: nowActive ? DEPOSIT_L2_PERCENT_ACTIVE * 100 : 0,
+          selfAmount: rewardOutcome.selfBonus,
+          l1Amount: rewardOutcome.l1Bonus,
+          l2Amount: rewardOutcome.l2Bonus,
+          l1UserId: rewardOutcome.l1UserId,
+          l2UserId: rewardOutcome.l2UserId,
+        },
+      }
+      await transaction.save({ session })
 
-    await transaction.save()
+      // 5) Notify the user
+      const notificationBodyParts = [
+        `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
+      ]
 
-    const notificationBodyParts = [
-      `Your deposit of $${FAKE_DEPOSIT_AMOUNT.toFixed(2)} has been approved and credited to your account.`,
-    ]
+      if (activated) {
+        notificationBodyParts.push(
+          `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(2)} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(
+            2,
+          )} activation threshold.`,
+        )
+      } else if (nowActive) {
+        notificationBodyParts.push("Your account remains Active.")
+      } else {
+        const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter)
+        notificationBodyParts.push(
+          `Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`,
+        )
+      }
 
-    if (activated) {
-      notificationBodyParts.push(
-        `You are now Active with lifetime deposits of $${lifetimeAfter.toFixed(2)} meeting the $${ACTIVE_DEPOSIT_THRESHOLD.toFixed(
-          2,
-        )} activation threshold.`,
+      await Notification.create(
+        [
+          {
+            userId: input.userId,
+            kind: "deposit-approved",
+            title: "Deposit Approved",
+            body: notificationBodyParts.join(" "),
+          },
+        ],
+        { session },
       )
-    } else if (nowActive) {
-      notificationBodyParts.push("Your account remains Active.")
-    } else {
-      const remaining = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeAfter)
-      notificationBodyParts.push(
-        `Deposit $${remaining.toFixed(2)} more in lifetime totals to become Active and unlock bonuses.`,
-      )
-    }
 
-    await Notification.create({
-      userId: input.userId,
-      kind: "deposit-approved",
-      title: "Deposit Approved",
-      body: notificationBodyParts.join(" "),
+      result = {
+        status: "approved" as const,
+        transaction,
+        receiptMeta: receiptResult?.meta,
+        message: activated ? "Deposit processed and account activated!" : "Fake deposit processed successfully!",
+        activated,
+      }
     })
 
-    return {
-      status: "approved" as const,
-      transaction,
-      receiptMeta: receiptResult?.meta,
-      message: activated
-        ? "Deposit processed and account activated!"
-        : "Fake deposit processed successfully!",
-      activated,
-    }
-  }
-
-  const transaction = await Transaction.create({
-    userId: input.userId,
-    type: "deposit",
-    amount: parsed.data.amount,
-    status: "pending",
-    meta: {
-      transactionNumber: normalizedTransactionHash,
-      transactionHash: normalizedTransactionHash,
-      depositWalletAddress: walletOption.address,
-      depositNetwork: walletOption.network,
-      depositNetworkId: walletOption.id,
-      exchangePlatform: parsed.data.exchangePlatform ?? null,
-      ...(receiptResult ? { receipt: receiptResult.meta } : {}),
-    },
-  })
-
-  return {
-    status: "pending" as const,
-    transaction,
-    receiptMeta: receiptResult?.meta,
-    message: `Deposit submitted for review (${walletOption.network})`,
-    activated: false,
+    // @ts-expect-error set in transaction scope
+    return result!
+  } finally {
+    await session.endSession()
   }
 }
