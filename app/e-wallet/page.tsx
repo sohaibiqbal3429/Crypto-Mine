@@ -241,12 +241,9 @@ export default function EWalletPage() {
                         <div className="flex-1 space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-semibold">{address.label}</h3>
-                            {typeof address.verified === "boolean" && (
-                              <Badge
-                                variant={address.verified ? "default" : "secondary"}
-                                className="text-xs"
-                              >
-                                {address.verified ? "Verified" : "Unverified"}
+                            {address.verified && (
+                              <Badge variant="default" className="text-xs">
+                                Verified
                               </Badge>
                             )}
                           </div>
