@@ -19,6 +19,15 @@ function toObjectId(id: unknown) {
   return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
 }
 
+function toDocumentId(value: unknown): string {
+  if (typeof value === "string" && value) return value;
+  if (value instanceof mongoose.Types.ObjectId) return value.toHexString();
+  if (value && typeof (value as { toString?: () => string }).toString === "function") {
+    return (value as { toString: () => string }).toString();
+  }
+  return "";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request);
@@ -26,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     await dbConnect();
 
-    const adminUser = await User.findById(userPayload.userId).lean();
+    const adminUser = await User.findById(userPayload.userId);
     if (!adminUser || adminUser.role !== "admin") return badRequest("Unauthorized", 401);
 
     const body = (await request.json().catch(() => null)) as { transactionId?: unknown } | null;
@@ -38,30 +47,28 @@ export async function POST(request: NextRequest) {
     if (!txOid) return badRequest("Invalid transaction id");
 
     // 1) ATOMIC approval to avoid races (returns null if already processed)
-    const approvedTx = await Transaction.findOneAndUpdate(
-      { _id: txOid, type: "deposit", status: "pending" },
-      { $set: { status: "approved" } },
-      { new: true }
-    );
+    const transactionDoc = await Transaction.findById(transactionId);
+    if (!transactionDoc) return badRequest("Transaction not found", 404);
+    if (transactionDoc.type !== "deposit") return badRequest("Invalid transaction type");
+    if (transactionDoc.status === "approved") return badRequest("Transaction already approved", 409);
+    if (transactionDoc.status !== "pending") return badRequest("Transaction not pending");
 
-    if (!approvedTx) {
-      // It might not exist, be a different type/status, or already approved/rejected
-      const existing = await Transaction.findById(txOid).lean();
-      if (!existing) return badRequest("Transaction not found", 404);
-      if (existing.type !== "deposit") return badRequest("Invalid transaction type");
-      if (existing.status === "approved") return badRequest("Transaction already approved", 409);
-      return badRequest("Transaction not pending");
-    }
+    transactionDoc.status = "approved";
+    const approvedTx = await transactionDoc.save();
 
     // 2) Validate amount & user
     const amountNum = Number(approvedTx.amount ?? 0);
     if (!Number.isFinite(amountNum) || amountNum <= 0) return badRequest("Invalid deposit amount");
 
-    const depositorId = toObjectId(approvedTx.userId);
-    if (!depositorId) return badRequest("Transaction user missing");
+    const depositorIdStr = toDocumentId(approvedTx.userId);
+    if (!depositorIdStr) return badRequest("Transaction user missing");
+    const depositorObjectId = toObjectId(depositorIdStr);
 
     // 3) Load user, compute activation + lifetime totals
-    const user = await User.findById(depositorId);
+    let user = await User.findById(depositorIdStr);
+    if (!user && depositorObjectId) {
+      user = await User.findById(depositorObjectId);
+    }
     if (!user) return badRequest("User not found", 404);
 
     const lifetimeBefore = Number(user.depositTotal ?? 0);
@@ -78,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // 4) Credit balance (upsert) — cannot fail on missing doc
     await Balance.updateOne(
-      { userId: depositorId },
+      { userId: depositorIdStr },
       {
         $inc: { current: amountNum, totalBalance: amountNum },
         $setOnInsert: {
@@ -102,8 +109,8 @@ export async function POST(request: NextRequest) {
     } | null = null;
 
     try {
-      const outcome = await applyDepositRewards(depositorId.toHexString(), amountNum, {
-        depositTransactionId: approvedTx._id.toString(),
+      const outcome = await applyDepositRewards(depositorIdStr, amountNum, {
+        depositTransactionId: approvedTx.id ?? toDocumentId(approvedTx._id),
         depositAt: approvedTx.createdAt ?? new Date(),
         transactional: false,
       });
@@ -156,7 +163,7 @@ export async function POST(request: NextRequest) {
       }
 
       await Notification.create({
-        userId: depositorId,
+        userId: depositorIdStr,
         kind: "deposit-approved",
         title: "Deposit Approved",
         body: msg.join(" "),
