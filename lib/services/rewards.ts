@@ -61,7 +61,9 @@ async function createPayout({
 
   // Idempotency: one payout per (receiver, type, sourceTxId)
   const filter = { receiverUserId, type, sourceTxId }
-  const updateOptions = sessionRef ? { upsert: true, session: sessionRef } : { upsert: true }
+  const updateOptions = sessionRef
+    ? { upsert: true, session: sessionRef, timestamps: false as const }
+    : { upsert: true, timestamps: false as const }
 
   const upsertResult = await BonusPayout.updateOne(
     filter,
