@@ -1,5 +1,4 @@
 import mongoose, { Schema, type Document } from "mongoose"
-
 import { createModelProxy } from "@/lib/in-memory/model-factory"
 
 export type BonusPayoutType =
@@ -13,10 +12,10 @@ export interface IBonusPayout extends Document {
   payerUserId: mongoose.Types.ObjectId
   receiverUserId: mongoose.Types.ObjectId
   type: BonusPayoutType
-  baseAmount: number
-  percent: number
-  payoutAmount: number
-  sourceTxId: string
+  baseAmount: number          // base amount the percent is applied to
+  percent: number             // stored as decimal fraction (e.g. 0.02 for 2%)
+  payoutAmount: number        // rounded to 4dp upstream for precision
+  sourceTxId: string          // idempotency key per event
   status: "PENDING" | "CLAIMED"
   createdAt: Date
   updatedAt: Date
@@ -34,19 +33,23 @@ const BonusPayoutSchema = new Schema<IBonusPayout>(
       index: true,
     },
     baseAmount: { type: Number, required: true },
-    percent: { type: Number, required: true },
+    percent: { type: Number, required: true },     // stored as 0.02, not 2
     payoutAmount: { type: Number, required: true },
     sourceTxId: { type: String, required: true },
     status: { type: String, enum: ["PENDING", "CLAIMED"], default: "PENDING", index: true },
     claimedAt: { type: Date, default: null },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 )
 
-BonusPayoutSchema.index({ receiverUserId: 1, status: 1, createdAt: -1 })
-BonusPayoutSchema.index({ payerUserId: 1, type: 1, createdAt: -1 })
-BonusPayoutSchema.index({ sourceTxId: 1, type: 1, receiverUserId: 1 }, { unique: true })
+// Hot-path read indices
+BonusPayoutSchema.index({ receiverUserId: 1, status: 1, createdAt: 1 }) // claim queue order
+BonusPayoutSchema.index({ payerUserId: 1, type: 1, createdAt: -1 })     // reporting/exports
+
+// ✅ Exact idempotency key as requested: (type, source_tx_id, receiver_user_id)
+BonusPayoutSchema.index(
+  { type: 1, sourceTxId: 1, receiverUserId: 1 },
+  { unique: true, name: "uniq_type_source_receiver" },
+)
 
 export default createModelProxy<IBonusPayout>("BonusPayout", BonusPayoutSchema)
