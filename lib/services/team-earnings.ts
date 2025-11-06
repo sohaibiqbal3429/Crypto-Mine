@@ -46,7 +46,7 @@ export interface PendingTeamEarning {
   id: string
   type: TeamEarningType
   amount: number
-  percent: number
+  percent: number     // percent as a whole number, e.g. 2 for 2%
   baseAmount: number
   createdAt: Date
   payer: UserLookupEntry | null
@@ -64,8 +64,13 @@ export interface TeamRewardsPreview {
   pending: PendingTeamEarning[]
 }
 
+/**
+ * Reads pending claimables and enriches with payer info.
+ * Totals are taken from Balance as the primary source of truth (kept in sync by rewards service),
+ * with a safe fallback to computed values if Balance is missing.
+ */
 export async function previewTeamEarnings(userId: string): Promise<TeamRewardsPreview> {
-  const [pendingRaw, claimedRaw] = await Promise.all([
+  const [pendingRaw, claimedRaw, balanceDoc] = await Promise.all([
     getPendingTeamEarnings(userId),
     BonusPayout.find({
       receiverUserId: new mongoose.Types.ObjectId(userId),
@@ -73,6 +78,9 @@ export async function previewTeamEarnings(userId: string): Promise<TeamRewardsPr
       type: { $in: TEAM_EARNING_TYPES },
     })
       .select({ payoutAmount: 1, claimedAt: 1 })
+      .lean(),
+    Balance.findOne({ userId: new mongoose.Types.ObjectId(userId) })
+      .select({ teamRewardsAvailable: 1, teamRewardsClaimed: 1, teamRewardsLastClaimedAt: 1 })
       .lean(),
   ])
 
@@ -83,25 +91,37 @@ export async function previewTeamEarnings(userId: string): Promise<TeamRewardsPr
     id: entry.id,
     type: entry.type as TeamEarningType,
     amount: entry.payoutAmount,
-    percent: entry.percent,
+    percent: entry.percent, // already in %
     baseAmount: entry.baseAmount,
     createdAt: entry.createdAt,
     sourceTxId: entry.sourceTxId,
     payer: payerLookup[entry.payerUserId] ?? null,
   }))
 
-  const available = pending.reduce((total, entry) => total + entry.amount, 0)
-  let claimedTotal = 0
-  let lastClaimedAt: Date | null = null
+  // Prefer Balance fields (they are updated atomically when creating/claiming)
+  const availableFromBalance = Number(balanceDoc?.teamRewardsAvailable ?? NaN)
+  const claimedFromBalance = Number(balanceDoc?.teamRewardsClaimed ?? NaN)
+  const lastClaimedAtFromBalance =
+    balanceDoc?.teamRewardsLastClaimedAt instanceof Date
+      ? balanceDoc.teamRewardsLastClaimedAt
+      : null
 
+  // Fallbacks if balance not initialized (e.g., legacy data)
+  const availableFallback = pending.reduce((total, entry) => total + entry.amount, 0)
+  let claimedFallback = 0
+  let lastClaimedAtFallback: Date | null = null
   for (const entry of claimedRaw) {
     const amount = Number(entry.payoutAmount ?? 0)
-    claimedTotal += amount
+    claimedFallback += amount
     const claimedAt = entry.claimedAt instanceof Date ? entry.claimedAt : null
-    if (claimedAt && (!lastClaimedAt || claimedAt > lastClaimedAt)) {
-      lastClaimedAt = claimedAt
+    if (claimedAt && (!lastClaimedAtFallback || claimedAt > lastClaimedAtFallback)) {
+      lastClaimedAtFallback = claimedAt
     }
   }
+
+  const available = Number.isFinite(availableFromBalance) ? availableFromBalance : availableFallback
+  const claimedTotal = Number.isFinite(claimedFromBalance) ? claimedFromBalance : claimedFallback
+  const lastClaimedAt = lastClaimedAtFromBalance ?? lastClaimedAtFallback
 
   return { available, claimedTotal, lastClaimedAt, pending }
 }
@@ -113,6 +133,10 @@ export interface ClaimTeamRewardsResult {
   lastClaimedAt: Date | null
 }
 
+/**
+ * Claims all pending team earnings (L1 2% / L2 1%), credits wallet, writes history.
+ * Idempotent via payout status transitions; totals returned align with Balance.
+ */
 export async function claimTeamEarnings(userId: string): Promise<ClaimTeamRewardsResult> {
   const outcome = await claimTeamEarningPayouts(userId)
   if (outcome.claimedCount === 0) {
@@ -126,7 +150,7 @@ export async function claimTeamEarnings(userId: string): Promise<ClaimTeamReward
     id: item.id,
     type: item.type as TeamEarningType,
     amount: item.amount,
-    percent: item.percent,
+    percent: item.percent, // already in %
     baseAmount: item.baseAmount,
     createdAt: item.createdAt,
     claimedAt: item.claimedAt,
@@ -151,7 +175,7 @@ export async function listTeamRewardHistory(userId: string): Promise<ClaimedTeam
     id: entry.id,
     type: entry.type as TeamEarningType,
     amount: entry.payoutAmount,
-    percent: entry.percent,
+    percent: entry.percent, // in %
     baseAmount: entry.baseAmount,
     createdAt: entry.createdAt,
     claimedAt: entry.claimedAt,
@@ -165,6 +189,10 @@ export async function getClaimableTeamRewardTotal(userId: string): Promise<numbe
   return pending.reduce((total, entry) => total + entry.payoutAmount, 0)
 }
 
+/**
+ * One-shot reconciler to sync Balance counters with existing payouts.
+ * Safe to run anytime (idempotent).
+ */
 export async function syncTeamRewardBalance(userId: string) {
   const [available, claimedTotal] = await Promise.all([
     getClaimableTeamRewardTotal(userId),
