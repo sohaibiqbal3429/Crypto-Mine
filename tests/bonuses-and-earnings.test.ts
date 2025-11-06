@@ -354,3 +354,42 @@ test("deposit and earning payouts are idempotent", async () => {
     Number((150 * TEAM_EARN_L1_PERCENT).toFixed(4)),
   )
 })
+
+/**
+ * G. L2 Conditionality:
+ * First deposit below activation threshold => L2 gets 0%.
+ * After user becomes Active, next deposit => L2 gets 3%.
+ */
+test("L2 conditionality respects depositor status at time of deposit", async () => {
+  const { member, l1, l2 } = await setupReferralChain()
+
+  // First deposit: 50 (lifetime < 80) => Inactive for this deposit
+  const first = await approveDeposit(member._id as mongoose.Types.ObjectId, 50)
+  assert.equal(first.outcome.depositorActive, false)
+
+  const firstPayouts = await BonusPayout.find({ sourceTxId: toHex(first.transaction._id) }).lean()
+  const firstTypes = new Set(firstPayouts.map((p) => p.type))
+  assert.ok(firstTypes.has("DEPOSIT_L1"))
+  assert.ok(!firstTypes.has("DEPOSIT_L2"))
+  assert.equal(
+    Number(firstPayouts.find((p) => p.type === "DEPOSIT_L1")?.payoutAmount?.toFixed(4) ?? 0),
+    Number((50 * DEPOSIT_L1_PERCENT).toFixed(4)),
+  )
+
+  // Second deposit: 100 (lifetime is now 150) => Active for this deposit
+  const second = await approveDeposit(member._id as mongoose.Types.ObjectId, 100)
+  assert.equal(second.outcome.depositorActive, true)
+
+  const secondPayouts = await BonusPayout.find({ sourceTxId: toHex(second.transaction._id) }).lean()
+  const byType = Object.fromEntries(
+    secondPayouts.map((p) => [p.type, Number((p.payoutAmount ?? 0).toFixed(4))]),
+  ) as Record<string, number>
+
+  assert.equal(byType.DEPOSIT_BONUS_SELF, Number((100 * DEPOSIT_SELF_PERCENT_ACTIVE).toFixed(4)))
+  assert.equal(byType.DEPOSIT_L1, Number((100 * DEPOSIT_L1_PERCENT).toFixed(4)))
+  assert.equal(byType.DEPOSIT_L2, Number((100 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)))
+
+  // Ensure L2 total came only from the second deposit
+  const l2Total = await sumPayouts({ type: "DEPOSIT_L2", receiverUserId: l2._id })
+  assert.equal(Number(l2Total.toFixed(4)), Number((100 * DEPOSIT_L2_PERCENT_ACTIVE).toFixed(4)))
+})
