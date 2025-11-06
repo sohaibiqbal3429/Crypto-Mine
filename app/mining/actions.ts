@@ -34,7 +34,7 @@ export async function mineAction(): Promise<MiningFormState> {
       success: `Mining successful! Earned $${result.profit.toFixed(2)}`,
       profit: result.profit,
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof MiningActionError) {
       if ((error as any).details?.timeLeft) {
         return {
@@ -45,6 +45,8 @@ export async function mineAction(): Promise<MiningFormState> {
     }
 
     console.error("Mining action failed", error)
-    return { error: "Unable to start mining. Please try again." }
+    const fallbackMessage =
+      error instanceof Error && error.message ? error.message : "Unable to start mining. Please try again."
+    return { error: fallbackMessage }
   }
 }
