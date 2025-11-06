@@ -20,6 +20,7 @@ type QueryFilter = Record<string, any>
 type UpdateSpec = Record<string, any>
 type UpdateOptions = { upsert?: boolean }
 
+// ---- Relations used by .populate() -----------------------------------------
 const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }>> = {
   balances: { userId: { collection: "users" } },
   miningSessions: { userId: { collection: "users" } },
@@ -46,6 +47,15 @@ const COLLECTION_RELATIONS: Record<string, Record<string, { collection: string }
   teamDailyClaims: {
     userId: { collection: "users" },
   },
+}
+
+// ---- Idempotency: composite key matcher (type, sourceTxId, receiverUserId) --
+const IDEMPOTENCY_KEY_FIELDS = ["type", "sourceTxId", "receiverUserId"] as const
+function hasIdempotencyKey(doc: Record<string, any>): boolean {
+  return IDEMPOTENCY_KEY_FIELDS.every((k) => doc[k] !== undefined && doc[k] !== null)
+}
+function sameIdempotencyKey(a: Record<string, any>, b: Record<string, any>): boolean {
+  return IDEMPOTENCY_KEY_FIELDS.every((k) => normalizeForComparison(a[k]) === normalizeForComparison(b[k]))
 }
 
 const DEMO_PASSWORD = "Coin4$"
@@ -103,6 +113,9 @@ class InMemoryQuery<T extends InMemoryDocument> implements PromiseLike<T[]> {
         for (const [field, direction] of entries) {
           const aValue = getValueAtPath(a, field)
           const bValue = getValueAtPath(b, field)
+          if (aValue === bValue) continue
+          if (aValue === undefined || aValue === null) return 1 * direction // push empties to end for asc
+          if (bValue === undefined || bValue === null) return -1 * direction
           if (aValue < bValue) return -1 * direction
           if (aValue > bValue) return 1 * direction
         }
@@ -216,12 +229,20 @@ class InMemoryCollection<T extends InMemoryDocument> {
 
   async create(doc: Partial<T> | Partial<T>[], _options?: unknown): Promise<T | T[]> {
     const createSingle = async (entry: Partial<T>): Promise<T> => {
+      // --- Idempotency guard (type, sourceTxId, receiverUserId) -------------
+      if (entry && typeof entry === "object" && hasIdempotencyKey(entry as Record<string, any>)) {
+        const existing = this.documents.find((d) => sameIdempotencyKey(d, entry as Record<string, any>))
+        if (existing) {
+          return createModelInstance(this, deepClone(existing)) as T
+        }
+      }
+
       const now = new Date()
       const newDoc: T = {
         ...(deepClone(entry) as T),
-        _id: entry._id ?? generateObjectId(),
-        createdAt: entry.createdAt ?? now,
-        updatedAt: entry.updatedAt ?? now,
+        _id: (entry as any)?._id ?? generateObjectId(),
+        createdAt: (entry as any)?.createdAt ?? now,
+        updatedAt: (entry as any)?.updatedAt ?? now,
       }
 
       this.documents.push(newDoc)
@@ -256,9 +277,17 @@ class InMemoryCollection<T extends InMemoryDocument> {
         updatedAt: now,
       }
 
-      this.documents.push(newDoc)
+      // Apply update then run idempotency guard (so upsert respects it)
       applyUpdateOperators(newDoc as unknown as Record<string, any>, update, { isUpsert: true })
-      newDoc.updatedAt = new Date()
+      // If idempotency key present & exists, don't insert duplicate
+      if (hasIdempotencyKey(newDoc as any)) {
+        const dup = this.documents.find((d) => sameIdempotencyKey(d, newDoc as any))
+        if (dup) {
+          return { acknowledged: true, modifiedCount: 0, upsertedId: dup._id, upsertedCount: 0 }
+        }
+      }
+
+      this.documents.push(newDoc)
       return { acknowledged: true, modifiedCount: 1, upsertedId: newDoc._id, upsertedCount: 1 }
     }
 
@@ -314,6 +343,15 @@ class InMemoryCollection<T extends InMemoryDocument> {
       normalized.createdAt = now as any
     }
 
+    // If saving a doc that would violate idempotency, overwrite target with existing
+    if (hasIdempotencyKey(normalized)) {
+      const dup = this.documents.find((d) => sameIdempotencyKey(d, normalized))
+      if (dup && dup._id !== normalized._id) {
+        // adopt the existing _id and treat as update
+        normalized._id = dup._id
+      }
+    }
+
     normalized.updatedAt = now as any
 
     const existingIndex = this.documents.findIndex((entry) => entry._id === normalized._id)
@@ -326,6 +364,14 @@ class InMemoryCollection<T extends InMemoryDocument> {
     }
 
     return deepClone(normalized) as T
+  }
+
+  // ---- snapshot helpers for transactions -----------------------------------
+  _getRaw(): T[] {
+    return this.documents
+  }
+  _setRaw(newDocs: T[]) {
+    ;(this.documents as unknown as T[]) = newDocs
   }
 }
 
@@ -367,6 +413,24 @@ class InMemoryDatabase {
 
     return collection as InMemoryCollection<T>
   }
+
+  // ---- transactional snapshots ---------------------------------------------
+  _snapshot(): Map<string, InMemoryDocument[]> {
+    const snap = new Map<string, InMemoryDocument[]>()
+    for (const [name, coll] of this.collections.entries()) {
+      // deep clone arrays and docs
+      const cloned = coll._getRaw().map((d) => deepClone(d))
+      snap.set(name, cloned)
+    }
+    return snap
+  }
+
+  _restore(snapshot: Map<string, InMemoryDocument[]>) {
+    for (const [name, docs] of snapshot.entries()) {
+      const coll = this.collections.get(name)
+      if (coll) coll._setRaw(docs.map((d) => deepClone(d)))
+    }
+  }
 }
 
 function getDatabase(): InMemoryDatabase {
@@ -406,23 +470,34 @@ function registerMongooseModels(db: InMemoryDatabase) {
     ;(mongoose.models as Record<string, any>)[name] = createModelProxy(collection)
   }
 
-  registerInMemorySessions()
+  registerInMemorySessions(db)
 }
 
 class InMemoryClientSession {
   public inMemory = true
   private active = false
+  private snapshot?: Map<string, InMemoryDocument[]>
+
+  constructor(private readonly db: InMemoryDatabase) {}
 
   async startTransaction() {
     this.active = true
+    // take snapshot for rollback
+    this.snapshot = this.db._snapshot()
   }
 
   async commitTransaction() {
     this.active = false
+    // discard snapshot
+    this.snapshot = undefined
   }
 
   async abortTransaction() {
+    if (this.active && this.snapshot) {
+      this.db._restore(this.snapshot)
+    }
     this.active = false
+    this.snapshot = undefined
   }
 
   async withTransaction<T>(fn: (session: InMemoryClientSession) => Promise<T>): Promise<T> {
@@ -438,13 +513,14 @@ class InMemoryClientSession {
   }
 
   async endSession() {
+    // ensure any pending snapshot is discarded
     this.active = false
+    this.snapshot = undefined
   }
 }
 
-function registerInMemorySessions() {
-  const factory = async () => new InMemoryClientSession()
-
+function registerInMemorySessions(db: InMemoryDatabase) {
+  const factory = async () => new InMemoryClientSession(db)
   ;(mongoose as unknown as { startSession: typeof factory }).startSession = factory
   ;(mongoose.connection as unknown as { startSession: typeof factory }).startSession = factory
 }
@@ -847,6 +923,9 @@ function sortDocuments(docs: any[], sortSpec: Record<string, number>): any[] {
     for (const [field, direction] of entries) {
       const aValue = getValueAtPath(a, field)
       const bValue = getValueAtPath(b, field)
+      if (aValue === bValue) continue
+      if (aValue === undefined || aValue === null) return 1 * direction
+      if (bValue === undefined || bValue === null) return -1 * direction
       if (aValue < bValue) return -1 * direction
       if (aValue > bValue) return 1 * direction
     }
@@ -922,687 +1001,4 @@ function getValueAtPath(target: any, path: string): any {
   if (!path) return target
 
   return path.split(".").reduce((value, key) => {
-    if (value === undefined || value === null) return undefined
-    return value[key]
-  }, target)
-}
-
-function setValueAtPath(target: any, path: string, value: any) {
-  const segments = path.split(".")
-  let current = target
-  for (let index = 0; index < segments.length - 1; index += 1) {
-    const key = segments[index]
-    if (!current[key] || typeof current[key] !== "object") {
-      current[key] = {}
-    }
-    current = current[key]
-  }
-  current[segments[segments.length - 1]] = value
-}
-
-function removePath(target: any, path: string) {
-  const segments = path.split(".")
-  let current = target
-  for (let index = 0; index < segments.length - 1; index += 1) {
-    const key = segments[index]
-    if (!current[key]) {
-      return
-    }
-    current = current[key]
-  }
-  delete current[segments[segments.length - 1]]
-}
-
-function deepClone<T>(value: T): T {
-  if (value instanceof mongoose.Types.ObjectId) {
-    return new mongoose.Types.ObjectId(value.toHexString()) as unknown as T
-  }
-
-  if (value instanceof Date) {
-    return new Date(value.getTime()) as unknown as T
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => deepClone(item)) as unknown as T
-  }
-
-  if (value && typeof value === "object") {
-    const clone: Record<string, any> = {}
-    for (const [key, entry] of Object.entries(value as Record<string, any>)) {
-      clone[key] = deepClone(entry)
-    }
-    return clone as unknown as T
-  }
-
-  return value
-}
-
-function generateObjectId(): string {
-  return randomBytes(12).toString("hex")
-}
-
-function createModelInstance<T extends Record<string, any>>(
-  collection: InMemoryCollection<any>,
-  doc: T,
-): T {
-  const instance = Object.assign(Object.create({}), doc) as T & {
-    save: () => Promise<T>
-    toObject: () => T
-    toJSON: () => T
-  }
-
-  Object.defineProperty(instance, "id", {
-    configurable: true,
-    enumerable: true,
-    get() {
-      const rawId = (instance as unknown as { _id?: string | mongoose.Types.ObjectId })._id
-      return typeof rawId === "string" ? rawId : rawId ? rawId.toString() : undefined
-    },
-    set(value: string | mongoose.Types.ObjectId | undefined) {
-      if (value == null) {
-        return
-      }
-
-      const normalized = typeof value === "string" ? value : value.toString()
-      ;(instance as unknown as { _id?: string })._id = normalized
-    },
-  })
-
-  Object.defineProperty(instance, "save", {
-    enumerable: false,
-    writable: false,
-    value: async function save() {
-      const saved = collection.saveDocument(instance as Record<string, any>)
-      Object.assign(instance, saved)
-      return instance
-    },
-  })
-
-  const toPlain = () => deepClone({ ...(instance as Record<string, any>) })
-
-  Object.defineProperty(instance, "toObject", {
-    enumerable: false,
-    writable: false,
-    value: () => toPlain(),
-  })
-
-  Object.defineProperty(instance, "toJSON", {
-    enumerable: false,
-    writable: false,
-    value: () => toPlain(),
-  })
-
-  return instance as T
-}
-
-function formatDate(date: Date, format: string): string {
-  const pad = (value: number) => value.toString().padStart(2, "0")
-  return format
-    .replace("%Y", String(date.getUTCFullYear()))
-    .replace("%m", pad(date.getUTCMonth() + 1))
-    .replace("%d", pad(date.getUTCDate()))
-}
-
-function createUsers(): InMemoryDocument[] {
-  const now = new Date()
-  const passwordHash = bcrypt.hashSync(DEMO_PASSWORD, 10)
-
-  const adminId = generateObjectId()
-  const userAId = generateObjectId()
-  const userBId = generateObjectId()
-  const userCId = generateObjectId()
-
-  return [
-    {
-      _id: adminId,
-      email: "admin@cryptomining.com",
-      phone: "+15551234567",
-      passwordHash,
-      name: "Admin User",
-      role: "admin",
-      referralCode: "ADMIN001",
-      referredBy: null,
-      status: "active",
-      isActive: true,
-      isBlocked: false,
-      blockedAt: null,
-      emailVerified: true,
-      phoneVerified: true,
-      depositTotal: 1200,
-      withdrawTotal: 300,
-      roiEarnedTotal: 450,
-      level: 4,
-      directActiveCount: 0,
-      totalActiveDirects: 12,
-      lastLevelUpAt: now,
-      qualified: true,
-      qualifiedAt: now,
-      kycStatus: "verified",
-      groups: { A: [userAId], B: [userBId], C: [userCId], D: [] },
-      profileAvatar: "avatar-01",
-      lastLoginAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: userAId,
-      email: "alice@example.com",
-      phone: "+15550000001",
-      passwordHash,
-      name: "Alice Miner",
-      role: "user",
-      referralCode: "ALICE01",
-      referredBy: adminId,
-      status: "active",
-      isActive: true,
-      isBlocked: false,
-      blockedAt: null,
-      emailVerified: true,
-      phoneVerified: false,
-      depositTotal: 600,
-      withdrawTotal: 100,
-      roiEarnedTotal: 220,
-      level: 2,
-      directActiveCount: 4,
-      totalActiveDirects: 9,
-      lastLevelUpAt: now,
-      qualified: true,
-      qualifiedAt: now,
-      kycStatus: "pending",
-      groups: { A: [], B: [], C: [], D: [] },
-      profileAvatar: "avatar-02",
-      lastLoginAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: userBId,
-      email: "bob@example.com",
-      phone: "+15550000002",
-      passwordHash,
-      name: "Bob Staker",
-      role: "user",
-      referralCode: "BOB001",
-      referredBy: adminId,
-      status: "active",
-      isActive: true,
-      isBlocked: false,
-      blockedAt: null,
-      emailVerified: false,
-      phoneVerified: true,
-      depositTotal: 350,
-      withdrawTotal: 50,
-      roiEarnedTotal: 120,
-      level: 1,
-      directActiveCount: 2,
-      totalActiveDirects: 5,
-      lastLevelUpAt: now,
-      qualified: true,
-      qualifiedAt: now,
-      kycStatus: "unverified",
-      groups: { A: [], B: [], C: [], D: [] },
-      profileAvatar: "avatar-03",
-      lastLoginAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: userCId,
-      email: "carol@example.com",
-      phone: "+15550000003",
-      passwordHash,
-      name: "Carol Trader",
-      role: "user",
-      referralCode: "CAROL1",
-      referredBy: adminId,
-      status: "active",
-      isActive: true,
-      isBlocked: false,
-      blockedAt: null,
-      emailVerified: true,
-      phoneVerified: true,
-      depositTotal: 420,
-      withdrawTotal: 0,
-      roiEarnedTotal: 140,
-      level: 1,
-      directActiveCount: 1,
-      totalActiveDirects: 5,
-      lastLevelUpAt: now,
-      qualified: true,
-      qualifiedAt: now,
-      kycStatus: "verified",
-      groups: { A: [], B: [], C: [], D: [] },
-      profileAvatar: "avatar-04",
-      lastLoginAt: now,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-}
-
-function createBalances(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-  return users.map((user) => ({
-    _id: generateObjectId(),
-    userId: user._id,
-    current: Math.max(user.depositTotal - user.withdrawTotal + user.roiEarnedTotal - 200, 0),
-    totalBalance: user.depositTotal,
-    totalEarning: user.roiEarnedTotal,
-    lockedCapital: 0,
-    lockedCapitalLots: [],
-    staked: user.depositTotal * 0.2,
-    pendingWithdraw: 50,
-    teamRewardsAvailable: 75,
-    teamRewardsClaimed: 120,
-    teamRewardsLastClaimedAt: now,
-    luckyDrawCredits: 0,
-    createdAt: now,
-    updatedAt: now,
-  }))
-}
-
-function createMiningSessions(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-  return users.map((user, index) => ({
-    _id: generateObjectId(),
-    userId: user._id,
-    nextEligibleAt: new Date(now.getTime() + (index === 0 ? 0 : 60 * 60 * 1000)),
-    lastClickAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
-    earnedInCycle: 12 * (index + 1),
-    totalClicks: 45 * (index + 1),
-    createdAt: now,
-    updatedAt: now,
-  }))
-}
-
-function createSettings(): InMemoryDocument[] {
-  const now = new Date()
-  return [
-    {
-      _id: generateObjectId(),
-      dailyProfitPercent: 1.5,
-      mining: { minPct: 1.5, maxPct: 1.5, roiCap: 3 },
-      gating: { minDeposit: 30, minWithdraw: 30, joinNeedsReferral: true, activeMinDeposit: 80, capitalLockDays: 30 },
-      joiningBonus: { threshold: 0, pct: 0 },
-      commission: { baseDirectPct: 0, startAtDeposit: 50, highTierPct: 5, highTierStartAt: 100 },
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-}
-
-function createCommissionRules(): InMemoryDocument[] {
-  const now = new Date()
-  return [
-    {
-      _id: generateObjectId(),
-      level: 1,
-      directPct: 7,
-      teamDailyPct: 1,
-      teamRewardPct: 0,
-      activeMin: 5,
-      teamOverrides: [
-        {
-          team: "A",
-          depth: 1,
-          pct: 1,
-          kind: "daily_override",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-      ],
-      monthlyBonuses: [],
-      monthlyTargets: { directSale: 0, bonus: 0 },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: generateObjectId(),
-      level: 2,
-      directPct: 8,
-      teamDailyPct: 1,
-      teamRewardPct: 0,
-      activeMin: 10,
-      teamOverrides: [
-        {
-          team: "A",
-          depth: 1,
-          pct: 1,
-          kind: "daily_override",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "B",
-          depth: 2,
-          pct: 1,
-          kind: "daily_override",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "C",
-          depth: 3,
-          pct: 1,
-          kind: "daily_override",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-      ],
-      monthlyBonuses: [],
-      monthlyTargets: { directSale: 0, bonus: 0 },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: generateObjectId(),
-      level: 3,
-      directPct: 8,
-      teamDailyPct: 0,
-      teamRewardPct: 2,
-      activeMin: 15,
-      teamOverrides: [
-        {
-          team: "A",
-          depth: 1,
-          pct: 8,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "B",
-          depth: 2,
-          pct: 8,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "C",
-          depth: 3,
-          pct: 8,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "D",
-          depth: 4,
-          pct: 8,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "A",
-          depth: 1,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "B",
-          depth: 2,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "C",
-          depth: 3,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "D",
-          depth: 4,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-      ],
-      monthlyBonuses: [],
-      monthlyTargets: { directSale: 0, bonus: 0 },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: generateObjectId(),
-      level: 4,
-      directPct: 9,
-      teamDailyPct: 0,
-      teamRewardPct: 0,
-      activeMin: 23,
-      teamOverrides: [
-        {
-          team: "A",
-          depth: 1,
-          pct: 2,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "B",
-          depth: 2,
-          pct: 2,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "C",
-          depth: 3,
-          pct: 2,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-        {
-          team: "D",
-          depth: 4,
-          pct: 2,
-          kind: "team_commission",
-          payout: "commission",
-          appliesTo: "profit",
-        },
-      ],
-      monthlyBonuses: [
-        { threshold: 2200, amount: 200, type: "bonus", label: "Monthly Bonus" },
-      ],
-      monthlyTargets: { directSale: 2200, bonus: 200 },
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      _id: generateObjectId(),
-      level: 5,
-      directPct: 10,
-      teamDailyPct: 0,
-      teamRewardPct: 2,
-      activeMin: 30,
-      teamOverrides: [
-        {
-          team: "A",
-          depth: 1,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "B",
-          depth: 2,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "C",
-          depth: 3,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-        {
-          team: "D",
-          depth: 4,
-          pct: 2,
-          kind: "team_reward",
-          payout: "reward",
-          appliesTo: "profit",
-        },
-      ],
-      monthlyBonuses: [
-        { threshold: 4500, amount: 400, type: "salary", label: "Monthly Salary" },
-      ],
-      monthlyTargets: { directSale: 4500, bonus: 0, salary: 400 },
-      createdAt: now,
-      updatedAt: now,
-    },
-  ]
-}
-
-function hashUserId(value: string): string {
-  return createHash("sha256").update(value).digest("hex")
-}
-
-
-function createTransactions(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-  const transactions: InMemoryDocument[] = []
-
-  users.forEach((user, index) => {
-    const baseAmount = 100 + index * 50
-
-    transactions.push(
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        type: "deposit",
-        amount: baseAmount,
-        status: "approved",
-        meta: { method: "USDT", reference: `DEP${index + 1}` },
-        createdAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
-        updatedAt: now,
-      },
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        type: "earn",
-        amount: baseAmount * 0.12,
-        status: "approved",
-        meta: { source: "mining" },
-        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-        updatedAt: now,
-      },
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        type: "commission",
-        amount: baseAmount * 0.05,
-        status: "approved",
-        meta: { source: "referral", fromUser: "ALICE01" },
-        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
-        updatedAt: now,
-      },
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        type: "withdraw",
-        amount: baseAmount * 0.3,
-        status: index === 0 ? "pending" : "approved",
-        meta: { method: "USDT", address: "TVxDemoAddress123" },
-        createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
-        updatedAt: now,
-      },
-    )
-  })
-
-
-  return transactions
-}
-
-function createNotifications(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-  const notifications: InMemoryDocument[] = []
-
-  users.forEach((user, index) => {
-    notifications.push(
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        title: "Welcome to Crypto Mine",
-        body: "Your account is ready to start mining.",
-        read: index === 0,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        _id: generateObjectId(),
-        userId: user._id,
-        title: "Deposit Approved",
-        body: "Your recent deposit has been approved and added to your balance.",
-        read: false,
-        createdAt: new Date(now.getTime() - 12 * 60 * 60 * 1000),
-        updatedAt: now,
-      },
-    )
-  })
-
-  return notifications
-}
-
-function createWalletAddresses(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-
-  return users.map((user, index) => ({
-    _id: generateObjectId(),
-    userId: user._id,
-    label: index === 0 ? "Primary Wallet" : `Wallet ${index + 1}`,
-    address: `TVxDemoAddress${1000 + index}`,
-    chain: "TRC20",
-    createdAt: now,
-    updatedAt: now,
-  }))
-}
-
-function createLuckyDrawRounds(users: InMemoryDocument[]): InMemoryDocument[] {
-  const now = new Date()
-  const start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  const end = new Date(start.getTime() + 72 * 60 * 60 * 1000)
-  const lastWinnerUser = users[0]
-
-  return [
-    {
-      _id: generateObjectId(),
-      roundNumber: 1,
-      status: "ACTIVE",
-      prizePoolUsd: 30,
-      startAtUtc: start,
-      endAtUtc: end,
-      announcementAtUtc: end,
-      selectedDepositId: null,
-      selectedUserId: null,
-      selectedWinnerName: null,
-      selectedAt: null,
-      lastWinnerName: lastWinnerUser?.name ?? "Wallet Ninja",
-      lastWinnerAnnouncedAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000),
-      createdAt: start,
-      updatedAt: start,
-    },
-  ]
-}
-
-export function getDemoCredentials() {
-  return { email: "admin@cryptomining.com", password: DEMO_PASSWORD }
-}
-
+ 
