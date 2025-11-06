@@ -9,6 +9,7 @@ import { calculateMiningProfit, hasReachedROICap } from "@/lib/utils/referral"
 import { createTeamEarningPayouts } from "@/lib/services/rewards"
 import { resolveDailyProfitPercent } from "@/lib/services/settings"
 import { calculatePercentFromAmounts } from "@/lib/utils/numeric"
+import mongoose from "mongoose"
 
 const DEFAULT_MINING_SETTINGS = {
   dailyProfitPercent: 1.5,
@@ -140,19 +141,7 @@ export async function performMiningClick(userId: string) {
     throw new MiningActionError("User not found", 404)
   }
 
-  let balance = await Balance.findOne({ userId: user._id })
-  if (!balance) {
-    balance = await Balance.create({
-      userId: user._id,
-      current: 0,
-      totalBalance: 0,
-      totalEarning: 0,
-      lockedCapital: 0,
-      staked: 0,
-      pendingWithdraw: 0,
-    })
-  }
-
+  // Resolve settings
   const plainSettings = settingsDoc
     ? ((typeof settingsDoc.toObject === "function" ? settingsDoc.toObject() : settingsDoc) as Partial<ISettings>)
     : null
@@ -168,10 +157,18 @@ export async function performMiningClick(userId: string) {
     throw new MiningActionError(`Mining requires a minimum deposit of $${requiredDeposit} USDT`, 403)
   }
 
-  const roiCapLimit = user.depositTotal > 0 ? user.depositTotal * settings.roiCap : null
-
-  if (roiCapLimit !== null && hasReachedROICap(user.roiEarnedTotal, user.depositTotal, settings.roiCap)) {
-    throw new MiningActionError(`ROI cap reached (${settings.roiCap}x)`, 400)
+  // Ensure we have related docs
+  let balance = await Balance.findOne({ userId: user._id })
+  if (!balance) {
+    balance = await Balance.create({
+      userId: user._id,
+      current: 0,
+      totalBalance: 0,
+      totalEarning: 0,
+      lockedCapital: 0,
+      staked: 0,
+      pendingWithdraw: 0,
+    })
   }
 
   let miningSession = await MiningSession.findOne({ userId: user._id })
@@ -187,9 +184,12 @@ export async function performMiningClick(userId: string) {
     throw error
   }
 
+  // Base amount for mining profit calculation is the user's current wallet balance
   const baseAmount = Number(balance.current ?? 0)
   const profit = calculateMiningProfit(baseAmount, settings.dailyProfitPercent)
 
+  // Respect ROI cap
+  const roiCapLimit = user.depositTotal > 0 ? user.depositTotal * settings.roiCap : null
   const newRoiTotal = user.roiEarnedTotal + profit
   let finalProfit = profit
   let roiCapReached = false
@@ -203,62 +203,108 @@ export async function performMiningClick(userId: string) {
     roiCapReached = true
   }
 
-  await Balance.updateOne(
-    { userId: user._id },
-    {
-      $inc: {
-        current: finalProfit,
-        totalBalance: finalProfit,
-        totalEarning: finalProfit,
-      },
-    },
-  )
+  // ---- ATOMIC TRANSACTION: credit + tx + cooldown + notification + TEAM PAYOUTS ----
+  const session = await mongoose.startSession()
+  try {
+    let result: {
+      profit: number
+      baseAmount: number
+      profitPct: number
+      roiCapReached: boolean
+      nextEligibleAt: string
+      newBalance: number
+      roiEarnedTotal: number
+    }
 
-  await User.updateOne({ _id: user._id }, { $inc: { roiEarnedTotal: finalProfit } })
+    await session.withTransaction(async () => {
+      // 1) Credit balance and earnings
+      await Balance.updateOne(
+        { userId: user._id },
+        {
+          $inc: {
+            current: finalProfit,
+            totalBalance: finalProfit,
+            totalEarning: finalProfit,
+          },
+        },
+        { session },
+      )
 
-  const profitTransaction = await Transaction.create({
-    userId: user._id,
-    type: "earn",
-    amount: finalProfit,
-    status: "approved",
-    meta: {
-      source: "mining",
-      baseAmount,
-      profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
-      roiCapReached,
-      originalProfit: profit,
-    },
-  })
+      await User.updateOne(
+        { _id: user._id },
+        { $inc: { roiEarnedTotal: finalProfit } },
+        { session },
+      )
 
-  const nextEligible = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-  await MiningSession.updateOne(
-    { userId: user._id },
-    {
-      lastClickAt: now,
-      nextEligibleAt: nextEligible,
-      earnedInCycle: finalProfit,
-    },
-  )
+      // 2) Record earn transaction (source of truth for idempotency of team-earnings)
+      const profitTransaction = await Transaction.create(
+        [
+          {
+            userId: user._id,
+            type: "earn",
+            amount: finalProfit,
+            status: "approved",
+            meta: {
+              source: "mining",
+              baseAmount,
+              profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
+              roiCapReached,
+              originalProfit: profit,
+            },
+          },
+        ],
+        { session },
+      ).then((docs) => docs[0])
 
-  await Notification.create({
-    userId: user._id,
-    kind: "mining-reward",
-    title: "Mining Reward Earned",
-    body: `You earned $${finalProfit.toFixed(2)} from mining! ${roiCapReached ? "ROI cap reached." : ""}`,
-  })
+      // 3) Update mining session cooldown
+      const nextEligible = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      await MiningSession.updateOne(
+        { userId: user._id },
+        {
+          lastClickAt: now,
+          nextEligibleAt: nextEligible,
+          earnedInCycle: finalProfit,
+        },
+        { session },
+      )
 
-  await createTeamEarningPayouts(user._id.toString(), finalProfit, {
-    earningTransactionId: profitTransaction._id.toString(),
-    earningAt: now,
-  })
+      // 4) Notify user
+      await Notification.create(
+        [
+          {
+            userId: user._id,
+            kind: "mining-reward",
+            title: "Mining Reward Earned",
+            body: `You earned $${finalProfit.toFixed(2)} from mining! ${roiCapReached ? "ROI cap reached." : ""}`,
+          },
+        ],
+        { session },
+      )
 
-  return {
-    profit: finalProfit,
-    baseAmount,
-    profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
-    roiCapReached,
-    nextEligibleAt: nextEligible.toISOString(),
-    newBalance: (balance.current ?? 0) + finalProfit,
-    roiEarnedTotal: user.roiEarnedTotal + finalProfit,
+      // 5) TEAM DAILY EARNINGS (Claimables): L1 = 2%, L2 = 1%
+      // Idempotent at rewards layer via (type, sourceTxId, receiverUserId) unique key.
+      await createTeamEarningPayouts(user._id.toString(), finalProfit, {
+        earningTransactionId: profitTransaction._id.toString(),
+        earningAt: now,
+        // if your rewards service supports sessions, this ensures full atomicity:
+        // @ts-ignore optional for in-memory, used in real Mongo
+        session,
+      })
+
+      result = {
+        profit: finalProfit,
+        baseAmount,
+        profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
+        roiCapReached,
+        nextEligibleAt: nextEligible.toISOString(),
+        newBalance: Number(balance.current ?? 0) + finalProfit,
+        roiEarnedTotal: user.roiEarnedTotal + finalProfit,
+      }
+    })
+
+    // @ts-expect-error set in transaction scope
+    return result!
+  } finally {
+    await session.endSession()
   }
 }
