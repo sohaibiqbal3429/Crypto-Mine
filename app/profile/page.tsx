@@ -34,6 +34,20 @@ import { ACTIVE_DEPOSIT_THRESHOLD } from "@/lib/constants/bonuses"
 
 type StatusMessage = { success?: string; error?: string }
 
+// --- helpers (defensive) ---
+const toNumber = (v: unknown, fallback = 0): number => {
+  if (v === null || v === undefined) return fallback
+  if (typeof v === "number") return v
+  const n = Number((v as any).toString?.() ?? v)
+  return Number.isFinite(n) ? n : fallback
+}
+const usd = (v: unknown) => `$${toNumber(v).toFixed(2)}`
+const dateISOToLocal = (v?: string | Date | null) => {
+  if (!v) return ""
+  const d = v instanceof Date ? v : new Date(v)
+  return isNaN(d.getTime()) ? "" : d.toLocaleDateString()
+}
+
 export default function ProfilePage() {
   const [user, setUser] = useState<SerializableUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -81,22 +95,20 @@ export default function ProfilePage() {
   const selectedAvatar = user?.profileAvatar || PROFILE_AVATAR_OPTIONS[0]?.value || "avatar-01"
   const isBlocked = Boolean(user?.isBlocked)
   const isActiveAccount = Boolean(user?.isActive)
-  const lifetimeDeposits = Number(user?.depositTotal ?? 0)
-  const remainingToActivate = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeDeposits)
+  const lifetimeDeposits = toNumber(user?.depositTotal)
+  const threshold = toNumber(ACTIVE_DEPOSIT_THRESHOLD, 80)
+  const remainingToActivate = Math.max(0, threshold - lifetimeDeposits)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const userRes = await fetch("/api/auth/me")
-
         if (!userRes.ok) {
           setGlobalError("Failed to load user data")
           return
         }
-
         const response = await userRes.json()
         const fetchedUser: SerializableUser | null = response.user || null
-
         if (fetchedUser) {
           syncUserState(fetchedUser)
         } else {
@@ -135,14 +147,8 @@ export default function ProfilePage() {
       })
 
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update profile")
-      }
-
-      if (data.user) {
-        syncUserState(data.user as SerializableUser)
-      }
+      if (!response.ok) throw new Error(data.error || "Failed to update profile")
+      if (data.user) syncUserState(data.user as SerializableUser)
 
       setProfileStatus({ success: data.message || "Profile updated successfully." })
       setVerificationStatus({})
@@ -164,19 +170,11 @@ export default function ProfilePage() {
     }
 
     setVerifyLoading(true)
-
     try {
       const response = await fetch("/api/profile/verify", { method: "POST" })
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to verify profile")
-      }
-
-      if (data.user) {
-        syncUserState(data.user as SerializableUser)
-      }
-
+      if (!response.ok) throw new Error(data.error || "Failed to verify profile")
+      if (data.user) syncUserState(data.user as SerializableUser)
       setVerificationStatus({ success: data.message || "Profile verified successfully." })
       setProfileStatus({})
     } catch (error: any) {
@@ -194,7 +192,6 @@ export default function ProfilePage() {
       setPasswordStatus({ error: "New passwords do not match" })
       return
     }
-
     if (!passwordData.otpCode) {
       setPasswordStatus({ error: "Enter the 6-digit verification code we emailed you" })
       return
@@ -215,12 +212,8 @@ export default function ProfilePage() {
           otpCode: passwordData.otpCode,
         }),
       })
-
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to update password")
-      }
+      if (!response.ok) throw new Error(data.error || "Failed to update password")
 
       setPasswordStatus({ success: data.message || "Password updated successfully." })
       setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "", otpCode: "" })
@@ -246,18 +239,10 @@ export default function ProfilePage() {
       const response = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: profileData.email,
-          purpose: "password_reset",
-        }),
+        body: JSON.stringify({ email: profileData.email, purpose: "password_reset" }),
       })
-
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send verification code")
-      }
-
+      if (!response.ok) throw new Error(data.error || "Failed to send verification code")
       setOtpStatus({ success: data.message || "Verification code sent to your email." })
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Failed to send verification code"
@@ -282,15 +267,13 @@ export default function ProfilePage() {
 
     setIsGeneratingLink(true)
     setGlobalError("")
-
     try {
       const referralCode = String(user.referralCode).trim()
       const referralLink = buildAuthUrl(referralCode)
-
       await navigator.clipboard.writeText(referralLink)
       setCopied(true)
       setTimeout(() => setCopied(false), 3000)
-
+      // Optional: navigate user to the signup page they just copied
       router.push(referralLink)
     } catch (error) {
       console.error("Error generating/copying referral link:", error)
@@ -343,8 +326,7 @@ export default function ProfilePage() {
           {isBlocked && (
             <Alert className="mb-6 border-orange-200 bg-orange-50 text-orange-900">
               <AlertDescription>
-                Your account is currently blocked. Contact support for assistance before requesting deposits or
-                withdrawals.
+                Your account is currently blocked. Contact support for assistance before requesting deposits or withdrawals.
               </AlertDescription>
             </Alert>
           )}
@@ -373,9 +355,9 @@ export default function ProfilePage() {
                     <Badge variant="secondary">Level {user?.level || 1}</Badge>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Lifetime deposits: ${lifetimeDeposits.toFixed(2)} / ${ACTIVE_DEPOSIT_THRESHOLD.toFixed(2)}
+                    Lifetime deposits: {usd(lifetimeDeposits)} / {usd(threshold)}
                     {!isActiveAccount && remainingToActivate > 0
-                      ? ` • Deposit ${remainingToActivate.toFixed(2)} more to activate`
+                      ? ` • Deposit ${usd(remainingToActivate)} more to activate`
                       : ""}
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-2">
@@ -383,7 +365,7 @@ export default function ProfilePage() {
                     {isBlocked && <Badge variant="destructive">Blocked</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    Member since {new Date(user?.createdAt || Date.now()).toLocaleDateString()}
+                    Member since {dateISOToLocal(user?.createdAt ?? undefined)}
                   </p>
                 </div>
 
@@ -414,11 +396,11 @@ export default function ProfilePage() {
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="rounded-lg bg-muted p-3 text-center">
-                    <div className="font-semibold">${user?.depositTotal || 0}</div>
+                    <div className="font-semibold">{usd(user?.depositTotal)}</div>
                     <div className="text-muted-foreground">Total Deposits</div>
                   </div>
                   <div className="rounded-lg bg-muted p-3 text-center">
-                    <div className="font-semibold">${user?.withdrawTotal || 0}</div>
+                    <div className="font-semibold">{usd(user?.withdrawTotal)}</div>
                     <div className="text-muted-foreground">Total Withdrawals</div>
                   </div>
                 </div>
@@ -654,24 +636,24 @@ export default function ProfilePage() {
                       <CardDescription>Update your account password</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {otpStatus.error && (
-                          <Alert variant="destructive" className="mb-4">
-                            <AlertDescription>{otpStatus.error}</AlertDescription>
-                          </Alert>
-                        )}
+                      {otpStatus.error && (
+                        <Alert variant="destructive" className="mb-4">
+                          <AlertDescription>{otpStatus.error}</AlertDescription>
+                        </Alert>
+                      )}
 
-                        {otpStatus.success && (
-                          <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-900">
-                            <CheckCircle className="h-4 w-4" />
-                            <AlertDescription>{otpStatus.success}</AlertDescription>
-                          </Alert>
-                        )}
+                      {otpStatus.success && (
+                        <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-900">
+                          <CheckCircle className="h-4 w-4" />
+                          <AlertDescription>{otpStatus.success}</AlertDescription>
+                        </Alert>
+                      )}
 
-                        {passwordStatus.error && (
-                          <Alert variant="destructive" className="mb-4">
-                            <AlertDescription>{passwordStatus.error}</AlertDescription>
-                          </Alert>
-                        )}
+                      {passwordStatus.error && (
+                        <Alert variant="destructive" className="mb-4">
+                          <AlertDescription>{passwordStatus.error}</AlertDescription>
+                        </Alert>
+                      )}
 
                       {passwordStatus.success && (
                         <Alert className="mb-4 border-green-200 bg-green-50 text-green-800">
