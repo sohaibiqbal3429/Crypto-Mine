@@ -4,6 +4,57 @@ import dbConnect from "@/lib/mongodb"
 import { getUserFromRequest } from "@/lib/auth"
 import { previewTeamEarnings, claimTeamEarnings } from "@/lib/services/team-earnings"
 
+function toISO(value: unknown): string | null {
+  if (!value) return null
+  const d = value instanceof Date ? value : new Date(value as any)
+  return isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0
+  if (typeof value === "number") return value
+  const n = Number((value as any).toString?.() ?? value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function serializePayer(payer: any | null | undefined) {
+  if (!payer) return null
+  return {
+    id: payer.id ?? payer._id ?? null,
+    name: payer.name ?? null,
+    email: payer.email ?? null,
+  }
+}
+
+function serializeClaimable(item: any) {
+  return {
+    id: item.id ?? item._id ?? null,
+    type: item.type,
+    status: item.status ?? "CLAIMABLE",
+    amount: toNumber(item.amount),
+    percent: toNumber(item.percent),
+    baseAmount: toNumber(item.baseAmount),
+    createdAt: toISO(item.createdAt),
+    sourceTxId: item.sourceTxId ?? null,
+    payer: serializePayer(item.payer),
+  }
+}
+
+function serializeClaimed(item: any) {
+  return {
+    id: item.id ?? item._id ?? null,
+    type: item.type,
+    status: item.status ?? "CLAIMED",
+    amount: toNumber(item.amount),
+    percent: toNumber(item.percent),
+    baseAmount: toNumber(item.baseAmount),
+    createdAt: toISO(item.createdAt),
+    claimedAt: toISO(item.claimedAt), // can be null if service marks later
+    sourceTxId: item.sourceTxId ?? null,
+    payer: serializePayer(item.payer),
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -16,25 +67,10 @@ export async function GET(request: NextRequest) {
     const preview = await previewTeamEarnings(userPayload.userId)
 
     return NextResponse.json({
-      available: preview.available,
-      claimedTotal: preview.claimedTotal,
-      lastClaimedAt: preview.lastClaimedAt ? preview.lastClaimedAt.toISOString() : null,
-      pending: preview.pending.map((item) => ({
-        id: item.id,
-        type: item.type,
-        amount: item.amount,
-        percent: item.percent,
-        baseAmount: item.baseAmount,
-        createdAt: item.createdAt.toISOString(),
-        sourceTxId: item.sourceTxId,
-        payer: item.payer
-          ? {
-              id: item.payer.id,
-              name: item.payer.name,
-              email: item.payer.email,
-            }
-          : null,
-      })),
+      available: toNumber(preview.available),
+      claimedTotal: toNumber(preview.claimedTotal),
+      lastClaimedAt: toISO(preview.lastClaimedAt),
+      pending: (preview.pending ?? []).map(serializeClaimable),
     })
   } catch (error) {
     console.error("Team rewards fetch error:", error)
@@ -54,54 +90,25 @@ export async function POST(request: NextRequest) {
 
     await dbConnect()
 
+    // Claim any current claimables (TEAM_EARN_* only)
     const result = await claimTeamEarnings(userPayload.userId)
 
-    if (result.claimed <= 0) {
+    if (!result || toNumber(result.claimed) <= 0) {
       return NextResponse.json({ error: "No rewards available" }, { status: 400 })
     }
 
+    // Refresh preview after claim
     const preview = await previewTeamEarnings(userPayload.userId)
 
     return NextResponse.json({
       success: true,
-      claimed: result.claimed,
-      creditedAmount: result.claimed,
-      claimedItems: result.items.map((item) => ({
-        id: item.id,
-        type: item.type,
-        amount: item.amount,
-        percent: item.percent,
-        baseAmount: item.baseAmount,
-        createdAt: item.createdAt.toISOString(),
-        claimedAt: item.claimedAt.toISOString(),
-        sourceTxId: item.sourceTxId,
-        payer: item.payer
-          ? {
-              id: item.payer.id,
-              name: item.payer.name,
-              email: item.payer.email,
-            }
-          : null,
-      })),
-      available: preview.available,
-      claimedTotal: preview.claimedTotal,
-      lastClaimedAt: preview.lastClaimedAt ? preview.lastClaimedAt.toISOString() : null,
-      pending: preview.pending.map((item) => ({
-        id: item.id,
-        type: item.type,
-        amount: item.amount,
-        percent: item.percent,
-        baseAmount: item.baseAmount,
-        createdAt: item.createdAt.toISOString(),
-        sourceTxId: item.sourceTxId,
-        payer: item.payer
-          ? {
-              id: item.payer.id,
-              name: item.payer.name,
-              email: item.payer.email,
-            }
-          : null,
-      })),
+      claimed: toNumber(result.claimed),
+      creditedAmount: toNumber(result.claimed), // explicit for UI
+      claimedItems: (result.items ?? []).map(serializeClaimed),
+      available: toNumber(preview.available),
+      claimedTotal: toNumber(preview.claimedTotal),
+      lastClaimedAt: toISO(preview.lastClaimedAt),
+      pending: (preview.pending ?? []).map(serializeClaimable),
     })
   } catch (error) {
     console.error("Team rewards claim error:", error)
