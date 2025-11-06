@@ -19,6 +19,7 @@ function asObjectId(id: string | mongoose.Types.ObjectId): mongoose.Types.Object
 }
 
 function roundAmount(amount: number): number {
+  // store precise to 4dp (UI rounds to 2dp)
   return Math.round(amount * 10000) / 10000
 }
 
@@ -27,7 +28,7 @@ interface CreatePayoutInput {
   receiverUserId: mongoose.Types.ObjectId
   type: BonusPayoutType
   baseAmount: number
-  percent: number
+  percent: number // stored as fraction (e.g., 0.02)
   sourceTxId: string
   occurredAt: Date
   session?: ClientSession | null
@@ -58,10 +59,10 @@ async function createPayout({
     return { created: false, amount: 0 }
   }
 
+  // Idempotency: one payout per (receiver, type, sourceTxId)
   const filter = { receiverUserId, type, sourceTxId }
-  const updateOptions = sessionRef
-    ? { upsert: true, session: sessionRef }
-    : { upsert: true }
+  const updateOptions = sessionRef ? { upsert: true, session: sessionRef } : { upsert: true }
+
   const upsertResult = await BonusPayout.updateOne(
     filter,
     {
@@ -70,8 +71,8 @@ async function createPayout({
         receiverUserId,
         type,
         baseAmount,
-        percent,
-        payoutAmount,
+        percent,            // stored as 0.02 etc.
+        payoutAmount,       // stored as numeric; UI will round to 2dp
         sourceTxId,
         status: immediate ? "CLAIMED" : "PENDING",
         claimedAt: immediate ? occurredAt : null,
@@ -83,12 +84,13 @@ async function createPayout({
   )
 
   const inserted = Number(upsertResult.upsertedCount ?? 0) > 0
-
   if (!inserted) {
+    // already existed ⇒ idempotent no-op (still return computed amount for visibility)
     return { created: false, amount: payoutAmount }
   }
 
   if (immediate) {
+    // Immediate credit (deposit bonuses & deposit referrals)
     const balanceOptions = sessionRef ? { upsert: true, session: sessionRef } : { upsert: true }
     await Balance.updateOne(
       { userId: receiverUserId },
@@ -141,6 +143,29 @@ async function createPayout({
       ],
       sessionRef ? { session: sessionRef } : undefined,
     )
+  } else {
+    // Claimables (TEAM_EARN_*): reflect in balance.available so UI shows "Available to Claim"
+    const balanceOptions = sessionRef ? { upsert: true, session: sessionRef } : { upsert: true }
+    await Balance.updateOne(
+      { userId: receiverUserId },
+      {
+        $inc: {
+          teamRewardsAvailable: payoutAmount,
+        },
+        $setOnInsert: {
+          current: 0,
+          totalBalance: 0,
+          totalEarning: 0,
+          lockedCapital: 0,
+          lockedCapitalLots: [],
+          staked: 0,
+          pendingWithdraw: 0,
+          teamRewardsClaimed: 0,
+          teamRewardsLastClaimedAt: null,
+        },
+      },
+      balanceOptions,
+    )
   }
 
   return { created: true, amount: payoutAmount }
@@ -174,15 +199,17 @@ export async function applyDepositRewards(
   const run = async (session: ClientSession | null) => {
     const findOptions = session ? { session } : undefined
     const depositor = await User.findById(userId, null, findOptions)
-    if (!depositor) {
-      throw new Error("Depositor not found")
-    }
+    if (!depositor) throw new Error("Depositor not found")
 
+    // IMPORTANT: we assume caller already incremented depositTotal BEFORE calling this
     const baseAmount = Number(depositAmount)
     const lifetimeAfter = Number(depositor.depositTotal ?? 0)
     const lifetimeBefore = Math.max(0, lifetimeAfter - baseAmount)
+
     const wasActive = lifetimeBefore >= ACTIVE_DEPOSIT_THRESHOLD
     const depositorActive = lifetimeAfter >= ACTIVE_DEPOSIT_THRESHOLD
+
+    // Rule: self 5% only if depositorActive; L1 always 15%; L2 = 3% only if depositorActive
     const selfPercent = depositorActive ? DEPOSIT_SELF_PERCENT_ACTIVE : 0
     const l1Percent = DEPOSIT_L1_PERCENT
     const l2Percent = depositorActive ? DEPOSIT_L2_PERCENT_ACTIVE : 0
@@ -196,6 +223,7 @@ export async function applyDepositRewards(
     if (baseAmount > 0) {
       const depositorObjectId = asObjectId(depositor._id as mongoose.Types.ObjectId)
 
+      // Self
       const selfResult = await createPayout({
         payerUserId: depositorObjectId,
         receiverUserId: depositorObjectId,
@@ -209,11 +237,13 @@ export async function applyDepositRewards(
       })
       selfBonus = selfResult.amount
 
+      // L1
       if (depositor.referredBy) {
         const l1User = await User.findById(depositor.referredBy, null, findOptions)
         if (l1User) {
           const l1ObjectId = asObjectId(l1User._id as mongoose.Types.ObjectId)
           l1UserId = l1ObjectId.toHexString()
+
           const l1Result = await createPayout({
             payerUserId: depositorObjectId,
             receiverUserId: l1ObjectId,
@@ -228,11 +258,13 @@ export async function applyDepositRewards(
           })
           l1Bonus = l1Result.amount
 
+          // L2
           if (l1User.referredBy) {
             const l2User = await User.findById(l1User.referredBy, null, findOptions)
             if (l2User) {
               const l2ObjectId = asObjectId(l2User._id as mongoose.Types.ObjectId)
               l2UserId = l2ObjectId.toHexString()
+
               const l2Result = await createPayout({
                 payerUserId: depositorObjectId,
                 receiverUserId: l2ObjectId,
@@ -271,38 +303,28 @@ export async function applyDepositRewards(
   }
 
   const shouldUseTransactions = options.transactional ?? true
-  if (!shouldUseTransactions) {
-    return run(null)
-  }
+  if (!shouldUseTransactions) return run(null)
 
   let session: ClientSession | null = null
   try {
     try {
       session = await mongoose.startSession()
     } catch (error) {
-      if (isTransactionNotSupportedError(error)) {
-        return run(null)
-      }
+      if (isTransactionNotSupportedError(error)) return run(null)
       throw error
     }
 
-    if (!session) {
-      return run(null)
-    }
+    if (!session) return run(null)
 
     try {
       let outcome: DepositRewardOutcome | null = null
       await session.withTransaction(async () => {
         outcome = await run(session)
       })
-      if (!outcome) {
-        throw new Error("Deposit reward outcome missing")
-      }
+      if (!outcome) throw new Error("Deposit reward outcome missing")
       return outcome
     } catch (error) {
-      if (isTransactionNotSupportedError(error)) {
-        return run(null)
-      }
+      if (isTransactionNotSupportedError(error)) return run(null)
       throw error
     }
   } finally {
@@ -328,14 +350,10 @@ export async function createTeamEarningPayouts(
 
   const run = async () => {
     const earner = await User.findById(userId, null, { session })
-    if (!earner) {
-      return { created: 0 }
-    }
+    if (!earner) return { created: 0 }
 
     const baseAmount = Number(earningAmount)
-    if (baseAmount <= 0) {
-      return { created: 0 }
-    }
+    if (baseAmount <= 0) return { created: 0 }
 
     const earnerObjectId = asObjectId(earner._id as mongoose.Types.ObjectId)
     let createdCount = 0
@@ -353,7 +371,7 @@ export async function createTeamEarningPayouts(
         receiverUserId: asObjectId(l1User._id as mongoose.Types.ObjectId),
         type: "TEAM_EARN_L1",
         baseAmount,
-        percent: TEAM_EARN_L1_PERCENT,
+        percent: TEAM_EARN_L1_PERCENT, // 2% of earning
         sourceTxId: options.earningTransactionId,
         occurredAt,
         session,
@@ -367,7 +385,7 @@ export async function createTeamEarningPayouts(
         receiverUserId: asObjectId(l2User._id as mongoose.Types.ObjectId),
         type: "TEAM_EARN_L2",
         baseAmount,
-        percent: TEAM_EARN_L2_PERCENT,
+        percent: TEAM_EARN_L2_PERCENT, // 1% of earning
         sourceTxId: options.earningTransactionId,
         occurredAt,
         session,
@@ -387,9 +405,7 @@ export async function createTeamEarningPayouts(
     await session.withTransaction(async () => {
       outcome = await run()
     })
-    if (!outcome) {
-      return { created: 0 }
-    }
+    if (!outcome) return { created: 0 }
     return outcome
   } finally {
     session.endSession().catch(() => null)
@@ -404,7 +420,7 @@ interface ClaimOutcome {
     type: BonusPayoutType
     amount: number
     baseAmount: number
-    percent: number
+    percent: number // returned as %
     payerUserId: string
     sourceTxId: string
     createdAt: Date
@@ -494,6 +510,7 @@ export async function claimTeamEarningPayouts(userId: string): Promise<ClaimOutc
         return
       }
 
+      // Credit wallet and move "available" → 0 (we consumed all pending)
       await Balance.updateOne(
         { userId: receiverId },
         {
@@ -518,10 +535,7 @@ export async function claimTeamEarningPayouts(userId: string): Promise<ClaimOutc
       }
     })
 
-    if (!outcome) {
-      throw new Error("Claim outcome missing")
-    }
-
+    if (!outcome) throw new Error("Claim outcome missing")
     return outcome
   } finally {
     session.endSession().catch(() => null)
