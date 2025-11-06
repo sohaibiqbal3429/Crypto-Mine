@@ -88,10 +88,6 @@ export default function ProfilePage() {
     })
   }
 
-  const kycStatus = user?.kycStatus ?? "unverified"
-  const kycLabel = `${kycStatus.charAt(0).toUpperCase()}${kycStatus.slice(1)}`
-  const kycBadgeVariant =
-    kycStatus === "verified" ? "default" : kycStatus === "rejected" ? "destructive" : "secondary"
   const selectedAvatar = user?.profileAvatar || PROFILE_AVATAR_OPTIONS[0]?.value || "avatar-01"
   const isBlocked = Boolean(user?.isBlocked)
   const isActiveAccount = Boolean(user?.isActive)
@@ -360,10 +356,11 @@ export default function ProfilePage() {
                       ? ` • Deposit ${usd(remainingToActivate)} more to activate`
                       : ""}
                   </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2">
-                    <Badge variant={kycBadgeVariant}>KYC: {kycLabel}</Badge>
-                    {isBlocked && <Badge variant="destructive">Blocked</Badge>}
-                  </div>
+                  {isBlocked && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Badge variant="destructive">Blocked</Badge>
+                    </div>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     Member since {dateISOToLocal(user?.createdAt ?? undefined)}
                   </p>
@@ -457,13 +454,6 @@ export default function ProfilePage() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-lg border border-muted p-4">
-                            <p className="text-sm font-semibold text-muted-foreground">KYC Status</p>
-                            <div className="mt-2 flex items-center justify-between">
-                              <span className="text-base font-semibold text-foreground">{kycLabel}</span>
-                              <Badge variant={kycBadgeVariant}>{kycLabel}</Badge>
-                            </div>
-                          </div>
                           <div className="rounded-lg border border-muted p-4">
                             <p className="text-sm font-semibold text-muted-foreground">Phone</p>
                             <div className="mt-2 flex items-center justify-between">
