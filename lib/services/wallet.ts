@@ -1,8 +1,9 @@
-﻿import dbConnect from "@/lib/mongodb"
+import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Settings from "@/models/Settings"
 import { calculateWithdrawableSnapshot } from "@/lib/utils/locked-capital"
+import { ACTIVE_DEPOSIT_THRESHOLD } from "@/lib/constants/bonuses"
 
 export interface WalletContext {
   user: {
@@ -60,13 +61,21 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
         activeLockedLots: [],
       }
 
+  // Always derive Active from lifetime deposits per the source-of-truth rule.
+  const lifetimeDeposits = Number(userDoc.depositTotal ?? 0)
+  const isActiveByRule = lifetimeDeposits >= ACTIVE_DEPOSIT_THRESHOLD
+
   const stats = {
-    currentBalance: withdrawableSnapshot.withdrawable ?? 0,
+    // Show what is actually withdrawable in the "Current Balance" stat card
+    currentBalance: Number(withdrawableSnapshot.withdrawable ?? 0),
     totalBalance: Number(balanceDoc?.totalBalance ?? 0),
     totalEarning: Number(balanceDoc?.totalEarning ?? 0),
-    pendingWithdraw: withdrawableSnapshot.pendingWithdraw ?? Number(balanceDoc?.pendingWithdraw ?? 0),
+    pendingWithdraw: Number(
+      withdrawableSnapshot.pendingWithdraw ?? balanceDoc?.pendingWithdraw ?? 0,
+    ),
     staked: Number(balanceDoc?.staked ?? 0),
-    walletBalance: withdrawableSnapshot.current ?? Number(balanceDoc?.current ?? 0),
+    // Wallet balance = real-time current (includes locked) for display
+    walletBalance: Number(withdrawableSnapshot.current ?? balanceDoc?.current ?? 0),
   }
 
   const minDeposit = Number(settingsDoc?.gating?.minDeposit ?? 30)
@@ -81,15 +90,17 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
       referralCode: userDoc.referralCode,
       role: userDoc.role,
       profileAvatar: userDoc.profileAvatar ?? "avatar-01",
-      isActive: Boolean(userDoc.isActive),
-      depositTotal: Number(userDoc.depositTotal ?? 0),
+      isActive: isActiveByRule, // <- derived from deposits ≥ $80
+      depositTotal: lifetimeDeposits,
     },
     stats,
     minDeposit,
     withdrawConfig,
     withdrawable: {
-      amount: withdrawableSnapshot.withdrawable ?? 0,
-      pendingWithdraw: withdrawableSnapshot.pendingWithdraw ?? Number(balanceDoc?.pendingWithdraw ?? 0),
+      amount: Number(withdrawableSnapshot.withdrawable ?? 0),
+      pendingWithdraw: Number(
+        withdrawableSnapshot.pendingWithdraw ?? balanceDoc?.pendingWithdraw ?? 0,
+      ),
     },
   }
 }
