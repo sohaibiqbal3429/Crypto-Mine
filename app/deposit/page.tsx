@@ -19,6 +19,14 @@ import { Wallet } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
+const pct = (n: number) => `${(n * 100).toFixed(0)}%`
+const num = (v: unknown, fallback = 0) => {
+  if (v === null || v === undefined) return fallback
+  if (typeof v === "number") return v
+  const n = Number((v as any).toString?.() ?? v)
+  return Number.isFinite(n) ? n : fallback
+}
+
 export default async function DepositPage() {
   const token = cookies().get("auth-token")?.value
   if (!token) {
@@ -37,9 +45,14 @@ export default async function DepositPage() {
 
   const walletOptions = getDepositWalletOptions()
 
-  const isActive = context.user.isActive
-  const lifetimeDeposits = context.user.depositTotal
-  const remainingToActivate = Math.max(0, ACTIVE_DEPOSIT_THRESHOLD - lifetimeDeposits)
+  const isActive = !!context.user.isActive
+  const lifetimeDeposits = num(context.user.depositTotal)
+  const threshold = num(ACTIVE_DEPOSIT_THRESHOLD, 80)
+  const remainingToActivate = Math.max(0, threshold - lifetimeDeposits)
+
+  const walletBalance = num(context.stats?.walletBalance)
+  const pendingWithdraw = num(context.stats?.pendingWithdraw)
+  const minDeposit = num(context.minDeposit)
 
   return (
     <div className="flex h-screen bg-background">
@@ -58,7 +71,7 @@ export default async function DepositPage() {
                 {isActive ? "Active" : "Inactive"}
               </Badge>
               <span className="text-muted-foreground">
-                Lifetime deposits: ${lifetimeDeposits.toFixed(2)} / ${ACTIVE_DEPOSIT_THRESHOLD.toFixed(2)}
+                Lifetime deposits: ${lifetimeDeposits.toFixed(2)} / ${threshold.toFixed(2)}
               </span>
               {!isActive ? (
                 <span className="text-xs text-muted-foreground">
@@ -75,7 +88,7 @@ export default async function DepositPage() {
                 <Wallet className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${context.stats.walletBalance.toFixed(2)}</div>
+                <div className="text-2xl font-bold">${walletBalance.toFixed(2)}</div>
                 <p className="text-xs text-muted-foreground">Total funds recorded for your account.</p>
               </CardContent>
             </Card>
@@ -85,7 +98,7 @@ export default async function DepositPage() {
                 <CardDescription>Transactions below this amount will be rejected automatically.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-emerald-600">${context.minDeposit.toFixed(2)}</div>
+                <div className="text-2xl font-bold text-emerald-600">${minDeposit.toFixed(2)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -94,9 +107,7 @@ export default async function DepositPage() {
                 <CardDescription>Funds currently awaiting approval.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600">
-                  ${context.stats.pendingWithdraw.toFixed(2)}
-                </div>
+                <div className="text-2xl font-bold text-orange-600">${pendingWithdraw.toFixed(2)}</div>
               </CardContent>
             </Card>
           </section>
@@ -106,32 +117,29 @@ export default async function DepositPage() {
               <CardHeader>
                 <CardTitle>Bonus &amp; Referral Breakdown</CardTitle>
                 <CardDescription>
-                  Active users earn a {(DEPOSIT_SELF_PERCENT_ACTIVE * 100).toFixed(0)}% bonus on every deposit. Your referrer
-                  always receives {(DEPOSIT_L1_PERCENT * 100).toFixed(0)}%, and their referrer receives
-                  {" "}
-                  {isActive
-                    ? `${(DEPOSIT_L2_PERCENT_ACTIVE * 100).toFixed(0)}%`
-                    : "0% until you become Active"} of each deposit.
+                  Percentages are of the <strong>deposit amount</strong>. Your status is recalculated{" "}
+                  <strong>after each deposit</strong>; bonuses for that deposit use your{" "}
+                  <strong>post-update</strong> status.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <p className="text-sm text-muted-foreground">Your bonus</p>
                   <p className="text-xl font-semibold text-primary">
-                    {isActive
-                      ? `${(DEPOSIT_SELF_PERCENT_ACTIVE * 100).toFixed(0)}% of every deposit`
-                      : `Become Active to unlock ${(DEPOSIT_SELF_PERCENT_ACTIVE * 100).toFixed(0)}%`}
+                    {isActive ? `${pct(DEPOSIT_SELF_PERCENT_ACTIVE)} of every deposit` : `Become Active to unlock ${pct(DEPOSIT_SELF_PERCENT_ACTIVE)}`}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">L1 referral share</p>
-                  <p className="text-xl font-semibold">{(DEPOSIT_L1_PERCENT * 100).toFixed(0)}% of each deposit</p>
+                  <p className="text-xl font-semibold">
+                    {pct(DEPOSIT_L1_PERCENT)} of each deposit (always, if you have an L1)
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">L2 referral share</p>
                   <p className="text-xl font-semibold">
                     {isActive
-                      ? `${(DEPOSIT_L2_PERCENT_ACTIVE * 100).toFixed(0)}% while you're Active`
+                      ? `${pct(DEPOSIT_L2_PERCENT_ACTIVE)} when you are Active`
                       : "0% until you are Active"}
                   </p>
                 </div>
@@ -155,7 +163,7 @@ export default async function DepositPage() {
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <DepositForm options={walletOptions} minDeposit={context.minDeposit} />
+                  <DepositForm options={walletOptions} minDeposit={minDeposit} />
                 )}
               </CardContent>
             </Card>
