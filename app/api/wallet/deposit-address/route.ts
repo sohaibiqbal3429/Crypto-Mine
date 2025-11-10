@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server"
 
-export async function GET() {
-  const depositAddress = process.env.DEPOSIT_WALLET_ADDRESS
+import { getPublicWalletAddresses } from "@/lib/services/app-settings"
 
-  if (!depositAddress) {
-    return NextResponse.json(
-      { error: "Deposit address not configured" },
-      { status: 500 },
-    )
+export async function GET() {
+  const wallets = await getPublicWalletAddresses()
+
+  if (wallets.length === 0) {
+    return NextResponse.json({ error: "Deposit address not configured" }, { status: 500 })
   }
 
+  const primary = wallets[0]
+  const legacyNetwork = process.env.DEPOSIT_WALLET_NETWORK ?? undefined
+
   return NextResponse.json({
-    address: depositAddress,
-    network: process.env.DEPOSIT_WALLET_NETWORK ?? undefined,
+    address: primary.address,
+    network: legacyNetwork ?? primary.network,
+    wallets,
   })
 }
 

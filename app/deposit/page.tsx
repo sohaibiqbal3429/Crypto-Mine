@@ -43,7 +43,7 @@ export default async function DepositPage() {
     redirect("/auth/login")
   }
 
-  const walletOptions = getDepositWalletOptions()
+  const walletOptions = await getDepositWalletOptions()
 
   const isActive = !!context.user.isActive
   const lifetimeDeposits = num(context.user.depositTotal)

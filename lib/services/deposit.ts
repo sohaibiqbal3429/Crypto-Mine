@@ -30,8 +30,8 @@ const HASH_PATTERNS = [
 
 const RECEIPT_UPLOAD_DIRECTORY = join(process.cwd(), "public", "uploads", "deposit-receipts")
 
-function resolveWalletOption(networkId: string) {
-  const optionMap = getDepositWalletOptionMap()
+async function resolveWalletOption(networkId: string) {
+  const optionMap = await getDepositWalletOptionMap()
   const option = optionMap[networkId]
   if (!option) {
     throw new DepositSubmissionError("Selected network is not available at the moment")
@@ -131,7 +131,7 @@ export async function submitDeposit(input: DepositSubmissionInput) {
   const normalizedTransactionHash = parsed.data.transactionNumber.trim()
   const isFakeDeposit = normalizedTransactionHash === TEST_TRANSACTION_NUMBER
 
-  const walletOption = resolveWalletOption(parsed.data.network)
+  const walletOption = await resolveWalletOption(parsed.data.network)
 
   await dbConnect()
 
