@@ -12,7 +12,8 @@
     "migrate:commission15": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-direct-commission-15.js",
     "migrate:retrofix15": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-retrofix-direct-commission.js",
     "admin:reset-password": "npm run seed:build && node -r ./dist/scripts/register-paths.js dist/scripts/migrations/20251029-admin-password-reset.js",
-    "start": "next start"
+    "start": "next start",
+    "load:test": "k6 run tests/load/mining-clicks.js"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",

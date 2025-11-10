@@ -129,7 +129,24 @@ export async function getMiningStatus(userId: string): Promise<MiningStatusResul
   }
 }
 
-export async function performMiningClick(userId: string) {
+export interface PerformMiningClickOptions {
+  idempotencyKey?: string
+}
+
+export interface MiningClickResult {
+  profit: number
+  baseAmount: number
+  profitPct: number
+  roiCapReached: boolean
+  nextEligibleAt: string
+  newBalance: number
+  roiEarnedTotal: number
+}
+
+export async function performMiningClick(
+  userId: string,
+  options: PerformMiningClickOptions = {},
+): Promise<MiningClickResult> {
   await dbConnect()
 
   const [user, settingsDoc] = await Promise.all([
@@ -155,6 +172,22 @@ export async function performMiningClick(userId: string) {
   const requiredDeposit = plainSettings?.gating?.minDeposit ?? 30
   if (user.depositTotal < requiredDeposit) {
     throw new MiningActionError(`Mining requires a minimum deposit of $${requiredDeposit} USDT`, 403)
+  }
+
+  const idempotencyKey = options.idempotencyKey
+
+  if (idempotencyKey) {
+    const priorTransaction = await Transaction.findOne({
+      userId: user._id,
+      type: "earn",
+      "meta.source": "mining",
+      "meta.idempotencyKey": idempotencyKey,
+    }).lean()
+
+    const priorResult = priorTransaction?.meta?.miningResult as MiningClickResult | undefined
+    if (priorResult) {
+      return priorResult
+    }
   }
 
   // Ensure we have related docs
@@ -206,15 +239,7 @@ export async function performMiningClick(userId: string) {
   // ---- ATOMIC TRANSACTION: credit + tx + cooldown + notification + TEAM PAYOUTS ----
   const session = await mongoose.startSession()
   try {
-    let result: {
-      profit: number
-      baseAmount: number
-      profitPct: number
-      roiCapReached: boolean
-      nextEligibleAt: string
-      newBalance: number
-      roiEarnedTotal: number
-    }
+    let result: MiningClickResult
 
     await session.withTransaction(async () => {
       // 1) Credit balance and earnings
@@ -237,6 +262,16 @@ export async function performMiningClick(userId: string) {
       )
 
       // 2) Record earn transaction (source of truth for idempotency of team-earnings)
+      const miningResult: MiningClickResult = {
+        profit: finalProfit,
+        baseAmount,
+        profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
+        roiCapReached,
+        nextEligibleAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        newBalance: Number(balance.current ?? 0) + finalProfit,
+        roiEarnedTotal: user.roiEarnedTotal + finalProfit,
+      }
+
       const profitTransaction = await Transaction.create(
         [
           {
@@ -246,10 +281,12 @@ export async function performMiningClick(userId: string) {
             status: "approved",
             meta: {
               source: "mining",
+              idempotencyKey,
               baseAmount,
-              profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
+              profitPct: miningResult.profitPct,
               roiCapReached,
               originalProfit: profit,
+              miningResult,
             },
           },
         ],
@@ -291,15 +328,7 @@ export async function performMiningClick(userId: string) {
         session,
       })
 
-      result = {
-        profit: finalProfit,
-        baseAmount,
-        profitPct: calculatePercentFromAmounts(finalProfit, baseAmount),
-        roiCapReached,
-        nextEligibleAt: nextEligible.toISOString(),
-        newBalance: Number(balance.current ?? 0) + finalProfit,
-        roiEarnedTotal: user.roiEarnedTotal + finalProfit,
-      }
+      result = miningResult
     })
 
     // @ts-expect-error set in transaction scope
