@@ -10,6 +10,8 @@ import {
   MINING_STATUS_TTL_MS,
   type MiningRequestStatus,
 } from "@/lib/services/mining-queue"
+import { MiningActionError, performMiningClick } from "@/lib/services/mining"
+import { recordMiningMetrics } from "@/lib/services/mining-metrics"
 
 const GLOBAL_BUCKET_KEY = "rate:mining:global"
 const USER_BUCKET_PREFIX = "rate:mining:user:"
@@ -81,15 +83,6 @@ function buildStatusResponse(
 }
 
 export async function POST(request: NextRequest) {
-  if (!isRedisEnabled() || !isMiningQueueEnabled()) {
-    return NextResponse.json(
-      {
-        error: "Mining queue is not available. Configure REDIS_URL and queue workers.",
-      },
-      { status: 503 },
-    )
-  }
-
   const idempotencyKey = request.headers.get("idempotency-key")?.trim()
   if (!idempotencyKey) {
     return NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 })
@@ -98,6 +91,54 @@ export async function POST(request: NextRequest) {
   const userPayload = getUserFromRequest(request)
   if (!userPayload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const ip = parseClientIp(request)
+
+  const queueAvailable = isRedisEnabled() && isMiningQueueEnabled()
+
+  if (!queueAvailable) {
+    try {
+      const requestedAt = new Date()
+      const result = await performMiningClick(userPayload.userId, { idempotencyKey })
+      const completedAt = new Date()
+
+      await recordMiningMetrics({
+        processed: 1,
+        profitTotal: result.profit,
+        roiCapReached: result.roiCapReached ? 1 : 0,
+      })
+
+      const status: MiningRequestStatus = {
+        status: "completed",
+        idempotencyKey,
+        userId: userPayload.userId,
+        requestedAt: requestedAt.toISOString(),
+        updatedAt: completedAt.toISOString(),
+        sourceIp: ip,
+        userAgent: request.headers.get("user-agent"),
+        queueDepth: 0,
+        result: {
+          ...result,
+          message: "Mining rewarded",
+          completedAt: completedAt.toISOString(),
+        },
+      }
+
+      return buildStatusResponse(status, request)
+    } catch (error) {
+      if (error instanceof MiningActionError) {
+        return NextResponse.json({ error: error.message }, { status: error.status })
+      }
+
+      console.error("Mining click processing error", error)
+      return NextResponse.json(
+        {
+          error: "Unable to process mining request",
+        },
+        { status: 500 },
+      )
+    }
   }
 
   const existingStatus = await getMiningRequestStatus(idempotencyKey)
@@ -110,7 +151,6 @@ export async function POST(request: NextRequest) {
   }
 
   const redis = getRedisClient()
-  const ip = parseClientIp(request)
 
   const [globalLimit, userLimit, ipLimit] = await Promise.all([
     consumeTokenBucket({
