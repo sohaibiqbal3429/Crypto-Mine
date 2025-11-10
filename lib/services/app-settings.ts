@@ -194,6 +194,18 @@ export async function getPublicWalletAddresses(): Promise<WalletSettingPublicRec
   return snapshot.public
 }
 
+export function getWalletSettingsFromEnv(): WalletSettingAdminRecord[] {
+  const adminRecords: WalletSettingAdminRecord[] = []
+
+  for (const descriptor of WALLET_DESCRIPTORS) {
+    const fallback = readEnvFallback(descriptor.envKeys)
+    const source: "env" | "unset" = fallback ? "env" : "unset"
+    adminRecords.push(computeAdminRecord(descriptor, fallback, source, null, null))
+  }
+
+  return adminRecords
+}
+
 function isValidEthereumLikeAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address)
 }

@@ -10,6 +10,7 @@ process.env.DEPOSIT_WALLET_ADDRESS_3 = "TNDh9bU1Wq6sLwVh5C3p2zYb8wQ7rNs5tR"
 
 import {
   getPublicWalletAddresses,
+  getWalletSettingsFromEnv,
   updateWalletAddressSettings,
   invalidateWalletSettingsCache,
   WalletSettingsRateLimitError,
@@ -52,6 +53,19 @@ test("public wallet addresses fall back to environment defaults", async () => {
   assert.equal(wallets[0]?.address, process.env.DEPOSIT_WALLET_ADDRESS_1)
   assert.equal(wallets[1]?.address, process.env.DEPOSIT_WALLET_ADDRESS_2)
   assert.equal(wallets[2]?.address, process.env.DEPOSIT_WALLET_ADDRESS_3)
+})
+
+test("admin fallback wallets expose environment values", () => {
+  const wallets = getWalletSettingsFromEnv()
+  assert.equal(wallets.length, 3)
+  assert.equal(wallets[0]?.address, process.env.DEPOSIT_WALLET_ADDRESS_1)
+  assert.equal(wallets[1]?.address, process.env.DEPOSIT_WALLET_ADDRESS_2)
+  assert.equal(wallets[2]?.address, process.env.DEPOSIT_WALLET_ADDRESS_3)
+  wallets.forEach((wallet) => {
+    assert.equal(wallet.source, wallet.address ? "env" : "unset")
+    assert.equal(wallet.updatedAt, null)
+    assert.equal(wallet.updatedBy, null)
+  })
 })
 
 test("updating wallet addresses persists values and overrides env", async () => {

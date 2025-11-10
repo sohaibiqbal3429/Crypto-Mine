@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { verifyToken } from "@/lib/auth"
 import { getAdminInitialData } from "@/lib/services/admin"
+import { getWalletSettingsFromEnv } from "@/lib/services/app-settings"
 import { getDailyProfitPercentBounds } from "@/lib/services/settings"
 import { AdminDashboard } from "@/components/admin/admin-dashboard"
 
@@ -43,10 +44,12 @@ export default async function AdminPage() {
     pendingLuckyDrawDeposits: 0,
   }
 
+  const fallbackWallets = getWalletSettingsFromEnv()
+
   const fallbackSettings = {
     dailyProfitPercent: 1.5,
     bounds: getDailyProfitPercentBounds(),
-    wallets: [],
+    wallets: fallbackWallets,
   }
 
   try {
