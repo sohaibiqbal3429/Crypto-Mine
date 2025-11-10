@@ -63,12 +63,24 @@ export interface AdminStats {
   pendingLuckyDrawDeposits: number
 }
 
+export interface AdminWalletSetting {
+  id: string
+  key: string
+  label: string
+  network: string
+  address: string
+  source: "db" | "env" | "unset"
+  updatedAt: string | null
+  updatedBy: { id: string; name: string | null; email: string | null } | null
+}
+
 export interface AdminPlatformSettings {
   dailyProfitPercent: number
   bounds: {
     min: number
     max: number
   }
+  wallets: AdminWalletSetting[]
 }
 
 export interface AdminInitialData {

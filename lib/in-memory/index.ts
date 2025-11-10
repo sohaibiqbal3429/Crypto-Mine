@@ -401,6 +401,9 @@ class InMemoryDatabase {
     this.collections.set("bonuspayouts", new InMemoryCollection("bonuspayouts", []))
     this.collections.set("teamDailyProfits", new InMemoryCollection("teamDailyProfits", []))
     this.collections.set("teamDailyClaims", new InMemoryCollection("teamDailyClaims", []))
+    this.collections.set("caches", new InMemoryCollection("caches", []))
+    this.collections.set("appsettings", new InMemoryCollection("appsettings", []))
+    this.collections.set("appsettingaudits", new InMemoryCollection("appsettingaudits", []))
 
     this.initialized = true
   }
@@ -464,6 +467,9 @@ function registerMongooseModels(db: InMemoryDatabase) {
     { name: "BonusPayout", collection: db.getCollection("bonuspayouts") },
     { name: "TeamDailyProfit", collection: db.getCollection("teamDailyProfits") },
     { name: "TeamDailyClaim", collection: db.getCollection("teamDailyClaims") },
+    { name: "Cache", collection: db.getCollection("caches") },
+    { name: "AppSetting", collection: db.getCollection("appsettings") },
+    { name: "AppSettingAudit", collection: db.getCollection("appsettingaudits") },
   ] as const
 
   for (const { name, collection } of collections) {

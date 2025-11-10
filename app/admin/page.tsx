@@ -46,6 +46,7 @@ export default async function AdminPage() {
   const fallbackSettings = {
     dailyProfitPercent: 1.5,
     bounds: getDailyProfitPercentBounds(),
+    wallets: [],
   }
 
   try {

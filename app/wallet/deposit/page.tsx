@@ -26,7 +26,7 @@ export default async function WalletDepositPage() {
     redirect("/auth/login")
   }
 
-  const walletOptions = getDepositWalletOptions()
+  const walletOptions = await getDepositWalletOptions()
 
   return (
     <div className="flex h-screen bg-background">

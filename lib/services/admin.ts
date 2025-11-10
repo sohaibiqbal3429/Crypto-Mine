@@ -6,6 +6,7 @@ import User from "@/models/User"
 import Settings from "@/models/Settings"
 import type { AdminInitialData, AdminStats } from "@/lib/types/admin"
 import { getDailyProfitPercentBounds, resolveDailyProfitPercent } from "@/lib/services/settings"
+import { getWalletSettingsForAdmin } from "@/lib/services/app-settings"
 
 const toNumber = (value: unknown): number => {
   const num = Number(value)
@@ -98,6 +99,8 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     pendingLuckyDrawDeposits,
   }
 
+  const walletSettings = await getWalletSettingsForAdmin()
+
   return {
     adminUser: {
       name: adminUserDoc.name ?? "",
@@ -111,6 +114,7 @@ export async function getAdminInitialData(adminId: string): Promise<AdminInitial
     settings: {
       dailyProfitPercent,
       bounds: dailyProfitBounds,
+      wallets: walletSettings,
     },
   }
 }

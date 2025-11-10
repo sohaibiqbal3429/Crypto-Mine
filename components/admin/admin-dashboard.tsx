@@ -15,7 +15,7 @@ import { TransactionTable, type TransactionFilters } from "@/components/admin/tr
 import { UserTable, type UserFilters } from "@/components/admin/user-table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, RefreshCw } from "lucide-react"
+import { Loader2, RefreshCw, ShieldCheck } from "lucide-react"
 import { AdminDepositsTable } from "@/components/admin/deposit-reviews"
 import { AdminWinnerBox } from "@/components/admin/winner-announcement"
 import { useToast } from "@/components/ui/use-toast"
@@ -28,8 +28,20 @@ import type {
   AdminTransactionRecord,
   AdminUserRecord,
   AdminPlatformSettings,
+  AdminWalletSetting,
 } from "@/lib/types/admin"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { multiplyAmountByPercent } from "@/lib/utils/numeric"
 
 type JsonRecord = Record<string, unknown>
@@ -115,10 +127,30 @@ interface PendingAnnouncement {
   prizeUsd: number
 }
 
+const WALLET_PAYLOAD_KEY_BY_ID: Record<string, "wallet1" | "wallet2" | "wallet3"> = {
+  bep20_primary: "wallet1",
+  bep20_secondary: "wallet2",
+  trc20: "wallet3",
+}
+
 export function AdminDashboard({ initialUser, initialStats, initialSettings, initialError = null }: AdminDashboardProps) {
   const [user, setUser] = useState(initialUser)
   const [stats, setStats] = useState(initialStats)
   const { toast } = useToast()
+
+  const [walletSettings, setWalletSettings] = useState<AdminWalletSetting[]>(initialSettings.wallets ?? [])
+  const [walletDrafts, setWalletDrafts] = useState<Record<string, string>>(() => {
+    const record: Record<string, string> = {}
+    for (const wallet of initialSettings.wallets ?? []) {
+      record[wallet.id] = wallet.address
+    }
+    return record
+  })
+  const [walletReason, setWalletReason] = useState("")
+  const [walletLoading, setWalletLoading] = useState(false)
+  const [walletSaving, setWalletSaving] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+  const [walletConfirmOpen, setWalletConfirmOpen] = useState(false)
 
   const [dailyProfitPercent, setDailyProfitPercent] = useState(initialSettings.dailyProfitPercent)
   const [dailyProfitDraft, setDailyProfitDraft] = useState(() => initialSettings.dailyProfitPercent.toFixed(2))
@@ -177,6 +209,30 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
     }
   }, [])
 
+  const normalizeWalletDraft = useCallback(
+    (id: string) => walletDrafts[id]?.trim() ?? "",
+    [walletDrafts],
+  )
+
+  const walletChanges = useMemo(
+    () => walletSettings.filter((wallet) => normalizeWalletDraft(wallet.id) !== wallet.address),
+    [normalizeWalletDraft, walletSettings],
+  )
+
+  const disableWalletSave = walletSaving || walletLoading || walletChanges.length === 0
+
+  const handleWalletDraftChange = useCallback(
+    (id: string) => (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value
+      setWalletDrafts((prev) => ({ ...prev, [id]: value }))
+    },
+    [],
+  )
+
+  const handleWalletReasonChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {
+    setWalletReason(event.target.value)
+  }, [])
+
   useEffect(() => {
     return () => {
       isMountedRef.current = false
@@ -193,6 +249,110 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
     error: luckyDepositsError,
     refresh: refreshLuckyDeposits,
   } = useLuckyDrawDeposits({ scope: "admin", autoRefresh: false })
+
+  const fetchWalletSettings = useCallback(async () => {
+    runIfMounted(() => {
+      setWalletLoading(true)
+      setWalletError(null)
+    })
+
+    try {
+      const response = await fetch("/api/admin/settings/wallets", { cache: "no-store" })
+      const payload = await readJsonSafe<{ wallets?: AdminWalletSetting[]; error?: unknown }>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to load wallet settings"
+        throw new Error(message)
+      }
+
+      const nextWallets = Array.isArray(payload?.wallets) ? payload.wallets : []
+      runIfMounted(() => {
+        setWalletSettings(nextWallets)
+        setWalletDrafts(
+          nextWallets.reduce<Record<string, string>>((acc, wallet) => {
+            acc[wallet.id] = wallet.address
+            return acc
+          }, {}),
+        )
+      })
+    } catch (error) {
+      console.error(error)
+      runIfMounted(() =>
+        setWalletError(error instanceof Error ? error.message : "Unable to load wallet settings"),
+      )
+    } finally {
+      runIfMounted(() => setWalletLoading(false))
+    }
+  }, [runIfMounted])
+
+  const handleWalletRefresh = useCallback(() => {
+    fetchWalletSettings().catch(() => null)
+  }, [fetchWalletSettings])
+
+  const handleWalletSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (disableWalletSave) {
+        return
+      }
+      setWalletError(null)
+      setWalletConfirmOpen(true)
+    },
+    [disableWalletSave],
+  )
+
+  const handleWalletConfirm = useCallback(async () => {
+    runIfMounted(() => setWalletSaving(true))
+    setWalletError(null)
+
+    const body: Record<string, unknown> = {
+      confirm: true,
+      wallet1: normalizeWalletDraft("bep20_primary"),
+      wallet2: normalizeWalletDraft("bep20_secondary"),
+      wallet3: normalizeWalletDraft("trc20"),
+    }
+
+    const reasonValue = walletReason.trim()
+    if (reasonValue.length > 0) {
+      body.reason = reasonValue
+    }
+
+    try {
+      const response = await fetch("/api/admin/settings/wallets", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const payload = await readJsonSafe<{ wallets?: AdminWalletSetting[]; error?: unknown }>(response)
+
+      if (!response.ok) {
+        const message = typeof payload?.error === "string" ? payload.error : "Unable to update wallet addresses"
+        throw new Error(message)
+      }
+
+      const nextWallets = Array.isArray(payload?.wallets) ? payload.wallets : []
+      runIfMounted(() => {
+        setWalletSettings(nextWallets)
+        setWalletDrafts(
+          nextWallets.reduce<Record<string, string>>((acc, wallet) => {
+            acc[wallet.id] = wallet.address
+            return acc
+          }, {}),
+        )
+        setWalletReason("")
+      })
+
+      toast({ description: "Wallet addresses updated successfully." })
+    } catch (error) {
+      console.error(error)
+      runIfMounted(() =>
+        setWalletError(error instanceof Error ? error.message : "Unable to update wallet addresses"),
+      )
+    } finally {
+      runIfMounted(() => setWalletSaving(false))
+      setWalletConfirmOpen(false)
+    }
+  }, [normalizeWalletDraft, runIfMounted, toast, walletReason])
 
   const [luckyRound, setLuckyRound] = useState<LuckyDrawRound>({
     id: "demo-round",
@@ -877,8 +1037,19 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
       fetchStats(),
       fetchLuckyRound(),
       fetchDailyProfitSettings(),
+      fetchTeamDailyProfitSettings(),
+      fetchWalletSettings(),
     ])
-  }, [fetchDailyProfitSettings, fetchLuckyRound, fetchStats, fetchTransactions, fetchUsers, runIfMounted])
+  }, [
+    fetchDailyProfitSettings,
+    fetchLuckyRound,
+    fetchStats,
+    fetchTeamDailyProfitSettings,
+    fetchTransactions,
+    fetchUsers,
+    fetchWalletSettings,
+    runIfMounted,
+  ])
 
   useEffect(() => {
     fetchStats().catch(() => null)
@@ -951,6 +1122,151 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
             <StatCard label="Pending withdrawals" value={stats.pendingWithdrawals} />
             <StatCard label="Lucky draw pending" value={stats.pendingLuckyDrawDeposits} />
           </div>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                <CardTitle>Wallet addresses</CardTitle>
+              </div>
+              <CardDescription>
+                Manage the deposit wallets displayed to users. Changes are audited and applied immediately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleWalletSubmit} className="space-y-6">
+                {walletSettings.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    No wallet addresses configured yet. Provide values below to publish them to users.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {walletSettings.map((wallet) => {
+                      const draftValue = walletDrafts[wallet.id] ?? ""
+                      const lastUpdated = wallet.updatedAt ? format(new Date(wallet.updatedAt), "PPpp") : null
+                      const sourceLabel =
+                        wallet.source === "db"
+                          ? "Admin override"
+                          : wallet.source === "env"
+                            ? "Environment default"
+                            : "Not configured"
+                      const updatedByLabel = wallet.updatedBy?.name || wallet.updatedBy?.email || null
+
+                      return (
+                        <div key={wallet.id} className="space-y-2">
+                          <label className="text-sm font-medium" htmlFor={`wallet-${wallet.id}`}>
+                            {wallet.label}
+                          </label>
+                          <Input
+                            id={`wallet-${wallet.id}`}
+                            value={draftValue}
+                            onChange={handleWalletDraftChange(wallet.id)}
+                            placeholder="0x..."
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <p>Network: {wallet.network}</p>
+                            <p>Source: {sourceLabel}</p>
+                            <p>
+                              {lastUpdated
+                                ? `Last updated ${lastUpdated}${updatedByLabel ? ` by ${updatedByLabel}` : ""}`
+                                : "Not yet set"}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="grid gap-2">
+                  <label htmlFor="wallet-change-reason" className="text-sm font-medium">
+                    Change rationale (optional)
+                  </label>
+                  <Textarea
+                    id="wallet-change-reason"
+                    value={walletReason}
+                    onChange={handleWalletReasonChange}
+                    placeholder="Explain why this update is needed. Included in the audit log."
+                    rows={3}
+                  />
+                </div>
+
+                {walletError && <p className="text-sm text-destructive">{walletError}</p>}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="submit" className="gap-2" disabled={disableWalletSave}>
+                    {walletSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Saving
+                      </>
+                    ) : (
+                      "Save changes"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={handleWalletRefresh}
+                    disabled={walletLoading || walletSaving}
+                  >
+                    {walletLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Refresh
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
+          <AlertDialog open={walletConfirmOpen} onOpenChange={setWalletConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm wallet address changes</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Review the updated addresses below. Confirming will immediately update what users see and record the change
+                  in the audit log.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="space-y-3 text-sm">
+                {walletChanges.length === 0 ? (
+                  <p>No changes detected.</p>
+                ) : (
+                  walletChanges.map((wallet) => {
+                    const nextValue = normalizeWalletDraft(wallet.id)
+                    const payloadKey = WALLET_PAYLOAD_KEY_BY_ID[wallet.id] ?? wallet.id
+                    return (
+                      <div key={wallet.id} className="rounded-md border bg-muted/40 p-3">
+                        <p className="font-medium">{wallet.label}</p>
+                        <p className="text-xs text-muted-foreground">Network: {wallet.network}</p>
+                        <p className="text-xs text-muted-foreground">Current: {wallet.address || "—"}</p>
+                        <p className="text-xs text-muted-foreground">Next: {nextValue || "—"}</p>
+                        <p className="text-xs text-muted-foreground">Setting key: {payloadKey}</p>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+              {walletReason.trim().length > 0 ? (
+                <p className="text-xs text-muted-foreground">Reason: {walletReason.trim()}</p>
+              ) : null}
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={walletSaving}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleWalletConfirm} disabled={walletSaving || walletChanges.length === 0}>
+                  {walletSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving
+                    </>
+                  ) : (
+                    "Confirm & Save"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <Card>
             <CardHeader className="pb-4">
