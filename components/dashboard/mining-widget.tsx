@@ -2,15 +2,13 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Zap, Clock, AlertCircle, Coins } from "lucide-react"
 import { motion } from "framer-motion"
-
-import { mineAction } from "@/app/mining/actions"
 
 interface MiningWidgetProps {
   mining: {
@@ -24,9 +22,15 @@ interface MiningWidgetProps {
 
 export function MiningWidget({ mining }: MiningWidgetProps) {
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
-  const [isPending, startTransition] = useTransition()
   const router = useRouter()
   const [canMine, setCanMine] = useState(mining.canMine)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [polling, setPolling] = useState<{
+    key: string
+    url: string
+  } | null>(null)
+  const lastClickRef = useRef<number>(0)
+  const CLICK_DEBOUNCE_MS = 400
 
   const formatTimeUntilNext = () => {
     if (!mining.nextEligibleAt) return "Ready to mine!"
@@ -51,19 +55,74 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
     setCanMine(mining.canMine)
   }, [mining.canMine])
 
-  const handleMining = () => {
-    setFeedback({})
-    startTransition(async () => {
-      const result = await mineAction()
-      if (result.error) {
-        setFeedback({ error: result.error })
+  const handleMining = useCallback(async () => {
+    const now = Date.now()
+    if (now - lastClickRef.current < CLICK_DEBOUNCE_MS) {
+      setFeedback({ error: "Easy there! Please wait a moment before trying again." })
+      return
+    }
+
+    lastClickRef.current = now
+
+    if (!canMine) {
+      setFeedback({ error: "Mining is not available right now." })
+      return
+    }
+
+    if (isSubmitting || polling) {
+      setFeedback({ error: "We are already processing a mining request." })
+      return
+    }
+
+    try {
+      setFeedback({})
+      setIsSubmitting(true)
+      const idempotencyKey = crypto.randomUUID()
+      const response = await fetch("/api/mining/click", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (response.status === 200) {
+        const result = data?.status?.result
+        const profit = typeof result?.profit === "number" ? result.profit : undefined
+        setFeedback({
+          success:
+            result?.message ??
+            (profit !== undefined ? `Mining successful! Earned $${profit.toFixed(2)}` : "Mining successful!"),
+        })
+        setCanMine(false)
+        setPolling(null)
+        router.refresh()
         return
       }
-      setFeedback({ success: result.success ?? "Mining successful!" })
-      setCanMine(false)
-      router.refresh()
-    })
-  }
+
+      if (response.status === 202) {
+        setFeedback({ success: "Mining request queued. We'll update you shortly." })
+        setPolling({ key: idempotencyKey, url: data?.statusUrl })
+        return
+      }
+
+      if (response.status === 429) {
+        const retry = response.headers.get("Retry-After")
+        const retryMessage = retry ? ` Try again in ${retry} seconds.` : ""
+        setFeedback({ error: `${data?.error ?? "Too many requests."}${retryMessage}` })
+        return
+      }
+
+      setFeedback({ error: data?.error ?? "Unable to start mining. Please try again." })
+    } catch (error) {
+      console.error("Mining request failed", error)
+      setFeedback({ error: "Unable to reach the mining service. Please try again." })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }, [canMine, isSubmitting, polling, router])
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -87,6 +146,77 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
 
     return () => clearInterval(interval)
   }, [canMine, mining.nextEligibleAt])
+
+  useEffect(() => {
+    if (!polling?.url) {
+      return
+    }
+
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const response = await fetch(polling.url, { cache: "no-store" })
+        const data = await response.json().catch(() => ({}))
+        if (cancelled) {
+          return
+        }
+
+        if (response.status === 200) {
+          const result = data?.status?.result
+          const profit = typeof result?.profit === "number" ? result.profit : undefined
+          setFeedback({
+            success:
+              result?.message ??
+              (profit !== undefined ? `Mining successful! Earned $${profit.toFixed(2)}` : "Mining successful!"),
+          })
+          setCanMine(false)
+          setPolling(null)
+          router.refresh()
+          return
+        }
+
+        if (response.status === 202) {
+          const queueDepth = response.headers.get("X-Queue-Depth")
+          const status = data?.status?.status
+          const message =
+            status === "processing"
+              ? "Mining request is processing..."
+              : queueDepth
+                ? `Mining queued. Position ~${queueDepth}.`
+                : "Mining request queued..."
+          setFeedback({ success: message })
+          return
+        }
+
+        if (response.status === 429) {
+          const retry = response.headers.get("Retry-After")
+          const retryMessage = retry ? ` Try again in ${retry} seconds.` : ""
+          setFeedback({ error: `${data?.status?.error?.message ?? "System busy."}${retryMessage}` })
+        } else {
+          setFeedback({ error: data?.status?.error?.message ?? "Mining request failed." })
+        }
+        setPolling(null)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+        console.error("Mining status poll failed", error)
+        setFeedback({ error: "Lost connection while waiting for mining response." })
+        setPolling(null)
+      }
+    }
+
+    const interval = setInterval(poll, 1500)
+    void poll()
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [polling, router])
+
+  const isMiningBusy = isSubmitting || Boolean(polling)
 
   return (
     <Card className="col-span-full lg:col-span-2 crypto-card">
@@ -129,14 +259,14 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
           >
             <div
               className={`w-full h-full rounded-full flex items-center justify-center text-5xl font-bold text-white shadow-2xl relative overflow-hidden ${
-                canMine
+                canMine && !isMiningBusy
                   ? "bg-gradient-to-br from-primary to-accent cursor-pointer crypto-glow"
                   : "bg-gradient-to-br from-gray-400 to-gray-600 cursor-not-allowed"
               }`}
-              onClick={canMine ? handleMining : undefined}
+              onClick={canMine && !isMiningBusy ? handleMining : undefined}
             >
               <Coins className="w-16 h-16" />
-              {canMine && (
+              {canMine && !isMiningBusy && (
                 <>
                   <motion.div
                     className="absolute inset-0 rounded-full bg-gradient-to-br from-primary to-accent opacity-30"
@@ -182,12 +312,12 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
           </div>
 
           <Button
-            onClick={handleMining}
-            disabled={!canMine || isPending}
+            onClick={() => void handleMining()}
+            disabled={!canMine || isMiningBusy}
             size="lg"
             className="w-full max-w-sm h-12 text-lg font-semibold bg-gradient-to-r from-primary to-accent hover:from-accent hover:to-primary transition-all duration-300 shadow-lg hover:shadow-xl"
           >
-            {isPending ? (
+            {isMiningBusy ? (
               <>
                 <Loader2 className="mr-3 h-5 w-5 animate-spin" />
                 Mining in Progress...
