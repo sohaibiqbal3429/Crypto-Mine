@@ -210,6 +210,8 @@ export async function markMiningStatusCompleted(
   )
 }
 
+export { isMiningQueueEnabled } from "@/lib/queues/mining-clicks"
+
 export async function markMiningStatusFailed(
   idempotencyKey: string,
   userId: string,

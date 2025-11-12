@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { isIP } from "node:net"
 
 import { isRedisEnabled, getRedisClient } from "@/lib/redis"
 import { consumeTokenBucket, type TokenBucketResult } from "@/lib/rate-limit/token-bucket"
@@ -34,6 +33,109 @@ const WHITELIST: string[] = (() => {
     .filter((entry) => entry.length > 0)
   return [...new Set([...DEFAULT_WHITELIST, ...items])]
 })()
+
+function isValidIPv4(ip: string): boolean {
+  if (!ip) {
+    return false
+  }
+
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+    return false
+  }
+
+  return ip.split(".").every((segment) => {
+    if (segment.length === 0) {
+      return false
+    }
+
+    const value = Number(segment)
+    return Number.isInteger(value) && value >= 0 && value <= 255
+  })
+}
+
+function isValidHextet(segment: string): boolean {
+  return /^[0-9a-f]{1,4}$/i.test(segment)
+}
+
+function isValidIPv6(ip: string): boolean {
+  if (!ip) {
+    return false
+  }
+
+  const value = ip.toLowerCase()
+  if (value === "::") {
+    return true
+  }
+
+  const doubleColonIndex = value.indexOf("::")
+  if (doubleColonIndex !== -1 && value.indexOf("::", doubleColonIndex + 1) !== -1) {
+    return false
+  }
+
+  const [headRaw, tailRaw] = value.split("::") as [string, string | undefined]
+  const headParts = headRaw ? headRaw.split(":") : []
+  const tailParts = tailRaw ? tailRaw.split(":") : []
+
+  const cleanHead = headParts.filter((part) => part.length > 0)
+  const cleanTail = tailParts.filter((part) => part.length > 0)
+
+  let ipv4Segments = 0
+
+  const validateSegment = (segment: string, isLast: boolean): boolean => {
+    if (segment.length === 0) {
+      return false
+    }
+
+    if (segment.includes(".")) {
+      if (!isLast || !isValidIPv4(segment)) {
+        return false
+      }
+
+      ipv4Segments = 2
+      return true
+    }
+
+    return isValidHextet(segment)
+  }
+
+  if (!cleanHead.every((segment) => validateSegment(segment, false))) {
+    return false
+  }
+
+  if (
+    !cleanTail.every((segment, index) => validateSegment(segment, index === cleanTail.length - 1))
+  ) {
+    return false
+  }
+
+  const segmentsCount = cleanHead.length + cleanTail.length + ipv4Segments
+  if (doubleColonIndex === -1) {
+    return segmentsCount === 8
+  }
+
+  return segmentsCount < 8
+}
+
+function detectIpVersion(ip: string): 0 | 4 | 6 {
+  if (!ip) {
+    return 0
+  }
+
+  const trimmed = ip.trim()
+  if (trimmed.length === 0) {
+    return 0
+  }
+
+  if (isValidIPv4(trimmed)) {
+    return 4
+  }
+
+  if (isValidIPv6(trimmed)) {
+    return 6
+  }
+
+  return 0
+}
 
 interface LocalBucketState {
   tokens: number
@@ -86,12 +188,12 @@ function normaliseIp(ip: string): NormalisedIp | null {
   }
 
   const maybeIPv4 = ip.startsWith("::ffff:") ? ip.slice(7) : ip
-  const version = isIP(maybeIPv4)
+  const version = detectIpVersion(maybeIPv4)
   if (version === 4) {
     return { value: maybeIPv4, version }
   }
 
-  const v6Version = isIP(ip)
+  const v6Version = detectIpVersion(ip)
   if (v6Version === 6) {
     return { value: ip, version: v6Version }
   }
