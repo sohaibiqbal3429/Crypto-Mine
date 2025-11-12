@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
+import { TEAM_REWARD_UNLOCK_LEVEL } from "@/lib/constants/bonuses"
 import { formatCurrency, formatDate, formatTime } from "@/lib/utils/formatting"
 import { ensureDate, ensureNumber } from "@/lib/utils/safe-parsing"
 
@@ -141,6 +142,8 @@ interface AvailableToClaimCardProps {
   isLoading: boolean
   onClaim: () => void
   isClaiming: boolean
+  isLocked?: boolean
+  unlockLevel?: number
 }
 
 function buildSourceLabel(payer: PendingRewardItem["payer"]): string {
@@ -157,13 +160,22 @@ const toPercentDisplay = (fractional: unknown): string => {
   return `${(value * 100).toFixed(2)}%`
 }
 
-function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: AvailableToClaimCardProps) {
+function AvailableToClaimCard({
+  items,
+  isLoading,
+  onClaim,
+  isClaiming,
+  isLocked = false,
+  unlockLevel = 1,
+}: AvailableToClaimCardProps) {
   const hasItems = items.length > 0
   const sorted = [...items].sort((a, b) => {
     const da = ensureDate(a.createdAt)?.getTime() ?? 0
     const db = ensureDate(b.createdAt)?.getTime() ?? 0
     return db - da // newest first
   })
+  const claimDisabled = isClaiming || !hasItems || isLocked
+  const unlockLabel = `Level ${unlockLevel}`
 
   return (
     <Card>
@@ -171,11 +183,13 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
         <div>
           <CardTitle className="text-lg">Available to Claim</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Review unclaimed team earnings. Claiming will credit the payout amount to your wallet balance.
+            {isLocked
+              ? `Team rewards unlock at ${unlockLabel}. Reach ${unlockLabel} to start accumulating claimable earnings.`
+              : "Review unclaimed team earnings. Claiming will credit the payout amount to your wallet balance."}
           </p>
         </div>
-        <Button onClick={onClaim} disabled={isClaiming || !hasItems}>
-          {isClaiming ? "Claiming..." : "Claim all"}
+        <Button onClick={onClaim} disabled={claimDisabled}>
+          {isLocked ? `Locked until ${unlockLabel}` : isClaiming ? "Claiming..." : "Claim all"}
         </Button>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -207,7 +221,9 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
             ) : !hasItems ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                  No team earnings are waiting to be claimed right now. New rewards will appear here when your team earns.
+                  {isLocked
+                    ? `Reach ${unlockLabel} to start accumulating claimable team rewards.`
+                    : "No team earnings are waiting to be claimed right now. New rewards will appear here when your team earns."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -236,8 +252,8 @@ function AvailableToClaimCard({ items, isLoading, onClaim, isClaiming }: Availab
                     <TableCell className="whitespace-nowrap text-right">{toPercentDisplay(item.percent)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">{formatCurrency(amount)}</TableCell>
                     <TableCell className="whitespace-nowrap text-right">
-                      <Button variant="outline" size="sm" onClick={onClaim} disabled={isClaiming}>
-                        Claim
+                      <Button variant="outline" size="sm" onClick={onClaim} disabled={isClaiming || isLocked}>
+                        {isLocked ? "Locked" : "Claim"}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -340,9 +356,19 @@ export default function TeamPageShell() {
   }, [activeTab, meLoading, mutateLevels])
 
   const [isClaiming, setIsClaiming] = useState(false)
+  const resolvedLevelRaw = levelData?.currentLevel ?? cachedLevelData?.currentLevel ?? null
+  const resolvedLevel = resolvedLevelRaw === null ? null : ensureNumber(resolvedLevelRaw, 0)
+  const teamRewardsLocked = resolvedLevel !== null ? resolvedLevel < TEAM_REWARD_UNLOCK_LEVEL : false
 
   const handleClaimRewards = async () => {
     if (isClaiming) return
+    if (teamRewardsLocked) {
+      toast({
+        title: "Team rewards locked",
+        description: `Reach Level ${TEAM_REWARD_UNLOCK_LEVEL} to claim team rewards.`,
+      })
+      return
+    }
 
     setIsClaiming(true)
     try {
@@ -475,6 +501,8 @@ export default function TeamPageShell() {
                   lastClaimedAt={teamRewards.lastClaimedAt}
                   isClaiming={isClaiming}
                   onClaim={handleClaimRewards}
+                  isLocked={teamRewardsLocked}
+                  unlockLevel={TEAM_REWARD_UNLOCK_LEVEL}
                 />
               ) : rewardsError ? (
                 <div className="rounded-xl border border-border/60 bg-card p-6 text-sm text-destructive">
@@ -487,6 +515,8 @@ export default function TeamPageShell() {
                 isLoading={rewardsLoading}
                 onClaim={handleClaimRewards}
                 isClaiming={isClaiming}
+                isLocked={teamRewardsLocked}
+                unlockLevel={TEAM_REWARD_UNLOCK_LEVEL}
               />
 
               <TeamRewardsHistory
