@@ -113,7 +113,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
             <HalvingChart />
-            <RateLimitTelemetryCard />
+            <RateLimitTelemetryCard  />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">

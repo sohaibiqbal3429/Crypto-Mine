@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Activity, AlertTriangle, Clock3 } from "lucide-react"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 
@@ -12,7 +11,6 @@ interface TelemetryLayer {
   throttleEventsLastWindow: number
   p95LatencyMs: number | null
 }
-
 interface TelemetryResponse {
   windowMs: number
   lastUpdated: string
@@ -22,18 +20,11 @@ interface TelemetryResponse {
 const REFRESH_INTERVAL_MS = 5000
 
 function formatLatency(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "—"
-  }
-
+  if (value === null || !Number.isFinite(value)) return "—"
   return `${Math.round(value)} ms`
 }
-
 function formatThrottleRate(events: number, windowMs: number): string {
-  if (windowMs <= 0) {
-    return "0 / window"
-  }
-
+  if (windowMs <= 0) return "0 / window"
   const perSecond = events / (windowMs / 1000)
   return `${events} / ${Math.round(windowMs / 1000)}s (${perSecond.toFixed(2)}/s)`
 }
@@ -48,37 +39,24 @@ export function RateLimitTelemetryCard() {
 
   useEffect(() => {
     let cancelled = false
-
     const loadTelemetry = async () => {
       try {
-        const response = await fetch("/api/observability/rate-limit", { cache: "no-store" })
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`)
-        }
-
-        const payload: TelemetryResponse = await response.json()
-        if (cancelled) {
-          return
-        }
-
+        const res = await fetch("/api/observability/rate-limit", { cache: "no-store" })
+        if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
+        const payload: TelemetryResponse = await res.json()
+        if (cancelled) return
         setTelemetry(payload.layers)
         setWindowMs(payload.windowMs)
         setLastUpdated(payload.lastUpdated)
         setError(null)
       } catch (err) {
-        if (cancelled) {
-          return
-        }
+        if (cancelled) return
         console.error("Failed to load rate limit telemetry", err)
         setError("Unable to load live rate limit telemetry.")
       }
     }
-
     void loadTelemetry()
-    const interval = setInterval(() => {
-      void loadTelemetry()
-    }, REFRESH_INTERVAL_MS)
-
+    const interval = setInterval(() => void loadTelemetry(), REFRESH_INTERVAL_MS)
     return () => {
       cancelled = true
       clearInterval(interval)
@@ -86,7 +64,7 @@ export function RateLimitTelemetryCard() {
   }, [])
 
   return (
-    <Card className="col-span-full lg:col-span-2 crypto-card">
+    <Card className="w-full col-span-full crypto-card">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -100,6 +78,7 @@ export function RateLimitTelemetryCard() {
           {error ? "Degraded" : "Live"}
         </Badge>
       </CardHeader>
+
       <CardContent className="space-y-4">
         {error ? (
           <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -108,9 +87,10 @@ export function RateLimitTelemetryCard() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* single column, full width */}
+        <div className="grid grid-cols-1 gap-4">
           {telemetry.map((layer) => (
-            <div key={layer.layer} className="rounded-lg border border-border/60 bg-muted/30 p-4 shadow-sm">
+            <div key={layer.layer} className="w-full rounded-lg border border-border/60 bg-muted/30 p-4 shadow-sm">
               <div className="flex items-center justify-between text-sm font-medium uppercase tracking-wide text-muted-foreground">
                 <span>{layer.layer}</span>
                 <Clock3 className="h-4 w-4 text-muted-foreground" />
@@ -142,8 +122,8 @@ export function RateLimitTelemetryCard() {
 
         {lastUpdated ? (
           <p className="text-xs text-muted-foreground">
-            Last updated {new Date(lastUpdated).toLocaleTimeString()} • Auto-refreshes every {Math.round(REFRESH_INTERVAL_MS / 1000)}
-            s
+            Last updated {new Date(lastUpdated).toLocaleTimeString()} • Auto-refreshes every{" "}
+            {Math.round(REFRESH_INTERVAL_MS / 1000)}s
           </p>
         ) : null}
       </CardContent>
