@@ -1,3 +1,5 @@
+import "server-only"
+
 import jwt from "jsonwebtoken"
 import bcrypt from "bcryptjs"
 import type { NextRequest } from "next/server"

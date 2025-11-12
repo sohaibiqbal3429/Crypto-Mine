@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { getTokenFromRequest, getUserFromRequest } from "@/lib/auth"
-import {
-  enforceUnifiedRateLimit,
-  getRateLimitContext,
-  shouldBypassRateLimit,
-} from "@/lib/rate-limit/unified"
+import { getTokenFromRequest, getUserFromRequest } from "@/lib/auth-middleware"
+import { enforceUnifiedRateLimit, getRateLimitContext, shouldBypassRateLimit } from "@/lib/rate-limit/edge"
 import { trackRequestRate } from "@/lib/observability/request-metrics"
 
 export async function middleware(request: NextRequest) {
@@ -34,7 +30,7 @@ export async function middleware(request: NextRequest) {
   const isPublicApiRoute = publicApiRoutes.some((route) => pathname.startsWith(route))
 
   // Get user from request
-  const user = getUserFromRequest(request)
+  const user = await getUserFromRequest(request)
 
   // Redirect authenticated users away from auth pages
   if (user && (pathname.startsWith("/auth/") || pathname === "/")) {
