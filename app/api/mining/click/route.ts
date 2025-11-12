@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { getUserFromRequest } from "@/lib/auth"
-import { getRedisClient, isRedisEnabled } from "@/lib/redis"
-import { consumeTokenBucket } from "@/lib/rate-limit/token-bucket"
+import { isRedisEnabled } from "@/lib/redis"
 import {
   enqueueMiningRequest,
   getMiningRequestStatus,
@@ -12,42 +11,12 @@ import {
 } from "@/lib/services/mining-queue"
 import { MiningActionError, performMiningClick } from "@/lib/services/mining"
 import { recordMiningMetrics } from "@/lib/services/mining-metrics"
-
-const GLOBAL_BUCKET_KEY = "rate:mining:global"
-const USER_BUCKET_PREFIX = "rate:mining:user:"
-const IP_BUCKET_PREFIX = "rate:mining:ip:"
-
-const USER_RATE_LIMIT = {
-  tokensPerInterval: Number(process.env.MINING_RATE_LIMIT_PER_USER ?? 5),
-  intervalMs: 1000,
-  maxTokens: Number(process.env.MINING_RATE_LIMIT_USER_BURST ?? 10),
-}
-
-const GLOBAL_RATE_LIMIT = {
-  tokensPerInterval: Number(process.env.MINING_RATE_LIMIT_GLOBAL ?? 12000),
-  intervalMs: 1000,
-  maxTokens: Number(process.env.MINING_RATE_LIMIT_GLOBAL_BURST ?? 24000),
-}
-
-const IP_RATE_LIMIT = {
-  tokensPerInterval: Number(process.env.MINING_RATE_LIMIT_PER_IP ?? 20),
-  intervalMs: 1000,
-  maxTokens: Number(process.env.MINING_RATE_LIMIT_IP_BURST ?? 40),
-}
-
-function parseClientIp(request: NextRequest): string {
-  const directIp = request.ip
-  if (directIp) {
-    return directIp
-  }
-
-  const forwardedFor = request.headers.get("x-forwarded-for")
-  if (!forwardedFor) {
-    return "unknown"
-  }
-
-  return forwardedFor.split(",")[0]?.trim() || "unknown"
-}
+import {
+  enforceUnifiedRateLimit,
+  getClientIp,
+  getRateLimitContext,
+} from "@/lib/rate-limit/unified"
+import { recordRequestLatency, trackRequestRate } from "@/lib/observability/request-metrics"
 
 function buildStatusResponse(
   status: MiningRequestStatus,
@@ -67,9 +36,12 @@ function buildStatusResponse(
     statusCode = 200
     headers["Cache-Control"] = `private, max-age=0, s-maxage=${Math.floor(MINING_STATUS_TTL_MS / 1000)}`
   } else {
-    statusCode = status.error?.retryable ? 429 : 409
+    statusCode = status.error?.retryable ? 503 : 409
     if (status.error?.retryAfterMs) {
-      headers["Retry-After"] = Math.ceil(status.error.retryAfterMs / 1000).toString()
+      const retrySeconds = Math.max(1, Math.ceil(status.error.retryAfterMs / 1000))
+      headers["Retry-After"] = retrySeconds.toString()
+      const backoffSeconds = Math.min(600, Math.pow(2, Math.ceil(Math.log2(retrySeconds))))
+      headers["X-Backoff-Hint"] = backoffSeconds.toString()
     }
   }
 
@@ -83,17 +55,34 @@ function buildStatusResponse(
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now()
+  const path = new URL(request.url).pathname
+  const rateLimitContext = getRateLimitContext(request)
+  trackRequestRate("backend", { path })
+
+  const respond = (response: NextResponse, tags: Record<string, string | number> = {}) => {
+    recordRequestLatency("backend", Date.now() - startedAt, { path, status: response.status, ...tags })
+    return response
+  }
+
+  const rateDecision = await enforceUnifiedRateLimit("backend", rateLimitContext, { path })
+  if (!rateDecision.allowed && rateDecision.response) {
+    return respond(rateDecision.response, { outcome: "rate_limited" })
+  }
+
   const idempotencyKey = request.headers.get("idempotency-key")?.trim()
   if (!idempotencyKey) {
-    return NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 })
+    return respond(NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 }), {
+      outcome: "missing_idempotency",
+    })
   }
 
   const userPayload = getUserFromRequest(request)
   if (!userPayload) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return respond(NextResponse.json({ error: "Unauthorized" }, { status: 401 }), { outcome: "unauthorized" })
   }
 
-  const ip = parseClientIp(request)
+  const ip = getClientIp(request)
 
   const queueAvailable = isRedisEnabled() && isMiningQueueEnabled()
 
@@ -125,18 +114,23 @@ export async function POST(request: NextRequest) {
         },
       }
 
-      return buildStatusResponse(status, request)
+      return respond(buildStatusResponse(status, request), { outcome: "completed_no_queue" })
     } catch (error) {
       if (error instanceof MiningActionError) {
-        return NextResponse.json({ error: error.message }, { status: error.status })
+        return respond(NextResponse.json({ error: error.message }, { status: error.status }), {
+          outcome: "mining_error",
+        })
       }
 
       console.error("Mining click processing error", error)
-      return NextResponse.json(
-        {
-          error: "Unable to process mining request",
-        },
-        { status: 500 },
+      return respond(
+        NextResponse.json(
+          {
+            error: "Unable to process mining request",
+          },
+          { status: 500 },
+        ),
+        { outcome: "processing_failure" },
       )
     }
   }
@@ -144,51 +138,13 @@ export async function POST(request: NextRequest) {
   const existingStatus = await getMiningRequestStatus(idempotencyKey)
   if (existingStatus) {
     if (existingStatus.userId !== userPayload.userId) {
-      return NextResponse.json({ error: "Idempotency key belongs to another user" }, { status: 409 })
+      return respond(
+        NextResponse.json({ error: "Idempotency key belongs to another user" }, { status: 409 }),
+        { outcome: "idempotency_conflict" },
+      )
     }
 
-    return buildStatusResponse(existingStatus, request)
-  }
-
-  const redis = getRedisClient()
-
-  const [globalLimit, userLimit, ipLimit] = await Promise.all([
-    consumeTokenBucket({
-      key: GLOBAL_BUCKET_KEY,
-      ...GLOBAL_RATE_LIMIT,
-      client: redis,
-    }),
-    consumeTokenBucket({
-      key: `${USER_BUCKET_PREFIX}${userPayload.userId}`,
-      ...USER_RATE_LIMIT,
-      client: redis,
-    }),
-    consumeTokenBucket({
-      key: `${IP_BUCKET_PREFIX}${ip}`,
-      ...IP_RATE_LIMIT,
-      client: redis,
-    }),
-  ])
-
-  const limitBreaches = [
-    { label: "global", result: globalLimit },
-    { label: "user", result: userLimit },
-    { label: "ip", result: ipLimit },
-  ].filter((entry) => !entry.result.allowed)
-
-  if (limitBreaches.length > 0) {
-    const retryAfter = Math.max(...limitBreaches.map((entry) => entry.result.retryAfterMs || 0))
-    const response = NextResponse.json(
-      {
-        error: "Too many requests",
-        scope: limitBreaches.map((entry) => entry.label),
-      },
-      { status: 429 },
-    )
-    if (retryAfter > 0) {
-      response.headers.set("Retry-After", Math.max(1, Math.ceil(retryAfter / 1000)).toString())
-    }
-    return response
+    return respond(buildStatusResponse(existingStatus, request), { outcome: "duplicate" })
   }
 
   try {
@@ -199,14 +155,17 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent"),
     })
 
-    return buildStatusResponse(enqueueResult.status, request)
+    return respond(buildStatusResponse(enqueueResult.status, request), { outcome: "enqueued" })
   } catch (error) {
     console.error("Mining click enqueue error", error)
-    return NextResponse.json(
-      {
-        error: "Unable to queue mining request",
-      },
-      { status: 500 },
+    return respond(
+      NextResponse.json(
+        {
+          error: "Unable to queue mining request",
+        },
+        { status: 500 },
+      ),
+      { outcome: "enqueue_failure" },
     )
   }
 }

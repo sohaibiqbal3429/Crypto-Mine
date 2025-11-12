@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react"
 import { ImportantUpdateModal } from "@/components/dashboard/important-update-modal"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
+import { RateLimitTelemetryCard } from "@/components/dashboard/rate-limit-telemetry"
 import { HalvingChart } from "@/components/dashboard/halving-chart"
 import { LuckyDrawCard } from "@/components/dashboard/lucky-draw-card"
 import { InviteAndEarnPanel } from "@/components/dashboard/invite-and-earn-panel"
@@ -111,6 +112,7 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
+            <RateLimitTelemetryCard />
             <HalvingChart />
           </div>
 

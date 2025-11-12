@@ -18,9 +18,10 @@ interface MiningWidgetProps {
     requiresDeposit?: boolean
     minDeposit?: number
   }
+  onMiningSuccess?: () => void
 }
 
-export function MiningWidget({ mining }: MiningWidgetProps) {
+export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
   const [feedback, setFeedback] = useState<{ error?: string; success?: string }>({})
   const router = useRouter()
   const [canMine, setCanMine] = useState(mining.canMine)
@@ -99,6 +100,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
         setCanMine(false)
         setPolling(null)
         router.refresh()
+        onMiningSuccess?.()
         return
       }
 
@@ -108,10 +110,14 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
         return
       }
 
-      if (response.status === 429) {
+      if (response.status === 429 || response.status === 503) {
         const retry = response.headers.get("Retry-After")
+        const backoff = response.headers.get("X-Backoff-Hint")
         const retryMessage = retry ? ` Try again in ${retry} seconds.` : ""
-        setFeedback({ error: `${data?.error ?? "Too many requests."}${retryMessage}` })
+        const backoffMessage = backoff ? ` Recommended backoff: ${backoff}s.` : ""
+        setFeedback({
+          error: `${data?.error ?? "System temporarily busy."}${retryMessage}${backoffMessage}`,
+        })
         return
       }
 
@@ -173,6 +179,7 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
           setCanMine(false)
           setPolling(null)
           router.refresh()
+          onMiningSuccess?.()
           return
         }
 
@@ -189,10 +196,14 @@ export function MiningWidget({ mining }: MiningWidgetProps) {
           return
         }
 
-        if (response.status === 429) {
+        if (response.status === 429 || response.status === 503) {
           const retry = response.headers.get("Retry-After")
+          const backoff = response.headers.get("X-Backoff-Hint")
           const retryMessage = retry ? ` Try again in ${retry} seconds.` : ""
-          setFeedback({ error: `${data?.status?.error?.message ?? "System busy."}${retryMessage}` })
+          const backoffMessage = backoff ? ` Recommended backoff: ${backoff}s.` : ""
+          setFeedback({
+            error: `${data?.status?.error?.message ?? "System busy."}${retryMessage}${backoffMessage}`,
+          })
         } else {
           setFeedback({ error: data?.status?.error?.message ?? "Mining request failed." })
         }
