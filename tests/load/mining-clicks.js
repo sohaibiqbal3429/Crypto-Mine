@@ -41,7 +41,8 @@ export default function () {
   })
 
   check(res, {
-    "status is acceptable": (r) => [200, 202, 429].includes(r.status),
+    "status is acceptable": (r) => [200, 202, 503].includes(r.status),
+    "no throttling": (r) => r.status !== 429,
   })
 
   if (res.status === 202 && res.json()?.statusUrl) {
@@ -50,7 +51,8 @@ export default function () {
       headers: buildHeaders(idempotencyKey),
     })
     check(statusRes, {
-      "status poll ok": (r) => [200, 202, 429].includes(r.status),
+      "status poll ok": (r) => [200, 202, 503].includes(r.status),
+      "status poll not throttled": (r) => r.status !== 429,
     })
   }
 

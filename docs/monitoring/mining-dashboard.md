@@ -8,18 +8,22 @@ The API and worker expose the following Prometheus counters and gauges (via `/ap
 
 | Metric | Type | Description |
 | --- | --- | --- |
-| `mining_click_requests_total{status="200|202|429"}` | Counter | Total click API responses, partitioned by HTTP status |
+| `mining_click_requests_total{status="200|202|503"}` | Counter | Total click API responses, partitioned by HTTP status |
 | `mining_click_queue_depth` | Gauge | Current `mining-clicks` queue depth from BullMQ |
 | `mining_worker_processed_total` | Counter | Successful worker completions |
 | `mining_worker_failed_total` | Counter | Worker failures, labelled by error code |
 | `mining_worker_lag_seconds` | Gauge | Time difference between newest queued job and processing time |
 | `redis_latency_ms` | Histogram | Redis command latency (from client instrumentation) |
+| `request_rate_current_per_s{layer="cdn|reverse-proxy|backend"}` | Gauge | Live requests per second per layer from middleware instrumentation |
+| `rate_limit_throttle_total{layer="cdn|reverse-proxy|backend",scope="ip|api-key"}` | Counter | Unified throttle hits labelled by layer/scope |
+| `request_latency_p95_ms{layer="cdn|reverse-proxy|backend"}` | Gauge | Rolling p95 latency derived from request timing hooks |
 
 ## Grafana dashboard layout
 
 1. **Overview row**
    - *RPS & status split*: `sum(rate(mining_click_requests_total[5m])) by (status)` stacked bar.
    - *Latency*: `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route="/api/mining/*"}[5m])) by (le))`.
+   - *Unified guardrail summary*: table panel backed by `/api/observability/rate-limit` (JSON API datasource) mirroring the in-app telemetry card.
 2. **Queue health row**
    - Queue depth time-series with alert threshold at 4,000.
    - Worker lag line chart using `mining_worker_lag_seconds`.
@@ -51,13 +55,13 @@ The API and worker expose the following Prometheus counters and gauges (via `/ap
     description: "Workers failing at >5 per second. Investigate logs and DB connectivity."
 
 - alert: MiningApi429Spike
-  expr: sum(rate(mining_click_requests_total{status="429"}[5m])) / sum(rate(mining_click_requests_total[5m])) > 0.05
+  expr: sum(rate(mining_click_requests_total{status="429"}[5m])) / sum(rate(mining_click_requests_total[5m])) > 0.001
   for: 5m
   labels:
     severity: warning
   annotations:
     summary: "429 rate elevated"
-    description: "More than 5% of mining click requests are throttled."
+    description: "More than 0.1% of mining click requests are throttled."
 ```
 
 ## Logging
