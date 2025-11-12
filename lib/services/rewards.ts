@@ -11,6 +11,7 @@ import {
   DEPOSIT_SELF_PERCENT_ACTIVE,
   TEAM_EARN_L1_PERCENT,
   TEAM_EARN_L2_PERCENT,
+  TEAM_REWARD_UNLOCK_LEVEL,
 } from "@/lib/constants/bonuses"
 import { isTransactionNotSupportedError } from "@/lib/utils/mongo-errors"
 
@@ -342,6 +343,12 @@ interface TeamEarningOptions {
   session?: ClientSession
 }
 
+function resolveUserLevel(user: { level?: unknown } | null | undefined): number {
+  const raw = user?.level
+  const value = typeof raw === "number" ? raw : Number(raw ?? Number.NaN)
+  return Number.isFinite(value) ? value : 0
+}
+
 export async function createTeamEarningPayouts(
   userId: string,
   earningAmount: number,
@@ -367,7 +374,8 @@ export async function createTeamEarningPayouts(
       ? await User.findById(l1User.referredBy, null, { session })
       : null
 
-    if (l1User) {
+    const l1Level = resolveUserLevel(l1User)
+    if (l1User && l1Level >= TEAM_REWARD_UNLOCK_LEVEL) {
       const l1Result = await createPayout({
         payerUserId: earnerObjectId,
         receiverUserId: asObjectId(l1User._id as mongoose.Types.ObjectId),
@@ -381,7 +389,8 @@ export async function createTeamEarningPayouts(
       if (l1Result.created) createdCount += 1
     }
 
-    if (l2User) {
+    const l2Level = resolveUserLevel(l2User)
+    if (l2User && l2Level >= TEAM_REWARD_UNLOCK_LEVEL) {
       const l2Result = await createPayout({
         payerUserId: earnerObjectId,
         receiverUserId: asObjectId(l2User._id as mongoose.Types.ObjectId),

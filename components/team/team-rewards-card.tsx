@@ -14,14 +14,25 @@ interface TeamRewardsCardProps {
   lastClaimedAt?: string | null
   isClaiming: boolean
   onClaim: () => void
+  isLocked?: boolean
+  unlockLevel?: number
 }
 
-export function TeamRewardsCard({ available, claimedTotal, lastClaimedAt, isClaiming, onClaim }: TeamRewardsCardProps) {
-  const canClaim = available > 0 && !isClaiming
+export function TeamRewardsCard({
+  available,
+  claimedTotal,
+  lastClaimedAt,
+  isClaiming,
+  onClaim,
+  isLocked = false,
+  unlockLevel = 1,
+}: TeamRewardsCardProps) {
+  const canClaim = available > 0 && !isClaiming && !isLocked
   const lastClaimedDate = ensureDate(lastClaimedAt)
   const formattedLastClaim = lastClaimedDate
     ? `${formatDate(lastClaimedDate, "long")} at ${formatTime(lastClaimedDate)}`
     : null
+  const unlockLabel = `Level ${unlockLevel}`
 
   return (
     <Card className="border-primary/20">
@@ -33,12 +44,14 @@ export function TeamRewardsCard({ available, claimedTotal, lastClaimedAt, isClai
           <div>
             <CardTitle className="text-lg">Team Rewards Wallet</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Daily team earnings accumulate here. Claim to credit them to your main balance.
+              {isLocked
+                ? `Reach ${unlockLabel} to unlock daily team earnings and start crediting them to your main balance.`
+                : "Daily team earnings accumulate here. Claim to credit them to your main balance."}
             </p>
           </div>
         </div>
-        <Badge variant={available > 0 ? "default" : "secondary"} className="w-fit">
-          {available > 0 ? "Rewards available" : "No rewards available"}
+        <Badge variant={isLocked ? "secondary" : available > 0 ? "default" : "secondary"} className="w-fit">
+          {isLocked ? `Unlocks at ${unlockLabel}` : available > 0 ? "Rewards available" : "No rewards available"}
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -46,8 +59,13 @@ export function TeamRewardsCard({ available, claimedTotal, lastClaimedAt, isClai
           <p className="text-sm text-muted-foreground">Available to claim</p>
           <p className="text-2xl font-semibold text-primary">{formatCurrency(available)}</p>
           <Button onClick={onClaim} disabled={!canClaim} className="w-full sm:w-auto">
-            {isClaiming ? "Claiming..." : "Claim rewards"}
+            {isLocked ? `Locked until ${unlockLabel}` : isClaiming ? "Claiming..." : "Claim rewards"}
           </Button>
+          {isLocked ? (
+            <p className="text-xs text-muted-foreground">
+              You&apos;ll start receiving team rewards once you reach {unlockLabel}.
+            </p>
+          ) : null}
         </div>
         <div className="space-y-3 rounded-lg border border-dashed border-muted p-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

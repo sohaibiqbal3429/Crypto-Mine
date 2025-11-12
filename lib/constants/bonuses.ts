@@ -11,6 +11,7 @@ export const DEPOSIT_L2_PERCENT_ACTIVE = 0.03 as const            // only if dep
 // Daily team earnings (fractions)
 export const TEAM_EARN_L1_PERCENT = 0.02 as const                 // 2% to L1
 export const TEAM_EARN_L2_PERCENT = 0.01 as const                 // 1% to L2
+export const TEAM_REWARD_UNLOCK_LEVEL = 1 as const                // Level required to receive team rewards
 
 // Optional: consolidated, frozen map (import { PERC } from "...") if you prefer one import
 export const PERC = Object.freeze({
