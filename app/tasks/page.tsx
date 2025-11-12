@@ -15,7 +15,7 @@ import {
   UserCheck,
   Share2,
   Wallet,
-  Sitemap,
+  Network,
 } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { formatCurrency } from "@/lib/utils/formatting"
@@ -41,7 +41,7 @@ const iconMap: Record<Task["type"], LucideIcon> = {
   mining: CheckCircle2,
   profile: UserCheck,
   social: Share2,
-  team: Sitemap,
+  team: Network,
   balance: Wallet,
 }
 
