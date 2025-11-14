@@ -13,6 +13,8 @@ import {
 import CommissionRule from "@/models/CommissionRule"
 import User from "@/models/User"
 
+const LEVEL_REFRESH_MAX_AGE_MS = 60_000
+
 export async function GET(request: NextRequest) {
   try {
     const userPayload = getUserFromRequest(request)
@@ -24,27 +26,44 @@ export async function GET(request: NextRequest) {
 
     const userId = userPayload.userId
 
-    await calculateUserLevel(userId, { persist: true, notify: false })
+    const selection = "level directActiveCount totalActiveDirects lastLevelUpAt levelEvaluatedAt"
 
-    const [user, teamStats, commissionRules] = await Promise.all([
-      User.findById(userId)
-        .select("level directActiveCount totalActiveDirects lastLevelUpAt")
-        .lean(),
-      getTeamStats(userId),
-      CommissionRule.find().sort({ level: 1 }).lean(),
-    ])
-
+    let user = await User.findById(userId).select(selection).lean()
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
+
+    const evaluatedAt = user.levelEvaluatedAt ? new Date(user.levelEvaluatedAt).getTime() : 0
+    const now = Date.now()
+    const shouldRefreshLevel = !evaluatedAt || now - evaluatedAt > LEVEL_REFRESH_MAX_AGE_MS
+
+    if (shouldRefreshLevel) {
+      await calculateUserLevel(userId, { persist: true, notify: false })
+      user = await User.findById(userId).select(selection).lean()
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 })
+      }
+    }
+
+    const [teamStats, commissionRules] = await Promise.all([
+      getTeamStats(userId, { forceRefresh: shouldRefreshLevel }),
+      CommissionRule.find().sort({ level: 1 }).lean(),
+    ])
 
     const currentLevel = Number.isFinite(user.level) ? Number(user.level) : 0
     const currentRule = commissionRules.find((rule) => rule.level === currentLevel) ?? null
     const nextRule = commissionRules.find((rule) => rule.level === currentLevel + 1) ?? null
     const requiredActive = getNextLevelRequirement(currentLevel)
 
-    const directActiveCount = user.directActiveCount ?? 0
-    const totalActiveDirects = user.totalActiveDirects ?? teamStats.directActive ?? 0
+    const fallbackDirectActive = Number.isFinite(teamStats?.directActive)
+      ? Number(teamStats.directActive)
+      : 0
+    const directActiveCount = Number.isFinite(user.directActiveCount)
+      ? Number(user.directActiveCount)
+      : fallbackDirectActive
+    const totalActiveDirects = Number.isFinite(user.totalActiveDirects)
+      ? Number(user.totalActiveDirects)
+      : fallbackDirectActive
     const lastLevelUpAt = user.lastLevelUpAt ? new Date(user.lastLevelUpAt).toISOString() : null
 
     let levelProgress: {
