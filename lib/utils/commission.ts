@@ -276,8 +276,12 @@ export async function calculateUserLevel(
   const resolvedLastLevelUpAt =
     achievements.length > 0 ? achievements[achievements.length - 1].achievedAt : null
 
+  const evaluationTimestamp = new Date()
+
   const updates: Record<string, unknown> = {
     level: resolvedLevel,
+    levelCached: resolvedLevel,
+    levelEvaluatedAt: evaluationTimestamp,
     directActiveCount: resolvedProgress,
     totalActiveDirects,
     lastLevelUpAt: resolvedLastLevelUpAt,
@@ -1179,19 +1183,107 @@ export async function buildTeamTree(userId: string, maxDepth = 5): Promise<any> 
   }
 }
 
-export async function getTeamStats(userId: string) {
-  const allTeamMembers = await getAllTeamMembers(userId)
-  const totalMembers = allTeamMembers.length
-  const activeMembers = allTeamMembers.filter((member) => hasQualifiedDeposit(member)).length
-  const totalTeamDeposits = allTeamMembers.reduce((sum, member) => sum + member.depositTotal, 0)
-  const totalTeamEarnings = allTeamMembers.reduce((sum, member) => sum + member.roiEarnedTotal, 0)
+type GraphTeamMember = {
+  _id: mongoose.Types.ObjectId
+  depth: number
+  depositTotal?: number | string | null
+  roiEarnedTotal?: number | string | null
+  qualified?: boolean | null
+}
 
-  const directReferrals = await User.find({ referredBy: userId })
-    .select("qualified depositTotal")
-    .lean()
+type TeamStatsCacheEntry = {
+  value: {
+    totalMembers: number
+    activeMembers: number
+    directReferrals: number
+    directActive: number
+    totalTeamDeposits: number
+    totalTeamEarnings: number
+    levels: { level1: number; level2: number }
+  }
+  expiresAt: number
+}
+
+export interface GetTeamStatsOptions {
+  forceRefresh?: boolean
+  maxAgeMs?: number
+}
+
+const TEAM_STATS_DEFAULT_MAX_AGE_MS = 60_000
+const teamStatsCache = new Map<string, TeamStatsCacheEntry>()
+
+function toFiniteNumber(value: number | string | null | undefined): number {
+  const numeric = typeof value === "string" ? Number.parseFloat(value) : Number(value ?? 0)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+export async function getTeamStats(userId: string, options: GetTeamStatsOptions = {}) {
+  const cacheKey = toObjectIdString(userId)
+  const now = Date.now()
+  const ttl = options.maxAgeMs ?? TEAM_STATS_DEFAULT_MAX_AGE_MS
+
+  const cached = teamStatsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now && !options.forceRefresh) {
+    return cached.value
+  }
+  if (cached && cached.expiresAt <= now) {
+    teamStatsCache.delete(cacheKey)
+  }
+
+  const [graphLookupResult] = (await User.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(cacheKey) } },
+    {
+      $graphLookup: {
+        from: User.collection.name,
+        startWith: "$_id",
+        connectFromField: "_id",
+        connectToField: "referredBy",
+        as: "teamMembers",
+        depthField: "depth",
+      },
+    },
+    {
+      $project: {
+        teamMembers: {
+          $map: {
+            input: {
+              $filter: {
+                input: "$teamMembers",
+                as: "member",
+                cond: { $ne: ["$$member._id", "$_id"] },
+              },
+            },
+            as: "member",
+            in: {
+              _id: "$$member._id",
+              depth: { $add: ["$$member.depth", 1] },
+              depositTotal: "$$member.depositTotal",
+              roiEarnedTotal: "$$member.roiEarnedTotal",
+              qualified: "$$member.qualified",
+            },
+          },
+        },
+      },
+    },
+  ])) as Array<{ teamMembers: GraphTeamMember[] }>
+
+  const teamMembers = graphLookupResult?.teamMembers ?? []
+  const totalMembers = teamMembers.length
+  const activeMembers = teamMembers.filter((member) => hasQualifiedDeposit(member)).length
+  const totalTeamDeposits = teamMembers.reduce(
+    (sum, member) => sum + toFiniteNumber(member.depositTotal),
+    0,
+  )
+  const totalTeamEarnings = teamMembers.reduce(
+    (sum, member) => sum + toFiniteNumber(member.roiEarnedTotal),
+    0,
+  )
+
+  const directReferrals = teamMembers.filter((member) => member.depth === 1)
   const directActive = directReferrals.filter((member) => hasQualifiedDeposit(member)).length
+  const level2Count = teamMembers.filter((member) => member.depth === 2).length
 
-  return {
+  const computed = {
     totalMembers,
     activeMembers,
     directReferrals: directReferrals.length,
@@ -1200,20 +1292,14 @@ export async function getTeamStats(userId: string) {
     totalTeamEarnings,
     levels: {
       level1: directReferrals.length,
-      level2: await User.countDocuments({ referredBy: { $in: directReferrals.map((r) => r._id) } }),
+      level2: level2Count,
     },
   }
-}
 
-async function getAllTeamMembers(userId: string, visited = new Set()): Promise<any[]> {
-  if (visited.has(userId)) return []
-  visited.add(userId)
+  teamStatsCache.set(cacheKey, {
+    value: computed,
+    expiresAt: now + ttl,
+  })
 
-  const directReferrals = await User.find({ referredBy: userId })
-  let allMembers = [...directReferrals]
-  for (const referral of directReferrals) {
-    const subTeam = await getAllTeamMembers(toObjectIdString(referral._id), visited)
-    allMembers = allMembers.concat(subTeam)
-  }
-  return allMembers
+  return computed
 }
