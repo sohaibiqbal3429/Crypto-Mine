@@ -7,6 +7,10 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { TeamRewardsCard } from "@/components/team/team-rewards-card"
 import { TeamRewardsHistory, type TeamRewardHistoryEntry } from "@/components/team/team-rewards-history"
 import { LevelProgress } from "@/components/team/level-progress"
+import {
+  TeamHierarchyChart,
+  TeamHierarchySkeleton,
+} from "@/components/team/team-hierarchy-chart"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -134,6 +138,35 @@ interface MeResponse {
     referralCode?: string
     role?: string
     profileAvatar?: string
+  } | null
+}
+
+interface TeamStructureMember {
+  _id?: string
+  name?: string | null
+  email?: string | null
+  referralCode?: string | null
+  level?: number | null
+  depositTotal?: number | null
+  isActive?: boolean | null
+  qualified?: boolean | null
+  createdAt?: string | null
+  profileAvatar?: string | null
+  children?: TeamStructureMember[] | null
+  directCount?: number | null
+  activeCount?: number | null
+}
+
+interface TeamStructureResponse {
+  teamTree?: TeamStructureMember | null
+  teamStats?: {
+    totalMembers?: number | null
+    activeMembers?: number | null
+    directReferrals?: number | null
+    directActive?: number | null
+    totalTeamDeposits?: number | null
+    totalTeamEarnings?: number | null
+    levels?: { level1?: number | null; level2?: number | null } | null
   } | null
 }
 
@@ -320,6 +353,15 @@ export default function TeamPageShell() {
   } = useSWR<LevelResponse>("/api/levels/eligibility", fetcher, {
     revalidateOnFocus: false,
     fallbackData: cachedLevelData ?? undefined,
+  })
+
+  const teamStructureKey = userId ? "/api/team/structure" : null
+  const {
+    data: teamStructureData,
+    isLoading: teamStructureLoading,
+    error: teamStructureError,
+  } = useSWR<TeamStructureResponse>(teamStructureKey, fetcher, {
+    revalidateOnFocus: false,
   })
 
   const previousTabRef = useRef(activeTab)
@@ -529,6 +571,23 @@ export default function TeamPageShell() {
                   We couldn't load the rewards history. Please refresh the page.
                 </div>
               ) : null}
+
+              {teamStructureLoading && !teamStructureData ? (
+                <TeamHierarchySkeleton />
+              ) : teamStructureData?.teamTree ? (
+                <TeamHierarchyChart
+                  teamTree={teamStructureData.teamTree}
+                  teamStats={teamStructureData.teamStats ?? null}
+                />
+              ) : teamStructureError ? (
+                <div className="rounded-xl border border-border/60 bg-card p-4 text-sm text-destructive">
+                  Unable to load the team hierarchy. Please try refreshing the page.
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border/60 bg-card p-6 text-sm text-muted-foreground">
+                  Build your network to see a visual hierarchy of how your team is structured.
+                </div>
+              )}
 
               <TeamList userId={userId} />
             </TabsContent>
