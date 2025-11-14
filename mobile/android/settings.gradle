@@ -1,0 +1,5 @@
+rootProject.name = "CryptoMineMobile"
+
+includeBuild('../node_modules/react-native-gradle-plugin')
+
+include ':app'
