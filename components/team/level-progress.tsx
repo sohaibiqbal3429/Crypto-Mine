@@ -231,9 +231,10 @@ export function LevelProgress({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Direct Commission:</span>
-                <span className="font-medium">
-                  {Number.isFinite(currentDirectPct) ? `${currentDirectPct}%` : "—"}
-                </span>
+              <span className="font-medium ">
+  15%
+</span>
+
               </div>
               {currentOverrides.map((summary) => (
                 <div key={`${summary.kind}-${summary.pct}`} className="flex justify-between">
