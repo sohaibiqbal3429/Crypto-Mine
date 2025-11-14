@@ -1,30 +1,64 @@
+
 "use client"
 
 import { memo, useMemo } from "react"
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
+interface TeamHierarchyMember {
+  _id?: string
+  name?: string | null
+  email?: string | null
+  referralCode?: string | null
+  level?: number | null
+  depositTotal?: number | null
+  isActive?: boolean | null
+  qualified?: boolean | null
+  createdAt?: string | null
+  profileAvatar?: string | null
+  children?: TeamHierarchyMember[] | null
+  directCount?: number | null
+  activeCount?: number | null
+}
+
+interface TeamStatsSummary {
+  totalMembers?: number | null
+  activeMembers?: number | null
+  directReferrals?: number | null
+  directActive?: number | null
+  totalTeamDeposits?: number | null
+  totalTeamEarnings?: number | null
+  levels?: { level1?: number | null; level2?: number | null } | null
+}
+
+interface TeamHierarchyChartProps {
+  teamTree: TeamHierarchyMember
+  teamStats?: TeamStatsSummary | null
+  maxDepth?: number
+}
+
 const LEVEL_STYLES = [
   {
-    card: "bg-gradient-to-r from-cyan-500 to-blue-500 border-blue-500/40",
-    avatar: "ring-cyan-500/60 bg-cyan-500/10 text-cyan-600 dark:text-cyan-100",
-    badge: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-100",
+    card: "from-sky-500/10 via-sky-500/5 to-transparent border-sky-500/40",
+    avatar: "ring-sky-500/60 bg-sky-500/10 text-sky-600 dark:text-sky-100",
+    badge: "bg-sky-500/10 text-sky-700 dark:text-sky-100",
   },
   {
-    card: "bg-gradient-to-r from-green-500 to-teal-500 border-green-500/40",
-    avatar: "ring-green-500/60 bg-green-500/10 text-green-600 dark:text-green-100",
-    badge: "bg-green-500/10 text-green-700 dark:text-green-100",
+    card: "from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/40",
+    avatar: "ring-emerald-500/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-100",
+    badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-100",
   },
   {
-    card: "bg-gradient-to-r from-purple-500 to-pink-500 border-purple-500/40",
-    avatar: "ring-purple-500/60 bg-purple-500/10 text-purple-600 dark:text-purple-100",
-    badge: "bg-purple-500/10 text-purple-700 dark:text-purple-100",
+    card: "from-violet-500/10 via-violet-500/5 to-transparent border-violet-500/40",
+    avatar: "ring-violet-500/60 bg-violet-500/10 text-violet-600 dark:text-violet-100",
+    badge: "bg-violet-500/10 text-violet-700 dark:text-violet-100",
   },
   {
-    card: "bg-gradient-to-r from-amber-500 to-orange-500 border-amber-500/40",
+    card: "from-amber-500/10 via-amber-500/5 to-transparent border-amber-500/40",
     avatar: "ring-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-100",
     badge: "bg-amber-500/10 text-amber-700 dark:text-amber-100",
   },
@@ -95,14 +129,14 @@ const MemberNode = memo(function MemberNode({ member, depth, maxDepth }: MemberN
     <div className="flex flex-col items-center text-center">
       <div
         className={cn(
-          "relative flex w-24 h-24 flex-col items-center gap-2 rounded-2xl border p-4 text-sm shadow-md",
+          "relative flex w-full max-w-xs flex-col items-center gap-4 rounded-2xl border bg-card p-6 text-sm shadow-sm",
           "bg-gradient-to-br",
           styles.card,
         )}
       >
         <Avatar
           className={cn(
-            "h-12 w-12 border-4 border-background shadow-lg",
+            "h-16 w-16 border-4 border-background shadow-md",
             "ring-4",
             styles.avatar,
           )}
@@ -116,11 +150,11 @@ const MemberNode = memo(function MemberNode({ member, depth, maxDepth }: MemberN
         </Avatar>
 
         <div className="space-y-1">
-          <h3 className="text-xs font-semibold">{member.name ?? "Unnamed member"}</h3>
-          <p className="text-[10px] text-muted-foreground">{member.email ?? "Email unavailable"}</p>
+          <h3 className="text-base font-semibold">{member.name ?? "Unnamed member"}</h3>
+          <p className="text-xs text-muted-foreground">{member.email ?? "Email unavailable"}</p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-1">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <Badge variant="secondary" className={cn("border-none", styles.badge)}>
             {getRoleLabel(depth)}
           </Badge>
@@ -143,38 +177,40 @@ const MemberNode = memo(function MemberNode({ member, depth, maxDepth }: MemberN
           </Badge>
         </div>
 
-        <div className="grid w-full grid-cols-2 gap-2 text-[10px]">
-          <div className="rounded-lg border border-border/40 bg-background/60 p-2">
+        <div className="grid w-full grid-cols-2 gap-3 text-xs">
+          <div className="rounded-lg border border-border/40 bg-background/60 p-3">
             <p className="text-muted-foreground">Team deposits</p>
             <p className="font-semibold">{formatCurrency(member.depositTotal ?? null)}</p>
           </div>
-          <div className="rounded-lg border border-border/40 bg-background/60 p-2">
+          <div className="rounded-lg border border-border/40 bg-background/60 p-3">
             <p className="text-muted-foreground">Direct referrals</p>
             <p className="font-semibold">{directCount}</p>
           </div>
-          <div className="rounded-lg border border-border/40 bg-background/60 p-2">
+          <div className="rounded-lg border border-border/40 bg-background/60 p-3">
             <p className="text-muted-foreground">Active referrals</p>
             <p className="font-semibold text-emerald-600 dark:text-emerald-300">{activeCount}</p>
           </div>
-          <div className="rounded-lg border border-border/40 bg-background/60 p-2">
+          <div className="rounded-lg border border-border/40 bg-background/60 p-3">
             <p className="text-muted-foreground">Joined</p>
             <p className="font-semibold">{formatDate(member.createdAt)}</p>
           </div>
         </div>
 
         {member.referralCode ? (
-          <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Code: <span className="text-foreground">{member.referralCode}</span>
           </p>
         ) : null}
       </div>
 
       {member.children && member.children.length > 0 ? (
-        <div className="relative mt-6 w-full">
+        <div className="relative mt-8 w-full">
           <div className="absolute left-1/2 top-0 h-6 w-px -translate-x-1/2 -translate-y-6 bg-border/70" />
-          <div className="relative flex flex-wrap justify-center gap-4 pt-6">
+          <div className="relative flex flex-wrap justify-center gap-6 pt-6">
+            <div className="pointer-events-none absolute left-[10%] right-[10%] top-0 hidden h-px bg-border/70 md:block" />
             {member.children.map((child) => (
               <div key={child._id ?? `${member._id}-child`} className="relative">
+                <div className="absolute left-1/2 top-0 h-6 w-px -translate-x-1/2 -translate-y-6 bg-border/70" />
                 <MemberNode member={child} depth={depth + 1} maxDepth={maxDepth} />
               </div>
             ))}
@@ -234,10 +270,55 @@ export function TeamHierarchyChart({ teamTree, teamStats, maxDepth = 4 }: TeamHi
       </CardHeader>
 
       <CardContent>
-        <div className="flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-12">
           <MemberNode member={teamTree} depth={0} maxDepth={maxDepth} />
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+export function TeamHierarchySkeleton() {
+  return (
+    <Card className="border-border/60">
+      <CardHeader className="space-y-2">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-4 w-72" />
+        <div className="flex gap-2">
+          <Skeleton className="h-5 w-28" />
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col items-center gap-10">
+          <HierarchyNodeSkeleton />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function HierarchyNodeSkeleton({ depth = 0, maxDepth = 3 }: { depth?: number; maxDepth?: number }) {
+  if (depth >= maxDepth) return null
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-2xl border border-dashed border-border/50 bg-muted/30 p-6">
+        <Skeleton className="h-16 w-16 rounded-full" />
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-3 w-44" />
+        <div className="grid w-full grid-cols-2 gap-3">
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+          <Skeleton className="h-12 w-full rounded-lg" />
+        </div>
+      </div>
+      <div className="mt-8 flex flex-wrap justify-center gap-6">
+        <HierarchyNodeSkeleton depth={depth + 1} maxDepth={maxDepth} />
+        <HierarchyNodeSkeleton depth={depth + 1} maxDepth={maxDepth} />
+      </div>
+    </div>
   )
 }
