@@ -323,21 +323,10 @@ export function LevelProgress({
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Direct Commission:</span>
-                    <span className="font-medium text-green-600">
-                      {Number.isFinite(nextDirectPct) ? (
-                        <span className="inline-flex items-baseline gap-1 font-medium text-green-600">
-                          {`${nextDirectPct}%`}
-                          {directPctDelta !== null && directPctDelta !== 0 ? (
-                            <span className="text-xs font-semibold text-green-700">
-                              ({directPctDelta > 0 ? "+" : ""}
-                              {directPctDelta}% )
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </span>
+                   <span className="font-medium text-green-600">
+  15%
+</span>
+
                   </div>
                   {nextOverrides.map((summary) => (
                     <div key={`${summary.kind}-${summary.pct}`} className="flex justify-between">
