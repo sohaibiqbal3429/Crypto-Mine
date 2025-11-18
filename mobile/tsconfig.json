@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "types": ["react", "react-native"],
+    "baseUrl": "./",
+    "paths": {
+      "@/api/*": ["src/api/*"],
+      "@/features/*": ["src/features/*"],
+      "@/navigation/*": ["src/navigation/*"],
+      "@/providers/*": ["src/providers/*"],
+      "@/store/*": ["src/store/*"],
+      "@/utils/*": ["src/utils/*"]
+    }
+  },
+  "include": ["src", "App.tsx", "index.js", "jest.setup.ts"],
+  "exclude": ["node_modules"]
+}

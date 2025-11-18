@@ -101,6 +101,13 @@ The script (`tests/load/mining-clicks.js`) issues 10k clicks/sec, polls status e
 - Run queue inspection script (to create) `pnpm ts-node scripts/queues/inspect-mining.ts` to view active jobs and metrics.
 - Follow the runbook whenever `mining_click_queue_depth` exceeds 4,500 or worker errors rise.
 
+## Mobile app & APK distribution
+
+- The React Native client lives in `/mobile` and mirrors the dashboard experience using React Query and Zustand. Set `API_BASE_URL` in `mobile/.env` (or your preferred env solution) to point at the deployed Next.js origin.
+- Generate a signed Android release with `cd mobile && npm install && cd android && ./gradlew assembleRelease`. Upload the resulting `app-release.apk` to the CDN bucket referenced by `MOBILE_APK_DOWNLOAD_URL`.
+- Surface the new URL, version, build date, and optional release notes through environment variables listed in `.env.example`. The website's “Download Mobile App” button reads `/api/mobile-app/apk` and updates the modal in real time.
+- Mobile metadata is cached client side with SWR and revalidated on window focus, mirroring the polling strategy of the web dashboard.
+
 ## Acceptance criteria summary
 
 - ✅ Handles 1k–10k concurrent users via queue + throttling.

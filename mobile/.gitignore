@@ -1,0 +1,15 @@
+# React Native / Android / iOS build artifacts
+node_modules/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/gradle/wrapper/gradle-wrapper.jar
+ios/build/
+ios/Pods/
+*.log
+*.keystore
+*.jks
+*.keystore.properties
+*.iml
+.expo/

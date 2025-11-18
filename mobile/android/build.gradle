@@ -1,0 +1,28 @@
+buildscript {
+    ext {
+        buildToolsVersion = findProperty('android.buildToolsVersion') ?: "34.0.0"
+        minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: "24")
+        compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: "34")
+        targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: "34")
+        ndkVersion = "26.1.10909125"
+        kotlinVersion = findProperty('kotlinVersion') ?: "1.9.24"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.3.2")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+}
+
+allprojects {
+    repositories {
+        maven { url("https://www.jitpack.io") }
+        maven { url("https://maven.google.com") }
+        google()
+        mavenCentral()
+    }
+}

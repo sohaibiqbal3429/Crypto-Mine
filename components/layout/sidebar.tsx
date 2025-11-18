@@ -1,12 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
-import { LogOut } from "lucide-react"
+import { LogOut, Smartphone } from "lucide-react"
 
 import { PRIMARY_NAV_ITEMS, ADMIN_NAV_ITEM } from "@/components/layout/nav-config"
 import { Button } from "@/components/ui/button"
+import { ApkDownloadModal } from "@/components/mobile/apk-download-modal"
 
 interface SidebarProps {
   user?: {
@@ -19,6 +21,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ user }: SidebarProps) {
+  const [isMobileModalOpen, setIsMobileModalOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
@@ -79,6 +82,17 @@ export function Sidebar({ user }: SidebarProps) {
         )}
       </nav>
 
+      <div className="px-3 pb-4">
+        <Button
+          variant="outline"
+          className="w-full justify-start border-sidebar-border bg-sidebar text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={() => setIsMobileModalOpen(true)}
+        >
+          <Smartphone className="mr-2 h-4 w-4" />
+          Download Mobile App
+        </Button>
+      </div>
+
       {/* User info and logout */}
       {user && (
         <div className="border-t border-sidebar-border p-4">
@@ -113,8 +127,11 @@ export function Sidebar({ user }: SidebarProps) {
   )
 
   return (
-    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
-      <SidebarContent />
-    </aside>
+    <>
+      <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
+        <SidebarContent />
+      </aside>
+      <ApkDownloadModal open={isMobileModalOpen} onOpenChange={setIsMobileModalOpen} />
+    </>
   )
 }

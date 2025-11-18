@@ -100,6 +100,7 @@ async function proxyLoginRequest(payload: LoginInput) {
   const response = NextResponse.json({
     success: true,
     user,
+    token: token ?? undefined,
   })
 
   if (token) {
@@ -167,6 +168,7 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
+      token,
       user: {
         id: user._id,
         name: user.name,
