@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { OTPInput } from "@/components/auth/otp-input"
 import { Loader2, Shield, ArrowLeft } from "lucide-react"
+import { formatOTPSuccessMessage, type OTPSuccessPayload } from "@/lib/utils/otp-messages"
 
 export default function VerifyOTPPage() {
   const [otp, setOtp] = useState("")
@@ -145,10 +146,10 @@ export default function VerifyOTPPage() {
         }),
       })
 
-      const data = await response.json()
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
 
       if (response.ok) {
-        setSuccess("New verification code sent!")
+        setSuccess(formatOTPSuccessMessage(data, "New verification code sent!"))
         setCountdown(60)
         setOtp("")
       } else {

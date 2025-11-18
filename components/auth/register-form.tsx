@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select"
 import { SORTED_COUNTRY_DIAL_CODES } from "@/lib/constants/country-codes"
 import { OTPInput } from "@/components/auth/otp-input"
+import { formatOTPSuccessMessage, type OTPSuccessPayload } from "@/lib/utils/otp-messages"
 
 const PHONE_REGEX = /^\+[1-9]\d{7,14}$/
 
@@ -116,14 +117,19 @@ export function RegisterForm() {
           }),
         })
 
-        const data = await response.json().catch(() => ({}))
+        const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
 
         if (!response.ok) {
-          setError((data as { error?: string }).error || "Failed to send verification code")
+          setError(data.error || "Failed to send verification code")
           return
         }
 
-        setInfoMessage("Verification code sent to your email. Enter it below to verify your account.")
+        setInfoMessage(
+          formatOTPSuccessMessage(
+            data,
+            "Verification code sent to your email. Enter it below to verify your account.",
+          ),
+        )
         setStep("otp")
         setOtpValue("")
         setOtpCountdown(60)
@@ -208,14 +214,14 @@ export function RegisterForm() {
         }),
       })
 
-      const data = await response.json().catch(() => ({}))
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
 
       if (!response.ok) {
-        setError((data as { error?: string }).error || "Failed to resend code")
+        setError(data.error || "Failed to resend code")
         return
       }
 
-      setInfoMessage("A new verification code has been sent to your email.")
+      setInfoMessage(formatOTPSuccessMessage(data, "A new verification code has been sent to your email."))
       setOtpValue("")
       setOtpCountdown(60)
     } catch (resendError) {

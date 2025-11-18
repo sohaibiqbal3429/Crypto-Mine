@@ -39,7 +39,15 @@ MINING_RATE_LIMIT_PER_IP=20
 MINING_RATE_LIMIT_IP_BURST=40
 MINING_QUEUE_MAX_DEPTH=5000
 MINING_WORKER_CONCURRENCY=4
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@example.com
+SMTP_PASS=your-email-password-or-app-password
+ENABLE_DEV_OTP_FALLBACK=true
 ```
+
+`ENABLE_DEV_OTP_FALLBACK` lets local environments surface OTP codes directly in the UI/logs when email/SMS providers aren't
+configured. Set it to `false` (or remove it) in production so that OTP codes are only delivered through the configured transport.
 
 Tune limits according to production capacity. Lower per-user/IP tokens to tighten abuse controls or raise global limits as the cluster grows.
 

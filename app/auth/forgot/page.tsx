@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Label } from "@/components/ui/label"
 import { OTPInput } from "@/components/auth/otp-input"
+import { formatOTPSuccessMessage, type OTPSuccessPayload } from "@/lib/utils/otp-messages"
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
@@ -73,14 +74,19 @@ export default function ForgotPasswordPage() {
           }),
         })
 
-        const data = await response.json().catch(() => ({}))
+        const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
 
         if (!response.ok) {
-          setError((data as { error?: string }).error || "Unable to send verification code")
+          setError(data.error || "Unable to send verification code")
           return
         }
 
-        setSuccess("Verification code sent to your email. Enter it below to verify your account.")
+        setSuccess(
+          formatOTPSuccessMessage(
+            data,
+            "Verification code sent to your email. Enter it below to verify your account.",
+          ),
+        )
         setStep("verify")
         setOtpValue("")
         setOtpCountdown(60)
@@ -194,14 +200,14 @@ export default function ForgotPasswordPage() {
         }),
       })
 
-      const data = await response.json().catch(() => ({}))
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
 
       if (!response.ok) {
-        setError((data as { error?: string }).error || "Unable to resend verification code")
+        setError(data.error || "Unable to resend verification code")
         return
       }
 
-      setSuccess("A new verification code has been sent to your email.")
+      setSuccess(formatOTPSuccessMessage(data, "A new verification code has been sent to your email."))
       setOtpValue("")
       setOtpCountdown(60)
       setVerifiedCode(null)
