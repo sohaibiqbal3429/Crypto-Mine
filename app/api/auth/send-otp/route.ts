@@ -35,6 +35,18 @@ export async function POST(request: NextRequest) {
     const expiresAt = getOTPExpiry(10) // 10 minutes
     console.log("[v0] Generated OTP:", otpCode)
 
+    const isDevEnvironment = process.env.NODE_ENV !== "production"
+    const allowDevOtpFallback = isDevEnvironment && process.env.ENABLE_DEV_OTP_FALLBACK !== "false"
+    const buildDevResponse = (message?: string) =>
+      NextResponse.json(
+        {
+          success: true,
+          message: message || "OTP generated in development mode. Use the displayed code to continue.",
+          devOtp: otpCode,
+        },
+        { status: 200 },
+      )
+
     if (email) {
       console.log("[v0] Processing email OTP for:", email)
 
@@ -56,6 +68,10 @@ export async function POST(request: NextRequest) {
 
       if (!hasEmailConfig) {
         console.error("[v0] Email configuration missing. Cannot send OTP email.")
+        if (allowDevOtpFallback) {
+          console.warn("[v0] Falling back to development OTP response")
+          return buildDevResponse("Email service is not configured. Using development OTP instead.")
+        }
         return NextResponse.json(
           { error: "Email service is not configured. Please contact support." },
           { status: 500 },
@@ -68,6 +84,10 @@ export async function POST(request: NextRequest) {
         console.log("[v0] Email sent successfully")
       } catch (emailError) {
         console.error("[v0] Email sending failed:", emailError)
+        if (allowDevOtpFallback) {
+          console.warn("[v0] Falling back to development OTP response after email failure")
+          return buildDevResponse("Verification email failed. Using development OTP instead.")
+        }
         return NextResponse.json(
           { error: "Failed to send verification email. Please try again later." },
           { status: 500 },
@@ -111,6 +131,10 @@ export async function POST(request: NextRequest) {
 
       if (!hasSMSConfig) {
         console.error("[v0] SMS configuration missing. Cannot send OTP SMS.")
+        if (allowDevOtpFallback) {
+          console.warn("[v0] Falling back to development OTP response for SMS")
+          return buildDevResponse("SMS service is not configured. Using development OTP instead.")
+        }
         return NextResponse.json(
           { error: "SMS service is not configured. Please use email verification." },
           { status: 500 },
@@ -123,6 +147,10 @@ export async function POST(request: NextRequest) {
         console.log("[v0] SMS sent successfully")
       } catch (smsError) {
         console.error("[v0] SMS sending failed:", smsError)
+        if (allowDevOtpFallback) {
+          console.warn("[v0] Falling back to development OTP response after SMS failure")
+          return buildDevResponse("SMS delivery failed. Using development OTP instead.")
+        }
         return NextResponse.json(
           { error: "Failed to send verification code via SMS. Please try again later." },
           { status: 500 },

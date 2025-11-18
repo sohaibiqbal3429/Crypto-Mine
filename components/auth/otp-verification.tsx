@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Loader2, Mail, Smartphone, RefreshCw } from "lucide-react"
 import Image from "next/image"
+import { formatOTPSuccessMessage, type OTPSuccessPayload } from "@/lib/utils/otp-messages"
 
 interface OTPVerificationProps {
   email?: string
@@ -22,6 +23,7 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
   const [isResending, setIsResending] = useState(false)
   const [countdown, setCountdown] = useState(60)
   const [canResend, setCanResend] = useState(false)
+  const [infoMessage, setInfoMessage] = useState("")
 
   useEffect(() => {
     if (countdown > 0) {
@@ -69,6 +71,7 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
   const handleResend = async () => {
     setIsResending(true)
     setError("")
+    setInfoMessage("")
 
     try {
       const response = await fetch("/api/auth/send-otp", {
@@ -81,12 +84,14 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
         }),
       })
 
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
+
       if (response.ok) {
         setCountdown(60)
         setCanResend(false)
         setOtp("")
+        setInfoMessage(formatOTPSuccessMessage(data, "A new verification code has been sent."))
       } else {
-        const data = await response.json()
         setError(data.error || "Failed to resend code")
       }
     } catch (err) {
@@ -113,6 +118,12 @@ export default function OTPVerification({ email, phone, onVerified, onBack }: OT
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {infoMessage && (
+          <Alert>
+            <AlertDescription>{infoMessage}</AlertDescription>
           </Alert>
         )}
 

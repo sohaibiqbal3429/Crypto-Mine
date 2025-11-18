@@ -31,6 +31,7 @@ import type { SerializableUser } from "@/lib/serializers/user"
 import { formatPhoneDisplay } from "@/lib/utils/formatting"
 import { PROFILE_AVATAR_OPTIONS } from "@/lib/constants/avatars"
 import { ACTIVE_DEPOSIT_THRESHOLD } from "@/lib/constants/bonuses"
+import { formatOTPSuccessMessage, type OTPSuccessPayload } from "@/lib/utils/otp-messages"
 
 type StatusMessage = { success?: string; error?: string }
 
@@ -237,9 +238,9 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: profileData.email, purpose: "password_reset" }),
       })
-      const data = await response.json()
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
       if (!response.ok) throw new Error(data.error || "Failed to send verification code")
-      setOtpStatus({ success: data.message || "Verification code sent to your email." })
+      setOtpStatus({ success: formatOTPSuccessMessage(data, "Verification code sent to your email.") })
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Failed to send verification code"
       setOtpStatus({ error: message })
