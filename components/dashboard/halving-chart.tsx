@@ -1,65 +1,65 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+
+import { Card, CardContent } from "@/components/ui/card"
 
 const halvingData = [
-  { userScale: "1K", performance: 10, label: "10 Rb/d" },
-  { userScale: "10K", performance: 5, label: "5 Rb/d" },
-  { userScale: "100K", performance: 2.5, label: "2.5" },
-  { userScale: "1M", performance: 1.25, label: "1.25" },
-  { userScale: "10M", performance: 0.625, label: "0.625" },
-  { userScale: ">10M", performance: 0.3125, label: "0.3125" },
+  { userScale: "1K", performance: 10 },
+  { userScale: "10K", performance: 5 },
+  { userScale: "100K", performance: 2.5 },
+  { userScale: "1M", performance: 1.25 },
+  { userScale: "10M", performance: 0.625 },
+  { userScale: ">10M", performance: 0.3125 },
 ]
 
 export function HalvingChart() {
   return (
-    <Card className="col-span-full lg:col-span-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-blue-600 rounded"></div>
-          Halving 50%
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          The base mining factor is halved every time the number of users increases by 10x...
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div className="h-64">
+    <Card className="relative overflow-hidden rounded-[32px] border border-white/30 bg-white/70 px-6 py-6 shadow-[0_20px_45px_rgba(87,65,217,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_60%)]" aria-hidden />
+      <CardContent className="relative px-0">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Halving 50%</p>
+          <p className="text-2xl font-semibold text-foreground dark:text-white">Mining reactor efficiency</p>
+          <p className="text-sm text-muted-foreground">
+            Each 10× user milestone halves the base mining factor. This curve mirrors our deflationary schedule.
+          </p>
+        </div>
+        <div className="mt-6 h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={halvingData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis
-                dataKey="userScale"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12 }}
-                className="text-muted-foreground"
-              />
+            <AreaChart data={halvingData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="halvingGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
+                  <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="userScale" axisLine={false} tickLine={false} tick={{ fill: "var(--foreground)", fontSize: 12 }} />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12 }}
-                className="text-muted-foreground"
-                label={{ value: "Mining performance (RBlock/day)", angle: -90, position: "insideLeft" }}
+                tickFormatter={(value) => `${value} Rb/d`}
+                tick={{ fill: "var(--foreground)", fontSize: 12 }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  backgroundColor: "hsla(var(--background) / 0.95)",
+                  borderRadius: 16,
+                  border: "1px solid hsla(var(--border) / 0.6)",
+                  padding: "12px 16px",
                 }}
-                labelStyle={{ color: "hsl(var(--foreground))" }}
+                labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+                formatter={(value: number) => [`${value} Rb/d`, "Performance"]}
               />
-              <Bar dataKey="performance" fill="url(#blueGradient)" radius={[4, 4, 0, 0]}>
-                <defs>
-                  <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.6} />
-                  </linearGradient>
-                </defs>
-              </Bar>
-            </BarChart>
+              <Area
+                type="monotone"
+                dataKey="performance"
+                stroke="hsl(var(--chart-1))"
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#halvingGradient)"
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </CardContent>

@@ -1,7 +1,13 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Wallet, DollarSign, ArrowDownToLine, Clock, Trophy } from "lucide-react"
+import { ArrowDownToLine, Clock, DollarSign, Wallet } from "lucide-react"
+
+const gradients = [
+  "from-purple-500/40 via-fuchsia-500/30 to-cyan-400/30",
+  "from-emerald-400/30 via-teal-400/20 to-cyan-500/30",
+  "from-rose-400/30 via-orange-400/20 to-amber-400/30",
+  "from-cyan-400/30 via-blue-500/20 to-indigo-500/30",
+]
 
 interface KPICardsProps {
   kpis: {
@@ -20,52 +26,53 @@ export function KPICards({ kpis }: KPICardsProps) {
   const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
 
   const cards = [
-   
     {
       title: "Total Balance",
       value: formatCurrency(kpis.totalBalance),
       icon: Wallet,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
+      hint: "Across vaults",
     },
     {
       title: "Current Balance",
       value: formatCurrency(kpis.currentBalance),
       icon: DollarSign,
-      color: "text-amber-600",
-      bgColor: "bg-amber-50",
+      hint: "Ready to deploy",
     },
     {
       title: "Total Withdraw",
       value: formatCurrency(kpis.totalWithdraw),
       icon: ArrowDownToLine,
-      color: "text-red-600",
-      bgColor: "bg-red-50",
+      hint: "Moved off-platform",
     },
     {
       title: "Pending Withdraw",
       value: formatCurrency(kpis.pendingWithdraw),
       icon: Clock,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
+      hint: "In review",
     },
-    
   ]
 
   return (
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 mb-8">
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
       {cards.map((card, index) => (
-        <Card key={index} className="hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-            <div className={`p-2 rounded-lg ${card.bgColor}`}>
-              <card.icon className={`h-4 w-4 ${card.color}`} />
+        <div
+          key={card.title}
+          className="relative overflow-hidden rounded-[28px] border border-white/30 bg-white/70 p-5 shadow-[0_25px_60px_rgba(87,65,217,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
+        >
+          <div className={`pointer-events-none absolute inset-0 rounded-[28px] bg-gradient-to-br ${gradients[index % gradients.length]}`} aria-hidden />
+          <div className="relative space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.4em] text-muted-foreground">{card.title}</p>
+                <p className="mt-2 text-3xl font-bold text-foreground dark:text-white">{card.value}</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/40 bg-white/70 text-foreground shadow-lg dark:border-white/10 dark:bg-white/5 dark:text-white">
+                <card.icon className="h-5 w-5" aria-hidden />
+              </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{card.value}</div>
-          </CardContent>
-        </Card>
+            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">{card.hint}</p>
+          </div>
+        </div>
       ))}
     </div>
   )
