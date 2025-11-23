@@ -15,7 +15,7 @@ This Expo + TypeScript project mirrors the MintMinePro web dashboard using the e
 ## Environment
 Create a `.env` file in `mobile/` with:
 ```
-API_BASE_URL=https://api.mintminepro.com
+API_BASE_URL=https://mintminepro.com/api
 ```
 Values are read via `app.config.ts` (Expo extra) and `transform-inline-environment-variables`.
 

@@ -1,4 +1,7 @@
-const FALLBACK_LOCAL_BASE = "http://localhost:3000/api"
+const DEFAULT_API_BASE =
+  process.env.NODE_ENV === "production"
+    ? "https://mintminepro.com/api"
+    : "http://localhost:3000/api"
 
 /**
  * Resolve the canonical backend base URL for both web and mobile clients.
@@ -10,7 +13,7 @@ export function resolveApiBaseUrl(): string {
     process.env.NEXT_PUBLIC_API_BASE_URL ||
     (process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/api` : null) ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/api` : null) ||
-    FALLBACK_LOCAL_BASE
+    DEFAULT_API_BASE
 
   return raw.replace(/\/$/, "")
 }
