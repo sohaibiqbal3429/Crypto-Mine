@@ -1,4 +1,5 @@
 import React from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { createDrawerNavigator, DrawerContentScrollView, DrawerItem } from '@react-navigation/drawer';
 import { View, Text, StyleSheet } from 'react-native';
 import HomeScreen from '../../screens/HomeScreen';
@@ -37,6 +38,27 @@ export type DrawerParamList = {
 
 const Drawer = createDrawerNavigator<DrawerParamList>();
 
+const drawerItems: {
+  name: keyof DrawerParamList;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  adminOnly?: boolean;
+}[] = [
+  { name: 'Home', label: 'Home', icon: 'home-outline' },
+  { name: 'Mining', label: 'Mining', icon: 'hardware-chip-outline' },
+  { name: 'Deposit', label: 'Deposit', icon: 'wallet-outline' },
+  { name: 'Withdraw', label: 'Withdraw', icon: 'arrow-down-circle-outline' },
+  { name: 'Tasks', label: 'Task', icon: 'checkbox-outline' },
+  { name: 'Team', label: 'Team', icon: 'people-outline' },
+  { name: 'Coins', label: 'List Coin', icon: 'cash-outline' },
+  { name: 'EWallet', label: 'E-Wallet', icon: 'card-outline' },
+  { name: 'History', label: 'History', icon: 'time-outline' },
+  { name: 'Support', label: 'Support', icon: 'help-circle-outline' },
+  { name: 'Profile', label: 'Profile', icon: 'person-circle-outline' },
+  { name: 'FAQs', label: 'FAQ,s', icon: 'document-text-outline' },
+  { name: 'AdminPanel', label: 'Admin Panel', icon: 'settings-outline', adminOnly: true }
+];
+
 const CustomDrawerContent = (props: any) => {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.auth.user);
@@ -50,17 +72,18 @@ const CustomDrawerContent = (props: any) => {
       <View style={styles.sectionLabel}>
         <Text style={styles.sectionText}>Main</Text>
       </View>
-      {props.state.routeNames.map((name: string) => {
-        if (name === 'AdminPanel' && !user?.isAdmin) return null;
-        return (
+      {drawerItems
+        .filter((item) => !item.adminOnly || user?.isAdmin)
+        .map((item) => (
           <DrawerItem
-            key={name}
-            label={({ color }) => <Text style={[styles.itemText, { color }]}>{name}</Text>}
-            icon={({ color, size }) => <Icon name="menu" color={color} size={size} />}
-            onPress={() => props.navigation.navigate(name)}
+            key={item.name}
+            label={({ color }) => <Text style={[styles.itemText, { color }]}>{item.label}</Text>}
+            icon={({ color, size }) => <Icon name={item.icon} color={color} size={size} />}
+            onPress={() => props.navigation.navigate(item.name)}
+            style={item.adminOnly ? styles.adminItem : undefined}
+            labelStyle={item.adminOnly ? styles.adminLabel : undefined}
           />
-        );
-      })}
+        ))}
       <DrawerItem
         label="Logout"
         icon={({ color, size }) => <Icon name="log-out" color={color} size={size} />}
@@ -123,6 +146,16 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 16
+  },
+  adminItem: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    marginHorizontal: spacing.xs,
+    marginTop: spacing.sm
+  },
+  adminLabel: {
+    color: colors.primary,
+    fontWeight: '700'
   }
 });
 

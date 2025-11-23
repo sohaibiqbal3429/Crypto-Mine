@@ -15,3 +15,8 @@ export const depositMethods = async () => {
   const { data } = await client.get('/wallet/deposit-methods');
   return data;
 };
+
+export const fetchHistory = async () => {
+  const { data } = await client.get('/wallet/history');
+  return data;
+};

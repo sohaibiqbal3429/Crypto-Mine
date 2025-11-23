@@ -19,7 +19,7 @@ const schema = yup.object().shape({
 });
 
 const WithdrawScreen = () => {
-  const { control, handleSubmit, formState } = useForm<WithdrawForm>({
+  const { control, handleSubmit, formState, reset } = useForm<WithdrawForm>({
     resolver: yupResolver(schema),
     defaultValues: { amount: '', address: '' }
   });
@@ -30,6 +30,7 @@ const WithdrawScreen = () => {
     try {
       await walletApi.withdraw(Number(values.amount), values.address);
       show('Withdrawal request submitted', 'success');
+      reset();
     } catch (error: any) {
       show(error?.message ?? 'Failed to submit withdrawal', 'error');
     }
