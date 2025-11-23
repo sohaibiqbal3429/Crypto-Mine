@@ -19,6 +19,13 @@ API_BASE_URL=https://mintminepro.com/api
 ```
 Values are read via `app.config.ts` (Expo extra) and `transform-inline-environment-variables`.
 
+- **Canonical production base:** `https://mintminepro.com/api`
+- **Quick reachability check (no auth needed):** `GET https://mintminepro.com/api/public/wallets` should return JSON with publi
+c deposit wallets in a browser/Postman.
+- **Authenticated check:** `GET https://mintminepro.com/api/wallet/balance` with a valid token/cookie confirms balances are rea
+dable. A 401/403 without auth is expected.
+- The bare `/api` path may return 404/blank in a browser because only defined JSON routes respond; this is normal.
+
 ## Running
 ```bash
 cd mobile
@@ -42,6 +49,13 @@ Update bundle IDs (`app.config.ts`), icons, splash, and permissions before publi
 - Set the app name, `owner`, `slug`, `android.package`, and `ios.bundleIdentifier` in `app.config.ts`.
 - Update version fields in `app.config.ts` (`version`, `android.versionCode`, `ios.buildNumber`) before each store upload.
 - Ensure permissions list only what you use (by default, Internet; add notifications/camera/etc. only if required).
+
+### Backend safety notes
+
+- **Shared contracts:** Both web and mobile import `types/api-contracts.ts` for request/response shapes. Logic-only backend cha
+nges are picked up automatically if endpoints and payloads stay the same.
+- **Breaking changes:** If you change endpoint paths, required params, or response fields, update `types/api-contracts.ts` and 
+the affected service functions under `src/services/api/`.
 
 ## Google Play Console publishing (step-by-step)
 1. **Register & access**: Create a Google Play Console developer account and pay the one-time fee.

@@ -114,3 +114,23 @@ The script (`tests/load/mining-clicks.js`) issues 10k clicks/sec, polls status e
 - Use per-environment files (`.env.local`, staging secrets, production secrets) to target dev/stage/prod without code changes. The Expo config also honors `EXPO_PUBLIC_API_BASE_URL` for EAS/CLI builds.
 - API contracts for auth, wallet, mining, tasks, team, coins, and admin live in `types/api-contracts.ts`. Import these types in both clients to keep request/response shapes synchronized with the backend.
 - Backend-only logic changes (business rules inside route handlers/services) do not require client edits as long as endpoint paths and response fields stay stable. If you change a contract (path, payload, response fields), update `types/api-contracts.ts` and the corresponding service modules in both apps.
+
+### Production API base URL (shared by web + mobile)
+
+- **Canonical base:** `https://mintminepro.com/api`
+- **Example unauthenticated check:** `GET https://mintminepro.com/api/public/wallets` returns JSON with the public deposit wallets. This is a quick way to confirm the host is reachable in a browser or Postman without credentials.
+- **Example authenticated check:** `GET https://mintminepro.com/api/wallet/balance` (requires the auth token/cookie). Use this from the web app or Postman with valid credentials to verify balances.
+- The base path `/api` may show a 404 or blank page in a browser because only specific routes respond and most require JSON + authentication; that is expected.
+
+### Safe vs. breaking backend changes
+
+- **Safe:** Internal logic changes that keep endpoint paths, request params, and response payloads identical. Both clients automatically pick up the new behavior without code updates.
+- **Breaking (client updates required):** Renaming endpoints, changing HTTP methods, altering required params, or modifying response field names/shapes. When this happens, update `types/api-contracts.ts` and the affected service calls in both web and mobile.
+
+### Before deploying to production and launching the mobile app
+
+1. Confirm `API_BASE_URL` (and `EXPO_PUBLIC_API_BASE_URL` for Expo builds) is set to `https://mintminepro.com/api` in your prod env vars for both web and mobile.
+2. Smoke-test on production API with a real account: login, dashboard totals, mining start, deposit address fetch, withdraw submission, history, support, profile update.
+3. Hit `GET https://mintminepro.com/api/public/wallets` in a browser/Postman to verify the host is reachable; optionally check an authenticated endpoint with valid credentials.
+4. Ensure no breaking contract changes were made—compare against `types/api-contracts.ts` and regenerate clients if needed.
+5. For extra safety, deploy to staging first and point both clients at the staging `API_BASE_URL`, then flip prod env vars once validated.
