@@ -28,7 +28,12 @@ const EWalletScreen = () => {
     const loadMethods = async () => {
       try {
         const response = await walletApi.depositMethods();
-        setMethods(response?.methods ?? response ?? []);
+        const mapped = response.wallets?.map((wallet, index) => ({
+          id: `${wallet.address}-${index}`,
+          name: wallet.network ? `${wallet.network} Wallet` : 'Primary Wallet',
+          address: wallet.address,
+        })) ?? [];
+        setMethods(mapped);
       } catch (error: any) {
         show(error?.message ?? 'Unable to load wallets', 'error');
       } finally {

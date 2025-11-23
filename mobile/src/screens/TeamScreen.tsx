@@ -7,15 +7,16 @@ import { useToast } from '../components/ToastProvider';
 
 interface TeamMember {
   id: string;
-  name: string;
-  email: string;
+  name?: string;
   level?: number;
+  qualified?: boolean;
+  createdAt?: string;
 }
 
 interface TeamStats {
-  total: number;
-  active: number;
-  rewards: number;
+  available: number;
+  claimedTotal: number;
+  pendingCount: number;
 }
 
 const TeamScreen = () => {
@@ -27,8 +28,20 @@ const TeamScreen = () => {
   const load = async () => {
     try {
       const [teamRes, statsRes] = await Promise.all([teamApi.fetchTeam(), teamApi.fetchStats()]);
-      setMembers(teamRes?.members ?? teamRes ?? []);
-      setStats(statsRes?.stats ?? statsRes);
+      setMembers(
+        teamRes?.items?.map((member) => ({
+          id: member._id,
+          name: member.name || 'Member',
+          level: member.level,
+          qualified: member.qualified,
+          createdAt: member.createdAt,
+        })) ?? [],
+      );
+      setStats({
+        available: statsRes.available,
+        claimedTotal: statsRes.claimedTotal,
+        pendingCount: statsRes.pending?.length ?? 0,
+      });
     } catch (error: any) {
       show(error?.message ?? 'Unable to load team', 'error');
     } finally {
@@ -43,10 +56,10 @@ const TeamScreen = () => {
   return (
     <View style={styles.container}>
       {stats && (
-        <Card title="Team Overview" style={{ marginBottom: spacing.md }}>
-          <Text style={styles.text}>Total: {stats.total}</Text>
-          <Text style={styles.text}>Active: {stats.active}</Text>
-          <Text style={styles.text}>Rewards Earned: ${stats.rewards}</Text>
+        <Card title="Team Rewards" style={{ marginBottom: spacing.md }}>
+          <Text style={styles.text}>Available: ${stats.available.toFixed(2)}</Text>
+          <Text style={styles.text}>Claimed: ${stats.claimedTotal.toFixed(2)}</Text>
+          <Text style={styles.text}>Pending payouts: {stats.pendingCount}</Text>
         </Card>
       )}
       {loading ? (
@@ -58,8 +71,11 @@ const TeamScreen = () => {
           contentContainerStyle={{ gap: spacing.md }}
           renderItem={({ item }) => (
             <Card title={item.name}>
-              <Text style={styles.text}>{item.email}</Text>
               {item.level !== undefined && <Text style={styles.subText}>Level {item.level}</Text>}
+              {item.qualified !== undefined && (
+                <Text style={styles.subText}>{item.qualified ? 'Qualified' : 'Unqualified'}</Text>
+              )}
+              {item.createdAt && <Text style={styles.subText}>Joined {new Date(item.createdAt).toLocaleDateString()}</Text>}
             </Card>
           )}
           ListEmptyComponent={<Text style={styles.text}>No team members yet.</Text>}

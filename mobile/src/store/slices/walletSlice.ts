@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+
 import * as walletApi from '../../services/api/walletApi';
 
 export interface BalanceSummary {
@@ -25,8 +26,13 @@ const initialState: WalletState = {
 };
 
 export const fetchWallet = createAsyncThunk('wallet/fetch', async () => {
-  const response = await walletApi.fetchSummary();
-  return response;
+  const response = await walletApi.fetchBalance();
+  return {
+    totalBalance: response.balance.totalBalance,
+    currentBalance: response.balance.current,
+    totalWithdraw: response.userStats.withdrawTotal ?? 0,
+    pendingWithdraw: response.balance.pendingWithdraw,
+  } satisfies BalanceSummary;
 });
 
 const walletSlice = createSlice({

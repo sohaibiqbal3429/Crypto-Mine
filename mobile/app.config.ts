@@ -19,7 +19,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     eas: {
       projectId: 'replace-with-eas-project-id'
     },
-    apiBaseUrl: process.env.API_BASE_URL
+    apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
+    environment: process.env.APP_ENV || 'development'
   },
   ios: {
     supportsTablet: true,

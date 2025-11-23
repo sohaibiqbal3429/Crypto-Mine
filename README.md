@@ -107,3 +107,10 @@ The script (`tests/load/mining-clicks.js`) issues 10k clicks/sec, polls status e
 - ✅ No duplicate writes (idempotency enforced in Redis + Mongo unique index).
 - ✅ API read latency cached (`/api/mining/status` headers) < 300 ms p95.
 - ✅ Worker backlog drains post-spike; metrics/alerts describe health.
+
+## Backend/API alignment for web + mobile
+
+- Both the web app and the Expo mobile client read the backend root from `API_BASE_URL` (see `.env.example` and `mobile/.env.example`). Point this at the same deployed backend, typically including the `/api` suffix (local dev: `http://localhost:3000/api`).
+- Use per-environment files (`.env.local`, staging secrets, production secrets) to target dev/stage/prod without code changes. The Expo config also honors `EXPO_PUBLIC_API_BASE_URL` for EAS/CLI builds.
+- API contracts for auth, wallet, mining, tasks, team, coins, and admin live in `types/api-contracts.ts`. Import these types in both clients to keep request/response shapes synchronized with the backend.
+- Backend-only logic changes (business rules inside route handlers/services) do not require client edits as long as endpoint paths and response fields stay stable. If you change a contract (path, payload, response fields), update `types/api-contracts.ts` and the corresponding service modules in both apps.

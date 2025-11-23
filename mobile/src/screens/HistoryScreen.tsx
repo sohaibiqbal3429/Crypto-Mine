@@ -7,7 +7,7 @@ import { useToast } from '../components/ToastProvider';
 
 interface HistoryItem {
   id: string;
-  type: 'deposit' | 'withdraw' | 'mining' | string;
+  type: 'withdraw';
   amount: number;
   status: string;
   createdAt: string;
@@ -22,7 +22,14 @@ const HistoryScreen = () => {
     const load = async () => {
       try {
         const response = await walletApi.fetchHistory();
-        setHistory(response?.history ?? response ?? []);
+        const mapped: HistoryItem[] = response.withdrawals?.map((entry) => ({
+          id: entry._id,
+          type: 'withdraw',
+          amount: entry.amount,
+          status: entry.status,
+          createdAt: entry.createdAt,
+        })) ?? [];
+        setHistory(mapped);
       } catch (error: any) {
         show(error?.message ?? 'Unable to load history', 'error');
       } finally {

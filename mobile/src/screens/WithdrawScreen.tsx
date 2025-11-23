@@ -28,7 +28,10 @@ const WithdrawScreen = () => {
 
   const onSubmit = async (values: WithdrawForm) => {
     try {
-      await walletApi.withdraw(Number(values.amount), values.address);
+      await walletApi.withdraw({
+        amount: Number(values.amount),
+        walletAddress: values.address,
+      });
       show('Withdrawal request submitted', 'success');
       reset();
     } catch (error: any) {
