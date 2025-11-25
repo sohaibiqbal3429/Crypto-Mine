@@ -6,7 +6,7 @@ import User from "@/models/User"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
 import { TOKEN_MAX_AGE_SECONDS, comparePassword, signToken } from "@/lib/auth"
 
-function resolveExternalLoginUrl() {
+function resolveExternalLoginUrl(request: NextRequest) {
   const rawUrl =
     process.env.AUTH_SERVICE_LOGIN_URL ??
     process.env.AUTH_SERVICE_URL ??
@@ -19,6 +19,15 @@ function resolveExternalLoginUrl() {
 
   try {
     const url = new URL(rawUrl)
+    const requestHost = request.headers.get("host") || request.nextUrl.host
+    const requestOrigin = `${request.nextUrl.protocol}//${requestHost}`
+
+    // Avoid proxying to the same host/path which would otherwise recurse and
+    // bubble up as a 500 error.
+    if (url.origin === requestOrigin) {
+      return null
+    }
+
     const pathname = url.pathname.replace(/\/$/, "")
     if (!/auth\/login$/i.test(pathname)) {
       url.pathname = `${pathname || ""}/auth/login`
@@ -30,8 +39,8 @@ function resolveExternalLoginUrl() {
   }
 }
 
-async function proxyLoginRequest(payload: LoginInput) {
-  const targetUrl = resolveExternalLoginUrl()
+async function proxyLoginRequest(payload: LoginInput, request: NextRequest) {
+  const targetUrl = resolveExternalLoginUrl(request)
 
   if (!targetUrl) {
     return null
@@ -51,7 +60,7 @@ async function proxyLoginRequest(payload: LoginInput) {
     })
   } catch (error) {
     console.error("Failed to contact authentication service", error)
-    throw new Error("Server not reachable. Please try later.")
+    return null
   }
 
   const rawBody = await backendResponse.text()
@@ -73,6 +82,14 @@ async function proxyLoginRequest(payload: LoginInput) {
       "Login failed. Please try again."
 
     const status = backendResponse.status || 502
+
+    // If the upstream service is unhealthy, fall back to local authentication
+    // instead of propagating the failure to the user.
+    if (status >= 500) {
+      console.warn("External authentication unavailable. Falling back to local login.")
+      return null
+    }
+
     return NextResponse.json({ error: message }, { status })
   }
 
@@ -120,7 +137,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = loginSchema.parse(body)
 
-    const proxiedResponse = await proxyLoginRequest(validatedData)
+    const proxiedResponse = await proxyLoginRequest(validatedData, request)
     if (proxiedResponse) {
       return proxiedResponse
     }
