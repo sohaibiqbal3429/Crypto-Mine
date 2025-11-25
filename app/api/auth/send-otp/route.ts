@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
 import { generateOTP, getOTPExpiry, formatPhoneNumber, validatePhoneNumber } from "@/lib/utils/otp"
-import { hasSMTPConfig, sendOTPEmail } from "@/lib/utils/email"
+import { sendOTPEmail } from "@/lib/utils/email"
 import { sendOTPSMS } from "@/lib/utils/sms"
 import { z } from "zod"
 
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       })
       console.log("[v0] Created OTP record:", otpRecord._id)
 
-      const hasEmailConfig = hasSMTPConfig()
+      const hasEmailConfig = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
 
       if (!hasEmailConfig) {
         console.error("[v0] Email configuration missing. Cannot send OTP email.")

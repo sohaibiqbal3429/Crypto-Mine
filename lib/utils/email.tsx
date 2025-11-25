@@ -1,50 +1,19 @@
 import nodemailer from "nodemailer"
 
-const normalizeEnvValue = (value?: string, removeInnerWhitespace = false) => {
-  const trimmed = value?.trim() || ""
-  return removeInnerWhitespace ? trimmed.replace(/\s+/g, "") : trimmed
-}
-
-export function getSMTPConfig() {
-  const port = Number.parseInt(normalizeEnvValue(process.env.SMTP_PORT) || "587", 10)
-
-  const smtpUser = normalizeEnvValue(process.env.SMTP_USER)
-  // Gmail app passwords are often displayed with spaces—strip them automatically
-  const smtpPass = normalizeEnvValue(process.env.SMTP_PASS, true)
-
-  return {
-    host: normalizeEnvValue(process.env.SMTP_HOST) || "smtp.gmail.com",
-    port,
-    user: smtpUser,
-    pass: smtpPass,
-    from: normalizeEnvValue(process.env.SMTP_FROM) || smtpUser,
-  }
-}
-
-export function hasSMTPConfig(): boolean {
-  const { user, pass } = getSMTPConfig()
-  return Boolean(user && pass)
-}
-
 const createTransporter = () => {
-  const config = getSMTPConfig()
-
   return nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    // Use a secure connection for implicit TLS (port 465) and STARTTLS otherwise
-    secure: config.port === 465,
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number.parseInt(process.env.SMTP_PORT || "587"),
+    secure: false, // true for 465, false for other ports
     auth: {
-      user: config.user,
-      pass: config.pass,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
   })
 }
 
 export async function sendOTPEmail(email: string, otp: string, purpose = "registration") {
-  const { user, pass, from } = getSMTPConfig()
-
-  if (!user || !pass) {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error("SMTP configuration missing. Please set SMTP_USER and SMTP_PASS environment variables.")
   }
 
@@ -87,7 +56,7 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
 
   try {
     await transporter.sendMail({
-      from: `"Mintmine Pro" <${from}>`,
+      from: `"Mintmine Pro" <${process.env.SMTP_USER}>`,
       to: email,
       subject,
       html,

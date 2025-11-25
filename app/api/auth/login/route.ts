@@ -4,7 +4,6 @@ import { ZodError } from "zod"
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
-import { resolveApiBaseUrl } from "@/config/backend"
 import { TOKEN_MAX_AGE_SECONDS, comparePassword, signToken } from "@/lib/auth"
 
 function resolveExternalLoginUrl() {
@@ -12,7 +11,7 @@ function resolveExternalLoginUrl() {
     process.env.AUTH_SERVICE_LOGIN_URL ??
     process.env.AUTH_SERVICE_URL ??
     process.env.BACKEND_API_URL ??
-    resolveApiBaseUrl()
+    process.env.API_BASE_URL
 
   if (!rawUrl) {
     return null
