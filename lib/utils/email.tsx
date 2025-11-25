@@ -1,22 +1,44 @@
 import nodemailer from "nodemailer"
 
+export function getSMTPConfig() {
+  const port = Number.parseInt(process.env.SMTP_PORT?.trim() || "587", 10)
+
+  const smtpUser = process.env.SMTP_USER?.trim() || ""
+  const smtpPass = process.env.SMTP_PASS?.trim() || ""
+
+  return {
+    host: process.env.SMTP_HOST?.trim() || "smtp.gmail.com",
+    port,
+    user: smtpUser,
+    pass: smtpPass,
+    from: process.env.SMTP_FROM?.trim() || smtpUser,
+  }
+}
+
+export function hasSMTPConfig(): boolean {
+  const { user, pass } = getSMTPConfig()
+  return Boolean(user && pass)
+}
+
 const createTransporter = () => {
-  const port = Number.parseInt(process.env.SMTP_PORT || "587")
+  const config = getSMTPConfig()
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port,
+    host: config.host,
+    port: config.port,
     // Use a secure connection for implicit TLS (port 465) and STARTTLS otherwise
-    secure: port === 465,
+    secure: config.port === 465,
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: config.user,
+      pass: config.pass,
     },
   })
 }
 
 export async function sendOTPEmail(email: string, otp: string, purpose = "registration") {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  const { user, pass, from } = getSMTPConfig()
+
+  if (!user || !pass) {
     throw new Error("SMTP configuration missing. Please set SMTP_USER and SMTP_PASS environment variables.")
   }
 
@@ -59,7 +81,7 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
 
   try {
     await transporter.sendMail({
-      from: `"Mintmine Pro" <${process.env.SMTP_USER}>`,
+      from: `"Mintmine Pro" <${from}>`,
       to: email,
       subject,
       html,
