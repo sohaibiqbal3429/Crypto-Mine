@@ -3,6 +3,7 @@ export type NormalizedSMTPError = {
   message: string
   status: number
   debug?: Record<string, unknown>
+  hint?: string
 }
 
 const toMessage = (error: unknown) => {
@@ -30,6 +31,7 @@ export function normalizeSMTPError(
   const responseCode = (error as any)?.responseCode as number | undefined
   const command = (error as any)?.command as string | undefined
   const response = (error as any)?.response as string | undefined
+  const providedHint = (error as any)?.hint as string | undefined
 
   const isLimitError =
     responseCode === 421 ||
@@ -75,36 +77,42 @@ export function normalizeSMTPError(
       code: "SMTP_LIMIT_EXCEEDED",
       message: "You’ve hit the daily email limit. Please try again later or contact support.",
       status: 429,
+      hint: "Your provider is rate limiting SMTP requests. Wait and retry, or request a limit increase.",
     }
   } else if (isAuthError) {
     normalized = {
       code: "SMTP_AUTH_FAILED",
       message: "Email service authentication failed. Please check SMTP credentials.",
       status: 401,
+      hint: "Verify SMTP_USER/SMTP_PASS, app passwords, and that the account allows SMTP (e.g., Gmail requires an app password).",
     }
   } else if (isInvalidAddress) {
     normalized = {
       code: "SMTP_INVALID_EMAIL",
       message: "The email address was rejected by the provider. Please verify it and try again.",
       status: 400,
+      hint: "Check the sender/recipient addresses and domain setup (SPF/DKIM) for your SMTP provider.",
     }
   } else if (isConnectionError) {
     normalized = {
       code: "SMTP_CONNECTION_ERROR",
       message: "Unable to reach the email server. Please try again in a few minutes.",
       status: 502,
+      hint: "Confirm SMTP_HOST and SMTP_PORT, ensure outbound traffic isn’t blocked by firewalls/ISP, and that the provider (e.g., Gmail) allows the chosen port.",
     }
   } else if (isTLSError) {
     normalized = {
       code: "SMTP_TLS_ERROR",
       message: "Secure connection to the email server failed. Please try again.",
       status: 502,
+      hint: "Ensure the SMTP port matches the TLS requirement (465 for secure), certificates are valid, and STARTTLS is supported.",
     }
   } else {
     normalized = {
       code: "SMTP_UNKNOWN_ERROR",
       message: "Failed to send verification email. Please try again later.",
       status: 500,
+      hint: "Re-check SMTP host, port, username, password, and provider-side SMTP access settings.",
     }
   }
 
@@ -120,5 +128,5 @@ export function normalizeSMTPError(
           stack: error instanceof Error ? error.stack : undefined,
         }
 
-  return { ...normalized, ...(debug ? { debug } : {}) }
+  return { ...normalized, ...(providedHint ? { hint: providedHint } : {}), ...(debug ? { debug } : {}) }
 }

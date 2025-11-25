@@ -169,6 +169,7 @@ export async function POST(request: NextRequest) {
             success: false,
             code: normalized.code,
             message: normalized.message,
+            ...(normalized.hint ? { hint: normalized.hint } : {}),
             ...(normalized.debug ? { debug: normalized.debug } : {}),
           },
           { status: normalized.status },
