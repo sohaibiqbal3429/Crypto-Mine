@@ -1,58 +1,85 @@
-import { type NextRequest, NextResponse } from "next/server"
+// app/api/send-otp/route.ts
+import { NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
-import { generateOTP, getOTPExpiry, formatPhoneNumber, validatePhoneNumber } from "@/lib/utils/otp"
+import {
+  generateOTP,
+  getOTPExpiry,
+  formatPhoneNumber,
+  validatePhoneNumber,
+} from "@/lib/utils/otp"
 import { sendOTPEmail } from "@/lib/utils/email"
 import { sendOTPSMS } from "@/lib/utils/sms"
-import { z } from "zod"
+import { z, ZodError } from "zod"
 
 const sendOTPSchema = z
   .object({
-    email: z.string().email().optional(),
+    email: z
+      .string()
+      .email("Invalid email address")
+      .optional(),
     phone: z.string().optional(),
-    purpose: z.enum(["registration", "login", "password_reset"]).default("registration"),
+    purpose: z
+      .enum(["registration", "login", "password_reset"])
+      .default("registration"),
   })
-  .refine((data) => data.email || data.phone, {
+  .refine((data) => !!data.email || !!data.phone, {
     message: "Either email or phone must be provided",
   })
 
 export async function POST(request: NextRequest) {
+  console.log("[send-otp] API called")
+
   try {
-    console.log("[v0] Send OTP API called")
     await dbConnect()
-    console.log("[v0] Database connected successfully")
+    console.log("[send-otp] Database connected")
 
-    const body = await request.json()
-    console.log("[v0] Request body:", body)
+    // ----- Parse & validate body -----
+    const rawBody = await request.json()
+    console.log("[send-otp] Raw body:", rawBody)
 
-    const validatedData = sendOTPSchema.parse(body)
-    console.log("[v0] Data validated:", validatedData)
+    // Normalise & trim incoming data before validation
+    const body = {
+      email:
+        typeof rawBody.email === "string" && rawBody.email.trim() !== ""
+          ? rawBody.email.trim()
+          : undefined,
+      phone:
+        typeof rawBody.phone === "string" && rawBody.phone.trim() !== ""
+          ? rawBody.phone.trim()
+          : undefined,
+      purpose: rawBody.purpose,
+    }
 
-    const { email, phone, purpose } = validatedData
+    const { email, phone, purpose } = sendOTPSchema.parse(body)
+    console.log("[send-otp] Validated body:", { email, phone, purpose })
 
-    // Generate OTP
+    // ----- Common OTP setup -----
     const otpCode = generateOTP(6)
     const expiresAt = getOTPExpiry(10) // 10 minutes
-    console.log("[v0] Generated OTP:", otpCode)
+    console.log("[send-otp] Generated OTP:", otpCode)
 
-    const isDevEnvironment = process.env.NODE_ENV !== "production"
-    const allowDevOtpFallback = isDevEnvironment && process.env.ENABLE_DEV_OTP_FALLBACK !== "false"
-    const buildDevResponse = (message?: string) =>
+    const isProduction = process.env.NODE_ENV === "production"
+
+    const buildDevResponse = (message: string) =>
       NextResponse.json(
         {
           success: true,
-          message: message || "OTP generated in development mode. Use the displayed code to continue.",
+          message,
           devOtp: otpCode,
         },
         { status: 200 },
       )
 
+    // ========================================================================
+    // EMAIL OTP
+    // ========================================================================
     if (email) {
-      console.log("[v0] Processing email OTP for:", email)
+      console.log("[send-otp] Processing EMAIL OTP for:", email)
 
-      // Delete any existing OTPs for this email
+      // Remove previous unverified OTPs for this email & purpose
       await OTP.deleteMany({ email, purpose, verified: false })
-      console.log("[v0] Deleted existing OTPs")
+      console.log("[send-otp] Deleted existing email OTPs")
 
       // Create new OTP record
       const otpRecord = await OTP.create({
@@ -62,60 +89,85 @@ export async function POST(request: NextRequest) {
         purpose,
         expiresAt,
       })
-      console.log("[v0] Created OTP record:", otpRecord._id)
+      console.log("[send-otp] Created email OTP record:", otpRecord._id)
 
-      const hasEmailConfig = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS)
+      const hasEmailConfig =
+        !!process.env.SMTP_HOST &&
+        !!process.env.SMTP_PORT &&
+        !!process.env.SMTP_USER &&
+        !!process.env.SMTP_PASS
 
+      // No SMTP config
       if (!hasEmailConfig) {
-        console.error("[v0] Email configuration missing. Cannot send OTP email.")
-        if (allowDevOtpFallback) {
-          console.warn("[v0] Falling back to development OTP response")
-          return buildDevResponse("Email service is not configured. Using development OTP instead.")
+        console.error("[send-otp] Missing SMTP configuration")
+
+        if (!isProduction) {
+          console.warn(
+            "[send-otp] Dev environment: returning devOtp instead of sending real email",
+          )
+          return buildDevResponse(
+            "Email service is not configured in development. Use the OTP shown in the response.",
+          )
         }
+
+        // Production: fail hard
         return NextResponse.json(
           { error: "Email service is not configured. Please contact support." },
           { status: 500 },
         )
       }
 
+      // Try sending email
       try {
-        // Send email
         await sendOTPEmail(email, otpCode, purpose)
-        console.log("[v0] Email sent successfully")
-      } catch (emailError) {
-        console.error("[v0] Email sending failed:", emailError)
-        if (allowDevOtpFallback) {
-          console.warn("[v0] Falling back to development OTP response after email failure")
-          return buildDevResponse("Verification email failed. Using development OTP instead.")
+        console.log("[send-otp] OTP email sent successfully")
+
+        return NextResponse.json({
+          success: true,
+          message: "OTP sent to your email address.",
+        })
+      } catch (err) {
+        console.error("[send-otp] Failed to send OTP email:", err)
+
+        if (!isProduction) {
+          console.warn(
+            "[send-otp] Dev environment: email failed, returning devOtp instead",
+          )
+          return buildDevResponse(
+            "Verification email failed in development. Use the OTP shown in the response.",
+          )
         }
+
         return NextResponse.json(
-          { error: "Failed to send verification email. Please try again later." },
+          {
+            error: "Failed to send verification email. Please try again later.",
+          },
           { status: 500 },
         )
       }
-
-      return NextResponse.json({
-        success: true,
-        message: "OTP sent to your email address",
-      })
     }
 
+    // ========================================================================
+    // PHONE / SMS OTP
+    // ========================================================================
     if (phone) {
-      console.log("[v0] Processing phone OTP for:", phone)
+      console.log("[send-otp] Processing SMS OTP for:", phone)
 
-      // Validate and format phone number
       const validation = validatePhoneNumber(phone)
       if (!validation.isValid) {
-        console.log("[v0] Invalid phone number format")
-        return NextResponse.json({ error: "Invalid phone number format" }, { status: 400 })
+        console.log("[send-otp] Invalid phone number format")
+        return NextResponse.json(
+          { error: "Invalid phone number format" },
+          { status: 400 },
+        )
       }
 
       const formattedPhone = formatPhoneNumber(phone)
-      console.log("[v0] Formatted phone:", formattedPhone)
+      console.log("[send-otp] Formatted phone:", formattedPhone)
 
-      // Delete any existing OTPs for this phone
+      // Remove previous unverified OTPs for this phone & purpose
       await OTP.deleteMany({ phone: formattedPhone, purpose, verified: false })
-      console.log("[v0] Deleted existing phone OTPs")
+      console.log("[send-otp] Deleted existing phone OTPs")
 
       // Create new OTP record
       const otpRecord = await OTP.create({
@@ -125,57 +177,88 @@ export async function POST(request: NextRequest) {
         purpose,
         expiresAt,
       })
-      console.log("[v0] Created phone OTP record:", otpRecord._id)
+      console.log("[send-otp] Created phone OTP record:", otpRecord._id)
 
-      const hasSMSConfig = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
+      const hasSMSConfig =
+        !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN
 
       if (!hasSMSConfig) {
-        console.error("[v0] SMS configuration missing. Cannot send OTP SMS.")
-        if (allowDevOtpFallback) {
-          console.warn("[v0] Falling back to development OTP response for SMS")
-          return buildDevResponse("SMS service is not configured. Using development OTP instead.")
+        console.error("[send-otp] Missing SMS configuration")
+
+        if (!isProduction) {
+          console.warn(
+            "[send-otp] Dev environment: returning devOtp instead of sending real SMS",
+          )
+          return buildDevResponse(
+            "SMS service is not configured in development. Use the OTP shown in the response.",
+          )
         }
+
         return NextResponse.json(
-          { error: "SMS service is not configured. Please use email verification." },
+          {
+            error:
+              "SMS service is not configured. Please use email verification.",
+          },
           { status: 500 },
         )
       }
 
       try {
-        // Send SMS
         await sendOTPSMS(formattedPhone, otpCode, purpose)
-        console.log("[v0] SMS sent successfully")
-      } catch (smsError) {
-        console.error("[v0] SMS sending failed:", smsError)
-        if (allowDevOtpFallback) {
-          console.warn("[v0] Falling back to development OTP response after SMS failure")
-          return buildDevResponse("SMS delivery failed. Using development OTP instead.")
+        console.log("[send-otp] OTP SMS sent successfully")
+
+        return NextResponse.json({
+          success: true,
+          message: "OTP sent to your phone number.",
+        })
+      } catch (err) {
+        console.error("[send-otp] Failed to send OTP SMS:", err)
+
+        if (!isProduction) {
+          console.warn(
+            "[send-otp] Dev environment: SMS failed, returning devOtp instead",
+          )
+          return buildDevResponse(
+            "SMS delivery failed in development. Use the OTP shown in the response.",
+          )
         }
+
         return NextResponse.json(
-          { error: "Failed to send verification code via SMS. Please try again later." },
+          {
+            error:
+              "Failed to send verification code via SMS. Please try again later.",
+          },
           { status: 500 },
         )
       }
-
-      return NextResponse.json({
-        success: true,
-        message: "OTP sent to your phone number",
-      })
     }
 
-    return NextResponse.json({ error: "Either email or phone must be provided" }, { status: 400 })
+    // Should not be reachable because of schema refine, but just in case:
+    return NextResponse.json(
+      { error: "Either email or phone must be provided" },
+      { status: 400 },
+    )
   } catch (error: any) {
-    console.error("[v0] Send OTP error:", error)
+    console.error("[send-otp] Uncaught error:", error)
 
-    if (error.name === "ZodError") {
-      console.log("[v0] Validation error:", error.errors)
-      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    if (error instanceof ZodError) {
+      console.log("[send-otp] Validation error:", error.errors)
+      return NextResponse.json(
+        { error: "Validation failed", details: error.errors },
+        { status: 400 },
+      )
     }
 
-    if (error.message?.includes("connect")) {
-      return NextResponse.json({ error: "Database connection failed. Please try again." }, { status: 500 })
+    if (typeof error?.message === "string" && error.message.includes("connect")) {
+      return NextResponse.json(
+        { error: "Database connection failed. Please try again." },
+        { status: 500 },
+      )
     }
 
-    return NextResponse.json({ error: "Failed to send OTP. Please try again." }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to send OTP. Please try again." },
+      { status: 500 },
+    )
   }
 }
