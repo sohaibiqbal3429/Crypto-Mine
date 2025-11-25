@@ -1,17 +1,23 @@
 import nodemailer from "nodemailer"
 
-export function getSMTPConfig() {
-  const port = Number.parseInt(process.env.SMTP_PORT?.trim() || "587", 10)
+const normalizeEnvValue = (value?: string, removeInnerWhitespace = false) => {
+  const trimmed = value?.trim() || ""
+  return removeInnerWhitespace ? trimmed.replace(/\s+/g, "") : trimmed
+}
 
-  const smtpUser = process.env.SMTP_USER?.trim() || ""
-  const smtpPass = process.env.SMTP_PASS?.trim() || ""
+export function getSMTPConfig() {
+  const port = Number.parseInt(normalizeEnvValue(process.env.SMTP_PORT) || "587", 10)
+
+  const smtpUser = normalizeEnvValue(process.env.SMTP_USER)
+  // Gmail app passwords are often displayed with spaces—strip them automatically
+  const smtpPass = normalizeEnvValue(process.env.SMTP_PASS, true)
 
   return {
-    host: process.env.SMTP_HOST?.trim() || "smtp.gmail.com",
+    host: normalizeEnvValue(process.env.SMTP_HOST) || "smtp.gmail.com",
     port,
     user: smtpUser,
     pass: smtpPass,
-    from: process.env.SMTP_FROM?.trim() || smtpUser,
+    from: normalizeEnvValue(process.env.SMTP_FROM) || smtpUser,
   }
 }
 
