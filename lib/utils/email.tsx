@@ -68,6 +68,7 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
     const smtpError = new Error(normalized.message)
     ;(smtpError as any).code = (error as any)?.code ?? normalized.code
     ;(smtpError as any).responseCode = (error as any)?.responseCode ?? normalized.status
+    ;(smtpError as any).hint = normalized.hint
     ;(smtpError as any).debug = normalized.debug
     throw smtpError
   }
