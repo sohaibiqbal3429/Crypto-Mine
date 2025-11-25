@@ -65,7 +65,9 @@ export async function POST(request: NextRequest) {
 
     const isProduction = process.env.NODE_ENV === "production"
     const allowDevOtp =
-      process.env.NODE_ENV === "test" || process.env.ENABLE_DEV_OTP_FALLBACK === "true"
+      process.env.NODE_ENV === "test" ||
+      process.env.NODE_ENV === "development" ||
+      process.env.ENABLE_DEV_OTP_FALLBACK === "true"
     const skipDelivery = process.env.NODE_ENV === "test" || process.env.SKIP_OTP_DELIVERY === "true"
 
     const buildDevResponse = (message: string) =>
