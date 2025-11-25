@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import test from "node:test"
+import test, { mock } from "node:test"
 
 process.env.SEED_IN_MEMORY = "true"
 process.env.ENABLE_DEV_OTP_FALLBACK = "true"
@@ -14,6 +14,8 @@ import { POST as sendOTP } from "@/app/api/auth/send-otp/route"
 import { POST as verifyOTP } from "@/app/api/auth/verify-otp/route"
 import { POST as registerWithOTP } from "@/app/api/auth/register-with-otp/route"
 import { POST as resetPassword } from "@/app/api/auth/reset-password/route"
+import { normalizeSMTPError } from "@/lib/utils/smtp-error"
+import * as emailUtils from "@/lib/utils/email"
 
 async function callRoute(handler: (req: any) => Promise<any>, body: Record<string, unknown>) {
   const response = await handler({ json: async () => body } as any)
@@ -210,6 +212,93 @@ test("send-otp fails loudly when email config is missing in production mode", as
     assert.equal(response.status, 500)
     assert.equal(data.error, "Email service is not configured. Please contact support.")
   } finally {
+    Object.assign(process.env, previousEnv)
+  }
+})
+
+test("normalizeSMTPError maps common SMTP failures", () => {
+  const limitError = normalizeSMTPError({ message: "Daily quota exceeded", responseCode: 421 })
+  assert.equal(limitError.code, "SMTP_LIMIT_EXCEEDED")
+  assert.equal(limitError.status, 429)
+
+  const authError = normalizeSMTPError({ message: "EAUTH Invalid login", code: "EAUTH" })
+  assert.equal(authError.code, "SMTP_AUTH_FAILED")
+
+  const invalidEmailError = normalizeSMTPError({ message: "Invalid recipient", responseCode: 550 })
+  assert.equal(invalidEmailError.code, "SMTP_INVALID_EMAIL")
+
+  const connectionError = normalizeSMTPError({ message: "Connection timeout", code: "ETIMEDOUT" })
+  assert.equal(connectionError.code, "SMTP_CONNECTION_ERROR")
+})
+
+test("send-otp returns structured SMTP errors without exposing sensitive data", async () => {
+  const previousEnv = { ...process.env }
+
+  const sendMock = mock.method(emailUtils, "sendOTPEmail", async () => {
+    const err = new Error("Daily limit exceeded by provider")
+    ;(err as any).code = "ESMTP"
+    ;(err as any).responseCode = 421
+    throw err
+  })
+
+  process.env.NODE_ENV = "production"
+  process.env.ENABLE_DEV_OTP_FALLBACK = "false"
+  process.env.SKIP_OTP_DELIVERY = "false"
+  process.env.SMTP_HOST = "smtp.example.com"
+  process.env.SMTP_PORT = "587"
+  process.env.SMTP_USER = "user@example.com"
+  process.env.SMTP_PASS = "password"
+
+  try {
+    const { response, data } = await callRoute(sendOTP, {
+      email: "limit@example.com",
+      purpose: "registration",
+    })
+
+    assert.equal(response.status, 429)
+    assert.equal(data.success, false)
+    assert.equal(data.code, "SMTP_LIMIT_EXCEEDED")
+    assert.equal(
+      data.message,
+      "You’ve hit the daily email limit. Please try again later or contact support.",
+    )
+    assert.equal("debug" in data, false)
+  } finally {
+    sendMock.restore()
+    Object.assign(process.env, previousEnv)
+  }
+})
+
+test("send-otp exposes SMTP debug info in non-production environments", async () => {
+  const previousEnv = { ...process.env }
+
+  const sendMock = mock.method(emailUtils, "sendOTPEmail", async () => {
+    const err = new Error("Invalid login")
+    ;(err as any).code = "EAUTH"
+    throw err
+  })
+
+  process.env.NODE_ENV = "development"
+  process.env.ENABLE_DEV_OTP_FALLBACK = "false"
+  process.env.SKIP_OTP_DELIVERY = "false"
+  process.env.SMTP_HOST = "smtp.example.com"
+  process.env.SMTP_PORT = "587"
+  process.env.SMTP_USER = "user@example.com"
+  process.env.SMTP_PASS = "password"
+
+  try {
+    const { response, data } = await callRoute(sendOTP, {
+      email: "authfail@example.com",
+      purpose: "registration",
+    })
+
+    assert.equal(response.status, 401)
+    assert.equal(data.success, false)
+    assert.equal(data.code, "SMTP_AUTH_FAILED")
+    assert.ok(data.debug)
+    assert.equal(data.debug.code, "EAUTH")
+  } finally {
+    sendMock.restore()
     Object.assign(process.env, previousEnv)
   }
 })

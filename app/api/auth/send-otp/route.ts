@@ -13,6 +13,14 @@ import {
 import { sendOTPEmail } from "@/lib/utils/email"
 import { sendOTPSMS } from "@/lib/utils/sms"
 import { z, ZodError } from "zod"
+import { normalizeSMTPError } from "@/lib/utils/smtp-error"
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof ZodError) return error.errors?.[0]?.message ?? error.message
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
 
 const sendOTPSchema = z
   .object({
@@ -56,7 +64,8 @@ export async function POST(request: NextRequest) {
     console.log("[send-otp] Generated OTP:", otpCode)
 
     const isProduction = process.env.NODE_ENV === "production"
-    const allowDevOtp = !isProduction || process.env.ENABLE_DEV_OTP_FALLBACK === "true"
+    const allowDevOtp =
+      process.env.NODE_ENV === "test" || process.env.ENABLE_DEV_OTP_FALLBACK === "true"
     const skipDelivery = process.env.NODE_ENV === "test" || process.env.SKIP_OTP_DELIVERY === "true"
 
     const buildDevResponse = (message: string) =>
@@ -125,7 +134,7 @@ export async function POST(request: NextRequest) {
 
         // Production: fail hard
         return NextResponse.json(
-          { error: "Email service is not configured. Please contact support." },
+          { success: false, message: "Email service is not configured. Please contact support." },
           { status: 500 },
         )
       }
@@ -141,21 +150,26 @@ export async function POST(request: NextRequest) {
         })
       } catch (err) {
         console.error("[send-otp] Failed to send OTP email:", err)
+        const normalized = normalizeSMTPError(err, { environment: process.env.NODE_ENV })
 
         if (allowDevOtp) {
           console.warn(
             "[send-otp] Dev environment: email failed, returning devOtp instead",
           )
           return buildDevResponse(
-            "Verification email failed in development. Use the OTP shown in the response.",
+            normalized.message +
+              " Use the OTP shown in the response while email delivery is unavailable.",
           )
         }
 
         return NextResponse.json(
           {
-            error: "Failed to send verification email. Please try again later.",
+            success: false,
+            code: normalized.code,
+            message: normalized.message,
+            ...(normalized.debug ? { debug: normalized.debug } : {}),
           },
-          { status: 500 },
+          { status: normalized.status },
         )
       }
     }
@@ -170,7 +184,7 @@ export async function POST(request: NextRequest) {
       if (!validation.isValid) {
         console.log("[send-otp] Invalid phone number format")
         return NextResponse.json(
-          { error: "Invalid phone number format" },
+          { success: false, message: "Invalid phone number format" },
           { status: 400 },
         )
       }
@@ -222,8 +236,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(
           {
-            error:
-              "SMS service is not configured. Please use email verification.",
+            success: false,
+            message: "SMS service is not configured. Please use email verification.",
           },
           { status: 500 },
         )
@@ -250,10 +264,7 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json(
-          {
-            error:
-              "Failed to send verification code via SMS. Please try again later.",
-          },
+          { success: false, message: getErrorMessage(err) },
           { status: 500 },
         )
       }
@@ -261,7 +272,7 @@ export async function POST(request: NextRequest) {
 
     // Should not be reachable because of schema refine, but just in case:
     return NextResponse.json(
-      { error: "Either email or phone must be provided" },
+      { success: false, message: "Either email or phone must be provided" },
       { status: 400 },
     )
   } catch (error: any) {
@@ -270,20 +281,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof ZodError) {
       console.log("[send-otp] Validation error:", error.errors)
       return NextResponse.json(
-        { error: "Validation failed", details: error.errors },
+        { success: false, message: getErrorMessage(error), details: error.errors },
         { status: 400 },
       )
     }
 
     if (typeof error?.message === "string" && error.message.includes("connect")) {
       return NextResponse.json(
-        { error: "Database connection failed. Please try again." },
+        { success: false, message: getErrorMessage(error) },
         { status: 500 },
       )
     }
 
     return NextResponse.json(
-      { error: "Failed to send OTP. Please try again." },
+      { success: false, message: getErrorMessage(error) },
       { status: 500 },
     )
   }

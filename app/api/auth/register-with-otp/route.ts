@@ -6,7 +6,14 @@ import OTP from "@/models/OTP"
 import { TOKEN_MAX_AGE_SECONDS, hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
 import { formatPhoneNumber, isOTPExpired, normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
-import { z } from "zod"
+import { z, ZodError } from "zod"
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof ZodError) return error.errors?.[0]?.message ?? error.message
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
 
 const registerWithOTPSchema = z
   .object({
@@ -52,12 +59,12 @@ export async function POST(request: NextRequest) {
     const otpRecord = await OTP.findOne(otpQuery).sort({ createdAt: -1 })
 
     if (!otpRecord || otpRecord.code !== validatedData.otpCode) {
-      return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid or unverified OTP code" }, { status: 400 })
     }
 
     if (isOTPExpired(otpRecord.expiresAt)) {
       await OTP.deleteOne({ _id: otpRecord._id })
-      return NextResponse.json({ error: "OTP code has expired" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "OTP code has expired" }, { status: 400 })
     }
 
     if (!otpRecord.verified) {
@@ -71,13 +78,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
-      return NextResponse.json({ error: "User already exists with this email or phone" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "User already exists with this email or phone" }, { status: 400 })
     }
 
     // Verify referral code exists
     const referrer = await User.findOne({ referralCode: validatedData.referralCode })
     if (!referrer) {
-      return NextResponse.json({ error: "Invalid referral code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid referral code" }, { status: 400 })
     }
 
     // Generate unique referral code for new user
@@ -150,10 +157,13 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Registration with OTP error:", error)
 
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, message: getErrorMessage(error), details: error.errors },
+        { status: 400 },
+      )
     }
 
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ success: false, message: getErrorMessage(error) }, { status: 500 })
   }
 }

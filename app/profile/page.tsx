@@ -144,7 +144,7 @@ export default function ProfilePage() {
       })
 
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Failed to update profile")
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to update profile")
       if (data.user) syncUserState(data.user as SerializableUser)
 
       setProfileStatus({ success: data.message || "Profile updated successfully." })
@@ -170,7 +170,7 @@ export default function ProfilePage() {
     try {
       const response = await fetch("/api/profile/verify", { method: "POST" })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Failed to verify profile")
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to verify profile")
       if (data.user) syncUserState(data.user as SerializableUser)
       setVerificationStatus({ success: data.message || "Profile verified successfully." })
       setProfileStatus({})
@@ -210,7 +210,7 @@ export default function ProfilePage() {
         }),
       })
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Failed to update password")
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to update password")
 
       setPasswordStatus({ success: data.message || "Password updated successfully." })
       setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "", otpCode: "" })
@@ -238,8 +238,11 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: profileData.email, purpose: "password_reset" }),
       })
-      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
-      if (!response.ok) throw new Error(data.error || "Failed to send verification code")
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & {
+        error?: string
+        message?: string
+      }
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to send verification code")
       setOtpStatus({ success: formatOTPSuccessMessage(data, "Verification code sent to your email.") })
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Failed to send verification code"

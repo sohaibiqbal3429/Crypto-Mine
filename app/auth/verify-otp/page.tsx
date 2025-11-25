@@ -70,7 +70,7 @@ export default function VerifyOTPPage() {
       const verifyData = await verifyResponse.json()
 
       if (!verifyResponse.ok) {
-        setError(verifyData.error || "Verification failed")
+        setError(verifyData.message || verifyData.error || "Verification failed")
         return
       }
 
@@ -95,7 +95,7 @@ export default function VerifyOTPPage() {
           setSuccess("Registration successful! Redirecting to dashboard...")
           setTimeout(() => router.push("/dashboard"), 1500)
         } else {
-          setError(registerData.error || "Registration failed")
+          setError(registerData.message || registerData.error || "Registration failed")
         }
       } else if (purpose === "login") {
         const loginResponse = await fetch("/api/auth/login-with-otp", {
@@ -114,7 +114,7 @@ export default function VerifyOTPPage() {
           setSuccess("Login successful! Redirecting to dashboard...")
           setTimeout(() => router.push("/dashboard"), 1500)
         } else {
-          setError(loginData.error || "Login failed")
+          setError(loginData.message || loginData.error || "Login failed")
         }
       } else {
         // Handle password reset
@@ -124,7 +124,8 @@ export default function VerifyOTPPage() {
         }, 1500)
       }
     } catch (err) {
-      setError("Network error. Please try again.")
+      const message = err instanceof Error ? err.message : "Network error. Please try again."
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -146,17 +147,18 @@ export default function VerifyOTPPage() {
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string; message?: string }
 
       if (response.ok) {
         setSuccess(formatOTPSuccessMessage(data, "New verification code sent!"))
         setCountdown(60)
         setOtp("")
       } else {
-        setError(data.error || "Failed to resend code")
+        setError(data.message || data.error || "Failed to resend code")
       }
     } catch (err) {
-      setError("Network error. Please try again.")
+      const message = err instanceof Error ? err.message : "Network error. Please try again."
+      setError(message)
     } finally {
       setIsResending(false)
     }

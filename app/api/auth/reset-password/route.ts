@@ -6,6 +6,14 @@ import OTP from "@/models/OTP"
 import { resetPasswordSchema } from "@/lib/validations/auth"
 import { hashPassword } from "@/lib/auth"
 import { normalizeEmail } from "@/lib/utils/otp"
+import { ZodError } from "zod"
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof ZodError) return error.errors?.[0]?.message ?? error.message
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = normalizeEmail(email)
     if (!normalizedEmail) {
-      return NextResponse.json({ error: "Invalid email" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid email" }, { status: 400 })
     }
 
     const otpRecord = await OTP.findOne({
@@ -27,13 +35,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (!otpRecord) {
-      return NextResponse.json({ error: "Invalid or unverified verification code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid or unverified verification code" }, { status: 400 })
     }
 
     const user = await User.findOne({ email: normalizedEmail })
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
     const passwordHash = await hashPassword(password)
@@ -49,10 +57,13 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Reset password error:", error)
 
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, message: getErrorMessage(error), details: error.errors },
+        { status: 400 },
+      )
     }
 
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ success: false, message: getErrorMessage(error) }, { status: 500 })
   }
 }
