@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Data validated:", validatedData)
 
     const { email, phone, purpose } = validatedData
+    const normalizedEmail = email?.toLowerCase().trim()
 
     // Generate OTP
     const otpCode = generateOTP(6)
@@ -36,7 +37,10 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Generated OTP:", otpCode)
 
     const isDevEnvironment = process.env.NODE_ENV !== "production"
-    const allowDevOtpFallback = isDevEnvironment && process.env.ENABLE_DEV_OTP_FALLBACK !== "false"
+    const hasEmailConfig = hasSMTPConfig()
+    const allowDevOtpFallback =
+      process.env.ENABLE_DEV_OTP_FALLBACK !== "false" &&
+      (isDevEnvironment || process.env.ENABLE_DEV_OTP_FALLBACK === "true" || !hasEmailConfig)
     const buildDevResponse = (message?: string) =>
       NextResponse.json(
         {
@@ -47,24 +51,22 @@ export async function POST(request: NextRequest) {
         { status: 200 },
       )
 
-    if (email) {
-      console.log("[v0] Processing email OTP for:", email)
+    if (normalizedEmail) {
+      console.log("[v0] Processing email OTP for:", normalizedEmail)
 
       // Delete any existing OTPs for this email
-      await OTP.deleteMany({ email, purpose, verified: false })
+      await OTP.deleteMany({ email: normalizedEmail, purpose, verified: false })
       console.log("[v0] Deleted existing OTPs")
 
       // Create new OTP record
       const otpRecord = await OTP.create({
-        email,
+        email: normalizedEmail,
         code: otpCode,
         type: "email",
         purpose,
         expiresAt,
       })
       console.log("[v0] Created OTP record:", otpRecord._id)
-
-      const hasEmailConfig = hasSMTPConfig()
 
       if (!hasEmailConfig) {
         console.error("[v0] Email configuration missing. Cannot send OTP email.")
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
 
       try {
         // Send email
-        await sendOTPEmail(email, otpCode, purpose)
+        await sendOTPEmail(normalizedEmail, otpCode, purpose)
         console.log("[v0] Email sent successfully")
       } catch (emailError) {
         console.error("[v0] Email sending failed:", emailError)
