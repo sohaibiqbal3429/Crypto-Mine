@@ -46,8 +46,8 @@ SMTP_PASS=your-email-password-or-app-password
 ENABLE_DEV_OTP_FALLBACK=true
 ```
 
-> Gmail app passwords are shown with spaces (for readability) when generated. Copy them without spaces or quotes; `SMTP_PASS`
-> should be a continuous 16-character string.
+> Gmail app passwords are shown with spaces (for readability) when generated. The app will now strip spaces automatically, but
+> you should still copy the password as a continuous 16-character string (no spaces or quotes) to avoid mistakes.
 
 `ENABLE_DEV_OTP_FALLBACK` lets local environments surface OTP codes directly in the UI/logs when email/SMS providers aren't
 configured. Set it to `false` (or remove it) in production so that OTP codes are only delivered through the configured transport.
