@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer"
+import { normalizeSMTPError } from "./smtp-error"
 
 const createTransporter = () => {
   return nodemailer.createTransport({
@@ -63,6 +64,11 @@ export async function sendOTPEmail(email: string, otp: string, purpose = "regist
     })
   } catch (error) {
     console.error("Email sending failed:", error)
-    throw new Error("Failed to send email. Please check your SMTP configuration.")
+    const normalized = normalizeSMTPError(error)
+    const smtpError = new Error(normalized.message)
+    ;(smtpError as any).code = (error as any)?.code ?? normalized.code
+    ;(smtpError as any).responseCode = (error as any)?.responseCode ?? normalized.status
+    ;(smtpError as any).debug = normalized.debug
+    throw smtpError
   }
 }

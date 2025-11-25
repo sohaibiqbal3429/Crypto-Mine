@@ -74,10 +74,13 @@ export default function ForgotPasswordPage() {
           }),
         })
 
-        const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
+        const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & {
+          error?: string
+          message?: string
+        }
 
         if (!response.ok) {
-          setError(data.error || "Unable to send verification code")
+          setError(data.message || data.error || "Unable to send verification code")
           return
         }
 
@@ -92,7 +95,8 @@ export default function ForgotPasswordPage() {
         setOtpCountdown(60)
       } catch (submitError) {
         console.error("Forgot password OTP error", submitError)
-        setError("Network error. Please try again.")
+        const message = submitError instanceof Error ? submitError.message : "Network error. Please try again."
+        setError(message)
       } finally {
         setIsLoading(false)
       }
@@ -122,7 +126,7 @@ export default function ForgotPasswordPage() {
         const data = await response.json().catch(() => ({}))
 
         if (!response.ok) {
-          setError((data as { error?: string }).error || "Verification failed")
+          setError((data as { message?: string; error?: string }).message || (data as { error?: string }).error || "Verification failed")
           return
         }
 
@@ -131,7 +135,8 @@ export default function ForgotPasswordPage() {
         setStep("reset")
       } catch (verifyError) {
         console.error("Verify OTP error", verifyError)
-        setError("Network error. Please try again.")
+        const message = verifyError instanceof Error ? verifyError.message : "Network error. Please try again."
+        setError(message)
       } finally {
         setIsLoading(false)
       }
@@ -165,7 +170,7 @@ export default function ForgotPasswordPage() {
       const data = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        setError((data as { error?: string }).error || "Unable to reset password")
+        setError((data as { message?: string; error?: string }).message || (data as { error?: string }).error || "Unable to reset password")
         return
       }
 
@@ -177,7 +182,8 @@ export default function ForgotPasswordPage() {
       }, 1500)
     } catch (error) {
       console.error("Forgot password error", error)
-      setError("Network error. Please try again.")
+      const message = error instanceof Error ? error.message : "Network error. Please try again."
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -200,10 +206,13 @@ export default function ForgotPasswordPage() {
         }),
       })
 
-      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & { error?: string }
+      const data = (await response.json().catch(() => ({}))) as OTPSuccessPayload & {
+        error?: string
+        message?: string
+      }
 
       if (!response.ok) {
-        setError(data.error || "Unable to resend verification code")
+        setError(data.message || data.error || "Unable to resend verification code")
         return
       }
 
@@ -214,7 +223,8 @@ export default function ForgotPasswordPage() {
       setStep("verify")
     } catch (resendError) {
       console.error("Resend OTP error", resendError)
-      setError("Network error. Please try again.")
+      const message = resendError instanceof Error ? resendError.message : "Network error. Please try again."
+      setError(message)
     } finally {
       setIsResending(false)
     }

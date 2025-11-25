@@ -18,6 +18,7 @@ export async function sendOTPSMS(phone: string, otp: string, purpose = "registra
     })
   } catch (error) {
     console.error("SMS sending failed:", error)
-    throw new Error("Failed to send SMS. Please check your Twilio configuration.")
+    const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Failed to send SMS"
+    throw new Error(message)
   }
 }

@@ -2,7 +2,14 @@ import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
 import { isOTPExpired, normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
-import { z } from "zod"
+import { z, ZodError } from "zod"
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof ZodError) return error.errors?.[0]?.message ?? error.message
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
 
 const verifyOTPSchema = z
   .object({
@@ -38,13 +45,13 @@ export async function POST(request: NextRequest) {
     const otpRecord = await OTP.findOne(baseQuery).sort({ createdAt: -1 })
 
     if (!otpRecord) {
-      return NextResponse.json({ error: "Invalid or expired OTP code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid or expired OTP code" }, { status: 400 })
     }
 
     // Check if OTP is expired
     if (isOTPExpired(otpRecord.expiresAt)) {
       await OTP.deleteOne({ _id: otpRecord._id })
-      return NextResponse.json({ error: "OTP code has expired" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "OTP code has expired" }, { status: 400 })
     }
 
     // If the OTP was already verified (e.g. registration failed later), allow the
@@ -58,13 +65,13 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      return NextResponse.json({ error: "Invalid or expired OTP code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid or expired OTP code" }, { status: 400 })
     }
 
     // Check attempt limit
     if (otpRecord.attempts >= 5) {
       await OTP.deleteOne({ _id: otpRecord._id })
-      return NextResponse.json({ error: "Too many failed attempts. Please request a new code." }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Too many failed attempts. Please request a new code." }, { status: 400 })
     }
 
     // Verify code
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest) {
       otpRecord.attempts += 1
       await otpRecord.save()
       return NextResponse.json(
-        { error: `Invalid OTP code. ${Math.max(0, 5 - otpRecord.attempts)} attempts remaining.` },
+        { success: false, message: `Invalid OTP code. ${Math.max(0, 5 - otpRecord.attempts)} attempts remaining.` },
         { status: 400 },
       )
     }
@@ -89,10 +96,13 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Verify OTP error:", error)
 
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, message: getErrorMessage(error), details: error.errors },
+        { status: 400 },
+      )
     }
 
-    return NextResponse.json({ error: "Failed to verify OTP" }, { status: 500 })
+    return NextResponse.json({ success: false, message: getErrorMessage(error) }, { status: 500 })
   }
 }

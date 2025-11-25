@@ -4,7 +4,14 @@ import User from "@/models/User"
 import OTP from "@/models/OTP"
 import { TOKEN_MAX_AGE_SECONDS, signToken } from "@/lib/auth"
 import { normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
-import { z } from "zod"
+import { z, ZodError } from "zod"
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof ZodError) return error.errors?.[0]?.message ?? error.message
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
 
 const loginWithOTPSchema = z
   .object({
@@ -48,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const otpRecord = await OTP.findOne(otpQuery)
     if (!otpRecord) {
-      return NextResponse.json({ error: "Invalid or unverified OTP code" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Invalid or unverified OTP code" }, { status: 400 })
     }
 
     // Find user
@@ -58,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const user = await User.findOne(userQuery)
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
     // Clean up used OTP
@@ -96,10 +103,13 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Login with OTP error:", error)
 
-    if (error.name === "ZodError") {
-      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { success: false, message: getErrorMessage(error), details: error.errors },
+        { status: 400 },
+      )
     }
 
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ success: false, message: getErrorMessage(error) }, { status: 500 })
   }
 }
