@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
 import OTP from "@/models/OTP"
 import { TOKEN_MAX_AGE_SECONDS, signToken } from "@/lib/auth"
+import { normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
 import { z } from "zod"
 
 const loginWithOTPSchema = z
@@ -21,14 +22,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = loginWithOTPSchema.parse(body)
+    const normalizedEmail = normalizeEmail(validatedData.email)
+    const normalizedPhone = normalizePhoneNumber(validatedData.phone)
 
     // Verify OTP first
     const contactFilters: Record<string, string>[] = []
-    if (validatedData.email) {
-      contactFilters.push({ email: validatedData.email })
+    if (normalizedEmail) {
+      contactFilters.push({ email: normalizedEmail })
     }
-    if (validatedData.phone) {
-      contactFilters.push({ phone: validatedData.phone })
+    if (normalizedPhone) {
+      contactFilters.push({ phone: normalizedPhone })
     }
 
     const otpQuery: Record<string, unknown> = {
@@ -50,8 +53,8 @@ export async function POST(request: NextRequest) {
 
     // Find user
     const userQuery: any = {}
-    if (validatedData.email) userQuery.email = validatedData.email
-    if (validatedData.phone) userQuery.phone = validatedData.phone
+    if (normalizedEmail) userQuery.email = normalizedEmail
+    if (normalizedPhone) userQuery.phone = normalizedPhone
 
     const user = await User.findOne(userQuery)
     if (!user) {

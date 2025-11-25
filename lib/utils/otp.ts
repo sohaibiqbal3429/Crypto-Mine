@@ -19,6 +19,12 @@ export function isOTPExpired(expiresAt: Date): boolean {
   return new Date() > expiresAt
 }
 
+export function normalizeEmail(email: string | undefined | null): string | undefined {
+  if (!email) return undefined
+  const trimmed = email.trim()
+  return trimmed ? trimmed.toLowerCase() : undefined
+}
+
 const E164_REGEX = /^\+[1-9]\d{7,14}$/
 
 export function formatPhoneNumber(phone: string): string {
@@ -38,4 +44,10 @@ export function validatePhoneNumber(phone: string): { isValid: boolean } {
   }
 
   return { isValid: false }
+}
+
+export function normalizePhoneNumber(phone: string | undefined | null): string | undefined {
+  if (!phone) return undefined
+  const cleaned = formatPhoneNumber(phone)
+  return cleaned || undefined
 }

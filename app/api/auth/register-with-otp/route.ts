@@ -5,7 +5,7 @@ import Balance from "@/models/Balance"
 import OTP from "@/models/OTP"
 import { TOKEN_MAX_AGE_SECONDS, hashPassword, signToken } from "@/lib/auth"
 import { generateReferralCode } from "@/lib/utils/referral"
-import { isOTPExpired } from "@/lib/utils/otp"
+import { formatPhoneNumber, isOTPExpired, normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
 import { z } from "zod"
 
 const registerWithOTPSchema = z
@@ -27,17 +27,19 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const validatedData = registerWithOTPSchema.parse(body)
+    const normalizedEmail = normalizeEmail(validatedData.email)
+    const normalizedPhone = normalizePhoneNumber(validatedData.phone)
 
     // Verify OTP first – look up the most recent OTP for this contact and
     // purpose, then make sure it matches what the user supplied. This allows us
     // to accept the freshly verified record while still protecting against
     // stale/incorrect codes.
     const contactFilters: Record<string, string>[] = []
-    if (validatedData.email) {
-      contactFilters.push({ email: validatedData.email })
+    if (normalizedEmail) {
+      contactFilters.push({ email: normalizedEmail })
     }
-    if (validatedData.phone) {
-      contactFilters.push({ phone: validatedData.phone })
+    if (normalizedPhone) {
+      contactFilters.push({ phone: normalizedPhone })
     }
 
     const otpQuery: Record<string, unknown> = { purpose: "registration" }
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email: validatedData.email }, { phone: validatedData.phone }].filter(Boolean),
+      $or: [{ email: normalizedEmail }, { phone: normalizedPhone }].filter(Boolean),
     })
 
     if (existingUser) {
@@ -96,13 +98,13 @@ export async function POST(request: NextRequest) {
       isActive: true, // User is active since they verified their contact
     }
 
-    if (validatedData.email) {
-      userData.email = validatedData.email
+    if (normalizedEmail) {
+      userData.email = normalizedEmail
       userData.emailVerified = true
     }
 
-    if (validatedData.phone) {
-      userData.phone = validatedData.phone
+    if (normalizedPhone) {
+      userData.phone = formatPhoneNumber(normalizedPhone)
       userData.phoneVerified = true
     }
 

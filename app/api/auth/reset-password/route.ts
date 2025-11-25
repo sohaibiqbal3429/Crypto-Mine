@@ -5,6 +5,7 @@ import User from "@/models/User"
 import OTP from "@/models/OTP"
 import { resetPasswordSchema } from "@/lib/validations/auth"
 import { hashPassword } from "@/lib/auth"
+import { normalizeEmail } from "@/lib/utils/otp"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +14,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password, otpCode } = resetPasswordSchema.parse(body)
 
-    const normalizedEmail = email.toLowerCase()
+    const normalizedEmail = normalizeEmail(email)
+    if (!normalizedEmail) {
+      return NextResponse.json({ error: "Invalid email" }, { status: 400 })
+    }
 
     const otpRecord = await OTP.findOne({
       email: normalizedEmail,

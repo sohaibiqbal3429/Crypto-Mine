@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import dbConnect from "@/lib/mongodb"
 import OTP from "@/models/OTP"
-import { isOTPExpired } from "@/lib/utils/otp"
+import { isOTPExpired, normalizeEmail, normalizePhoneNumber } from "@/lib/utils/otp"
 import { z } from "zod"
 
 const verifyOTPSchema = z
@@ -20,9 +20,15 @@ export async function POST(request: NextRequest) {
     await dbConnect()
 
     const body = await request.json()
-    const validatedData = verifyOTPSchema.parse(body)
+    const validatedData = verifyOTPSchema.parse({
+      ...body,
+      email: normalizeEmail(body?.email),
+      phone: normalizePhoneNumber(body?.phone),
+    })
 
-    const { code, email, phone, purpose } = validatedData
+    const { code, purpose } = validatedData
+    const email = normalizeEmail(validatedData.email)
+    const phone = normalizePhoneNumber(validatedData.phone)
 
     const baseQuery: Record<string, unknown> = { purpose }
     if (email) baseQuery.email = email

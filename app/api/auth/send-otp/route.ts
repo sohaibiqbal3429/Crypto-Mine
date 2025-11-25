@@ -7,6 +7,8 @@ import {
   getOTPExpiry,
   formatPhoneNumber,
   validatePhoneNumber,
+  normalizeEmail,
+  normalizePhoneNumber,
 } from "@/lib/utils/otp"
 import { sendOTPEmail } from "@/lib/utils/email"
 import { sendOTPSMS } from "@/lib/utils/sms"
@@ -39,19 +41,13 @@ export async function POST(request: NextRequest) {
     console.log("[send-otp] Raw body:", rawBody)
 
     // Normalise & trim incoming data before validation
-    const body = {
-      email:
-        typeof rawBody.email === "string" && rawBody.email.trim() !== ""
-          ? rawBody.email.trim()
-          : undefined,
-      phone:
-        typeof rawBody.phone === "string" && rawBody.phone.trim() !== ""
-          ? rawBody.phone.trim()
-          : undefined,
+    const body = sendOTPSchema.parse({
+      email: normalizeEmail(typeof rawBody.email === "string" ? rawBody.email : undefined),
+      phone: normalizePhoneNumber(typeof rawBody.phone === "string" ? rawBody.phone : undefined),
       purpose: rawBody.purpose,
-    }
+    })
 
-    const { email, phone, purpose } = sendOTPSchema.parse(body)
+    const { email, phone, purpose } = body
     console.log("[send-otp] Validated body:", { email, phone, purpose })
 
     // ----- Common OTP setup -----
@@ -60,6 +56,8 @@ export async function POST(request: NextRequest) {
     console.log("[send-otp] Generated OTP:", otpCode)
 
     const isProduction = process.env.NODE_ENV === "production"
+    const allowDevOtp = !isProduction || process.env.ENABLE_DEV_OTP_FALLBACK === "true"
+    const skipDelivery = process.env.NODE_ENV === "test" || process.env.SKIP_OTP_DELIVERY === "true"
 
     const buildDevResponse = (message: string) =>
       NextResponse.json(
@@ -91,17 +89,32 @@ export async function POST(request: NextRequest) {
       })
       console.log("[send-otp] Created email OTP record:", otpRecord._id)
 
+      if (skipDelivery) {
+        console.warn("[send-otp] Skipping email delivery in test mode; returning dev OTP")
+        return buildDevResponse("Verification code generated (delivery skipped for tests).")
+      }
+
+      const smtpHost = process.env.SMTP_HOST?.trim()
+      const smtpPort = process.env.SMTP_PORT?.trim()
+      const smtpUser = process.env.SMTP_USER?.trim()
+      const smtpPass = process.env.SMTP_PASS?.trim()
+
       const hasEmailConfig =
-        !!process.env.SMTP_HOST &&
-        !!process.env.SMTP_PORT &&
-        !!process.env.SMTP_USER &&
-        !!process.env.SMTP_PASS
+        !!smtpHost &&
+        !!smtpPort &&
+        !!smtpUser &&
+        !!smtpPass
+
+      if (smtpHost) process.env.SMTP_HOST = smtpHost
+      if (smtpPort) process.env.SMTP_PORT = smtpPort
+      if (smtpUser) process.env.SMTP_USER = smtpUser
+      if (smtpPass) process.env.SMTP_PASS = smtpPass
 
       // No SMTP config
       if (!hasEmailConfig) {
         console.error("[send-otp] Missing SMTP configuration")
 
-        if (!isProduction) {
+        if (allowDevOtp) {
           console.warn(
             "[send-otp] Dev environment: returning devOtp instead of sending real email",
           )
@@ -129,7 +142,7 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.error("[send-otp] Failed to send OTP email:", err)
 
-        if (!isProduction) {
+        if (allowDevOtp) {
           console.warn(
             "[send-otp] Dev environment: email failed, returning devOtp instead",
           )
@@ -179,13 +192,26 @@ export async function POST(request: NextRequest) {
       })
       console.log("[send-otp] Created phone OTP record:", otpRecord._id)
 
+      if (skipDelivery) {
+        console.warn("[send-otp] Skipping SMS delivery in test mode; returning dev OTP")
+        return buildDevResponse("Verification code generated (delivery skipped for tests).")
+      }
+
+      const twilioSid = process.env.TWILIO_ACCOUNT_SID?.trim()
+      const twilioToken = process.env.TWILIO_AUTH_TOKEN?.trim()
+      const twilioPhone = process.env.TWILIO_PHONE_NUMBER?.trim()
+
       const hasSMSConfig =
-        !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN
+        !!twilioSid && !!twilioToken && !!twilioPhone
+
+      if (twilioSid) process.env.TWILIO_ACCOUNT_SID = twilioSid
+      if (twilioToken) process.env.TWILIO_AUTH_TOKEN = twilioToken
+      if (twilioPhone) process.env.TWILIO_PHONE_NUMBER = twilioPhone
 
       if (!hasSMSConfig) {
         console.error("[send-otp] Missing SMS configuration")
 
-        if (!isProduction) {
+        if (allowDevOtp) {
           console.warn(
             "[send-otp] Dev environment: returning devOtp instead of sending real SMS",
           )
