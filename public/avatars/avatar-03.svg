@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title>Navigator avatar</title>
+  <desc>A smiling person with short curls on an orange gradient background</desc>
+  <defs>
+    <linearGradient id="bgGradient03" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="64" fill="url(#bgGradient03)" />
+  <circle cx="64" cy="50" r="25" fill="#fff7ed" />
+  <path d="M64 72c-22 0-39 14-39 32v8h78v-8c0-18-17-32-39-32z" fill="#ffedd5" />
+  <path d="M64 30c-10 0-18 7-18 16s8 16 18 16 18-7 18-16-8-16-18-16z" fill="#9a3412" opacity="0.35" />
+</svg>

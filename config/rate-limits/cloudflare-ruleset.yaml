@@ -1,0 +1,62 @@
+# Cloudflare Ruleset configuration for unified token-bucket rate limiting
+# Applies 50 req/s per IP and 200 req/s per API key with a 2000 request burst.
+# Static assets and health-check addresses are excluded.
+
+kind: cloudflare#ruleset
+version: 1
+rules:
+  - description: "Bypass static content and health checks"
+    action: skip
+    expression: |
+      starts_with(http.request.uri.path, "/static") or
+      starts_with(http.request.uri.path, "/assets") or
+      starts_with(http.request.uri.path, "/images") or
+      starts_with(http.request.uri.path, "/cdn") or
+      http.request.uri.path eq "/status" or
+      ip.src in {10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1 ::1}
+    action_parameters:
+      ruleset: "cdn-rate-limits"
+
+  - description: "Token bucket per client IP"
+    action: rate_limit
+    expression: "true"
+    ratelimit:
+      characteristics:
+        - ip.src
+      period: 1
+      requests_per_period: 50
+      burst: 2000
+      mitigation_timeout: 1
+      count_expression: "true"
+    action_parameters:
+      response:
+        status_code: 429
+        content_type: text/plain
+        body: "Too many requests"
+        headers:
+          Retry-After: "{ceil($remaining_time)}"
+          X-Backoff-Hint: "{min(600, pow(2, ceil(log2(max(1, ceil($remaining_time))))) )}"
+          X-RateLimit-Layer: "cdn"
+          X-RateLimit-Scope: "ip"
+
+  - description: "Token bucket per API key"
+    action: rate_limit
+    expression: "http.request.headers[\"x-api-key\"] ne \"\""
+    ratelimit:
+      characteristics:
+        - http.request.headers["x-api-key"]
+      period: 1
+      requests_per_period: 200
+      burst: 2000
+      mitigation_timeout: 1
+      count_expression: "true"
+    action_parameters:
+      response:
+        status_code: 429
+        content_type: application/json
+        body: '{"error":"Too many requests","layer":"cdn","scope":["api-key"]}'
+        headers:
+          Retry-After: "{ceil($remaining_time)}"
+          X-Backoff-Hint: "{min(600, pow(2, ceil(log2(max(1, ceil($remaining_time))))) )}"
+          X-RateLimit-Layer: "cdn"
+          X-RateLimit-Scope: "api-key"

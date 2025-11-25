@@ -1,0 +1,14 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title>Innovator avatar</title>
+  <desc>A person with glasses in a purple gradient circle</desc>
+  <defs>
+    <linearGradient id="bgGradient04" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#7e22ce" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="64" fill="url(#bgGradient04)" />
+  <circle cx="64" cy="50" r="26" fill="#faf5ff" />
+  <path d="M64 72c-22 0-40 15-40 34v6h80v-6c0-19-18-34-40-34z" fill="#ede9fe" />
+  <path d="M64 32c-11 0-20 7-20 16 2 8 10 14 20 14s18-6 20-14c0-9-9-16-20-16z" fill="#6b21a8" opacity="0.3" />
+</svg>
