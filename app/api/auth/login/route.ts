@@ -38,7 +38,7 @@ async function proxyLoginRequest(payload: LoginInput) {
     return null
   }
 
-  let backendResponse: Response
+  let backendResponse: Response | null = null
 
   try {
     backendResponse = await fetch(targetUrl, {
@@ -52,10 +52,14 @@ async function proxyLoginRequest(payload: LoginInput) {
     })
   } catch (error) {
     console.error("Failed to contact authentication service", error)
-    throw new Error("Server not reachable. Please try later.")
+    return null
   }
 
-  const rawBody = await backendResponse.text()
+  if (!backendResponse) {
+    return null
+  }
+
+  const rawBody = await backendResponse.text().catch(() => "")
   let parsedBody: any = null
 
   if (rawBody) {
@@ -67,14 +71,12 @@ async function proxyLoginRequest(payload: LoginInput) {
   }
 
   if (!backendResponse.ok || (parsedBody && typeof parsedBody === "object" && parsedBody.success === false)) {
-    const message =
-      (parsedBody && typeof parsedBody === "object" && typeof parsedBody.error === "string" && parsedBody.error) ||
-      (parsedBody && typeof parsedBody === "object" && typeof parsedBody.message === "string" && parsedBody.message) ||
-      (typeof parsedBody === "string" && parsedBody) ||
-      "Login failed. Please try again."
-
-    const status = backendResponse.status || 502
-    return NextResponse.json({ error: message }, { status })
+    console.warn(
+      "External auth login failed. Falling back to internal auth.",
+      backendResponse.status,
+      typeof parsedBody === "object" ? parsedBody?.error || parsedBody?.message : parsedBody,
+    )
+    return null
   }
 
   const token =
