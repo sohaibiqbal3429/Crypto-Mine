@@ -5,13 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { differenceInSeconds, format } from "date-fns"
 import { CalendarDays, Gift, History, RefreshCw, Timer } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLuckyDrawDeposits } from "@/hooks/use-lucky-draw-deposits"
 import type { LuckyDrawDeposit, LuckyDrawRound, LuckyDrawDepositStatus } from "@/lib/types/lucky-draw"
 import { LuckyDrawDepositModal } from "@/components/lucky-draw/deposit-modal"
+import { cn } from "@/lib/utils"
 
 const REQUIRED_AMOUNT = 10
 
@@ -206,13 +206,13 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
   return (
     <Card
       id="lucky-draw"
-      className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-500/10 via-rose-500/10 to-purple-500/10 shadow-lg backdrop-blur"
+      className="relative overflow-hidden rounded-[32px] border border-white/30 bg-white/80 px-6 py-6 shadow-[0_20px_50px_rgba(239,68,68,0.15)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
     >
       <div
-        className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.1),_transparent_60%)]"
+        className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.4),_transparent_65%)]"
         aria-hidden
       />
-      <CardHeader className="relative z-10 space-y-4">
+      <CardHeader className="relative z-10 space-y-4 border-none px-0">
         <div className="flex items-center justify-between gap-4">
           <div>
             <CardTitle className="text-xl font-semibold text-foreground">BLIND BOX LUCKY DRAW</CardTitle>
@@ -220,7 +220,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </div>
           <Gift className="h-10 w-10 text-amber-500" />
         </div>
-        <div className="rounded-xl bg-white/40 p-4 shadow-inner">
+        <div className="rounded-[28px] border border-white/40 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/10">
           <p className="text-sm font-medium text-foreground">
             Pay <span className="font-semibold text-amber-600">${REQUIRED_AMOUNT.toFixed(2)}</span> to join the game and the lucky
             draw to win
@@ -235,39 +235,45 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </p>
         </div>
       </CardHeader>
-      <CardContent className="relative z-10 space-y-6">
+      <CardContent className="relative z-10 space-y-6 px-0">
         {isAnnouncementPending ? (
-          <Alert className="border-white/40 bg-white/70 text-foreground">
-            <AlertTitle>Winner selected — awaiting reveal</AlertTitle>
-            <AlertDescription>
-              The Blind Box winner has been locked in by the admin. The official announcement is scheduled for
-              {" "}
+          <div className="rounded-[28px] border border-amber-200/70 bg-gradient-to-r from-amber-100/80 to-rose-100/60 p-4 text-sm text-foreground dark:border-amber-500/40 dark:from-amber-900/30 dark:to-rose-900/30 dark:text-white">
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-amber-600 dark:text-amber-200">
+              Winner selected — awaiting reveal
+            </p>
+            <p className="mt-2">
+              The Blind Box winner has been locked in by the admin. The official announcement is scheduled for {" "}
               {format(announcementDate, "MMM d, yyyy • HH:mm 'UTC'")}. {winnerSelectionDate ? (
-                <span>
-                  Selected {format(winnerSelectionDate, "MMM d, yyyy • HH:mm 'UTC'")}.
-                </span>
+                <span>Selected {format(winnerSelectionDate, "MMM d, yyyy • HH:mm 'UTC'")}.</span>
               ) : null}
-            </AlertDescription>
-          </Alert>
+            </p>
+          </div>
         ) : null}
         {statusAlert ? (
-          <Alert variant={statusAlert.variant} className="border-white/40 bg-white/70 text-foreground">
-            <AlertTitle>{statusAlert.title}</AlertTitle>
-            <AlertDescription>{statusAlert.description}</AlertDescription>
-          </Alert>
+          <div
+            className={cn(
+              "rounded-[28px] border p-4 text-sm",
+              statusAlert.variant === "destructive"
+                ? "border-rose-200/70 bg-rose-50/80 text-rose-700 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100"
+                : "border-white/40 bg-white/70 text-foreground dark:border-white/10 dark:bg-white/10",
+            )}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.4em]">{statusAlert.title}</p>
+            <p className="mt-2">{statusAlert.description}</p>
+          </div>
         ) : null}
         {roundError ? (
-          <Alert variant="destructive" className="border-white/40 bg-rose-500/10">
-            <AlertTitle>Unable to load round details</AlertTitle>
-            <AlertDescription>{roundError}</AlertDescription>
-          </Alert>
+          <div className="rounded-[28px] border border-rose-200/70 bg-rose-50/80 p-4 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100">
+            <p className="text-xs font-semibold uppercase tracking-[0.4em]">Unable to load round details</p>
+            <p className="mt-2">{roundError}</p>
+          </div>
         ) : null}
 
         {depositsError ? (
-          <Alert variant="destructive" className="border-white/40 bg-rose-500/10">
-            <AlertTitle>Unable to load deposit status</AlertTitle>
-            <AlertDescription>{depositsError}</AlertDescription>
-          </Alert>
+          <div className="rounded-[28px] border border-rose-200/70 bg-rose-50/80 p-4 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100">
+            <p className="text-xs font-semibold uppercase tracking-[0.4em]">Unable to load deposit status</p>
+            <p className="mt-2">{depositsError}</p>
+          </div>
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -292,20 +298,18 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
         </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Badge className="bg-emerald-500/15 text-emerald-600">
+            <Badge className="rounded-full border border-white/40 bg-white/70 text-emerald-600 shadow-sm dark:border-white/10 dark:bg-white/5">
               Prize Pool ${activeRound.prizePoolUsd.toFixed(2)}
             </Badge>
-            <Badge className="bg-blue-500/10 text-blue-600">Join with a $10 BEP20 deposit</Badge>
+            <Badge className="rounded-full border border-white/40 bg-white/70 text-blue-600 shadow-sm dark:border-white/10 dark:bg-white/5">
+              Join with a $10 BEP20 deposit
+            </Badge>
             <span className="text-sm text-muted-foreground">No internal credits allowed.</span>
           </div>
 
         <div className="flex flex-wrap items-center gap-3">
           {hasApprovedPurchase ? (
-            <Button
-              size="lg"
-              disabled
-              className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15"
-            >
+            <Button size="lg" disabled className="rounded-2xl border border-emerald-200/60 bg-emerald-50/80 text-emerald-700">
               Purchased
             </Button>
           ) : (
@@ -313,11 +317,16 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
               size="lg"
               disabled={depositsLoading || roundLoading}
               onClick={() => setDepositModalOpen(true)}
+              className="rounded-2xl bg-gradient-to-r from-purple-500 to-rose-500 text-white shadow-lg"
             >
               Play Now / Buy for ${REQUIRED_AMOUNT.toFixed(2)}
             </Button>
           )}
-          <Button variant="outline" className="backdrop-blur" size="lg">
+          <Button
+            variant="outline"
+            className="rounded-2xl border-white/40 bg-white/70 text-foreground backdrop-blur hover:bg-white/80 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            size="lg"
+          >
             View Leaderboard
           </Button>
           <div className="text-sm text-muted-foreground">
@@ -326,14 +335,14 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/40 bg-white/50 p-4 shadow-inner">
+        <div className="rounded-[28px] border border-white/40 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/10">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">Last winner</p>
-            <Badge variant="outline" className="border-emerald-400/50 text-emerald-600">
+            <Badge className="rounded-full border border-emerald-300/60 bg-emerald-50/80 text-emerald-600 dark:border-emerald-500/40 dark:bg-emerald-900/30 dark:text-emerald-200">
               Credited automatically
             </Badge>
           </div>
-          <p className="mt-2 text-sm text-foreground">
+          <p className="mt-2 text-sm text-foreground dark:text-white">
             {latestWinner
               ? `${latestWinner.name} — announced ${format(new Date(latestWinner.announcedAt), "MMM d, yyyy")}`
               : "Winner will appear here once announced."}
@@ -349,7 +358,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1 text-xs"
+              className="gap-1 rounded-full border border-white/40 px-3 py-1 text-xs text-foreground dark:border-white/10 dark:text-white"
               onClick={refreshDeposits}
               disabled={depositsLoading}
             >
@@ -358,7 +367,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
           </div>
           <div className="space-y-2">
             {depositsLoading ? (
-              <div className="flex items-center justify-center gap-2 rounded-lg border border-white/40 bg-white/60 p-3 text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 rounded-[24px] border border-white/40 bg-white/60 p-4 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/5">
                 <RefreshCw className="h-4 w-4 animate-spin" /> Loading your deposit history…
               </div>
             ) : deposits.length === 0 ? (
@@ -369,7 +378,7 @@ export function LuckyDrawCard({ round, deposits: depositsProp }: LuckyDrawCardPr
               deposits.map((deposit) => (
                 <div
                   key={deposit.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/50 bg-white/70 p-3 text-sm shadow-sm"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/40 bg-white/70 p-4 text-sm shadow-inner dark:border-white/10 dark:bg-white/5"
                 >
                   <div className="space-y-1">
                     <p className="font-semibold text-foreground">
@@ -427,12 +436,12 @@ function SummaryTile({
   helper: string
 }) {
   return (
-    <div className="rounded-xl border border-white/40 bg-white/60 p-4 shadow-sm">
+    <div className="rounded-[28px] border border-white/40 bg-white/60 p-4 shadow-inner dark:border-white/10 dark:bg-white/10">
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span className="rounded-lg bg-white/70 p-2 text-amber-500">{icon}</span>
-        <span className="font-medium uppercase tracking-wide">{label}</span>
+        <span className="rounded-2xl bg-white/80 p-2 text-amber-500 shadow-sm dark:bg-white/10">{icon}</span>
+        <span className="font-medium uppercase tracking-[0.3em]">{label}</span>
       </div>
-      <p className="mt-3 text-xl font-semibold text-foreground">{value}</p>
+      <p className="mt-3 text-xl font-semibold text-foreground dark:text-white">{value}</p>
       <p className="text-xs text-muted-foreground">{helper}</p>
     </div>
   )

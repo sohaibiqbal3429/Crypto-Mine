@@ -3,9 +3,8 @@
 import { useCallback } from "react"
 import { Share2, Users } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
 
 interface InviteAndEarnPanelProps {
@@ -62,45 +61,50 @@ export function InviteAndEarnPanel({ referralCode = "CRYPTO123", activeInvites =
   }, [referralCode, toast])
 
   return (
-    <Card className="flex h-full flex-col border-0 bg-gradient-to-br from-emerald-500/10 via-cyan-500/10 to-sky-500/10 shadow-lg">
-      <CardHeader className="space-y-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold text-foreground">Invite &amp; Earn</CardTitle>
-          <Share2 className="h-6 w-6 text-emerald-500" />
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Earn 15% of your friends’ daily earnings when they start mining with your referral link.
-        </p>
-      </CardHeader>
-      <CardContent className="flex flex-1 flex-col justify-between gap-6">
+    <Card className="relative h-full overflow-hidden rounded-[32px] border border-white/30 bg-gradient-to-br from-indigo-600 via-purple-600 to-cyan-400 px-6 py-6 text-white shadow-[0_25px_50px_rgba(79,70,229,0.45)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.35),_transparent_60%)]" aria-hidden />
+      <CardContent className="relative flex h-full flex-col justify-between px-0">
         <div className="space-y-4">
-          <div className="rounded-xl border border-white/50 bg-white/60 p-4 shadow-inner">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your referral code</p>
-            <p className="mt-2 text-2xl font-bold text-foreground">{referralCode}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button size="sm" onClick={handleCopyCode}>
-                Copy Code
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.4em] text-white/70">Invite &amp; earn</p>
+              <p className="mt-2 text-2xl font-semibold">Unlock 15% daily boosts</p>
+            </div>
+            <Share2 className="h-6 w-6" aria-hidden />
+          </div>
+          <p className="text-sm text-white/80">Earn a percentage of your crew&apos;s daily mining once they activate their rigs.</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-white/40 bg-white/10 p-4 text-center">
+            <p className="text-xs uppercase tracking-[0.4em] text-white/70">Your code</p>
+            <p className="mt-2 text-3xl font-bold">{referralCode}</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button onClick={handleCopyCode} className="flex-1 rounded-2xl bg-white text-foreground hover:bg-white/90">
+                Copy code
               </Button>
-              <Button size="sm" variant="outline" className="backdrop-blur" onClick={handleShare}>
-                Share &amp; Invite
+              <Button
+                variant="outline"
+                onClick={handleShare}
+                className="flex-1 rounded-2xl border-white/50 bg-transparent text-white hover:bg-white/10"
+              >
+                Share link
               </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 rounded-xl border border-white/40 bg-white/60 p-4">
-            <span className="rounded-full bg-emerald-500/20 p-2 text-emerald-600">
-              <Users className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Invite progress</p>
-              <p className="text-xs text-muted-foreground">
-                {activeInvites} active invite{activeInvites === 1 ? "" : "s"} | ${totalEarnedUsd.toFixed(2)} earned from referrals
-              </p>
+          <div className="rounded-3xl border border-white/40 bg-white/10 p-4">
+            <div className="flex items-center gap-3">
+              <span className="rounded-2xl bg-white/15 p-2 text-white">
+                <Users className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">{activeInvites} active invite{activeInvites === 1 ? "" : "s"}</p>
+                <p className="text-xs text-white/70">${totalEarnedUsd.toFixed(2)} earned so far</p>
+              </div>
             </div>
           </div>
         </div>
-
-        <Badge className="w-fit bg-emerald-500/15 text-emerald-600">Rewards paid to your current balance automatically</Badge>
       </CardContent>
     </Card>
   )

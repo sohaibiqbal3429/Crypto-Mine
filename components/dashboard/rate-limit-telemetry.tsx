@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useRef, useState, memo } from "react"
-import { Activity, AlertTriangle, Clock3 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { AlertTriangle, Clock3 } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 interface TelemetryLayer {
   layer: string
@@ -33,27 +33,23 @@ function formatThrottleRate(events: number, windowMs: number) {
 /** small, memoized tile to avoid re-render churn */
 const Tile = memo(function Tile({ layer, windowMs }: { layer: TelemetryLayer; windowMs: number }) {
   return (
-    <div className="w-full rounded-lg border border-border/60 bg-muted/30 p-4 shadow-sm">
-      <div className="flex items-center justify-between text-sm font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="w-full rounded-3xl border border-white/40 bg-white/70 p-4 shadow-inner backdrop-blur-md dark:border-white/10 dark:bg-white/5">
+      <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
         <span>{layer.layer}</span>
-        <Clock3 className="h-4 w-4 text-muted-foreground" />
+        <Clock3 className="h-4 w-4" aria-hidden />
       </div>
-      <dl className="mt-3 space-y-2 text-sm">
+      <dl className="mt-3 space-y-2 text-sm text-foreground dark:text-white">
         <div className="flex items-center justify-between">
           <dt className="text-muted-foreground">Request rate</dt>
-          <dd className="font-semibold text-foreground">
-            {layer.requestRatePerSecond.toLocaleString()} /s
-          </dd>
+          <dd className="font-semibold">{layer.requestRatePerSecond.toLocaleString()} /s</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="text-muted-foreground">Throttle hits</dt>
-          <dd className="font-semibold text-foreground">
-            {formatThrottleRate(layer.throttleEventsLastWindow, windowMs)}
-          </dd>
+          <dd className="font-semibold">{formatThrottleRate(layer.throttleEventsLastWindow, windowMs)}</dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="text-muted-foreground">p95 latency</dt>
-          <dd className="font-semibold text-foreground">{formatLatency(layer.p95LatencyMs)}</dd>
+          <dd className="font-semibold">{formatLatency(layer.p95LatencyMs)}</dd>
         </div>
       </dl>
     </div>
@@ -124,42 +120,48 @@ export function RateLimitTelemetryCard() {
   const windowLabel = `${Math.round(windowMs / 1000)} seconds`
 
   return (
-    <Card className="w-full col-span-full crypto-card">
-      <CardHeader className="flex flex-row items-start justify-between gap-3">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Activity className="h-5 w-5 text-primary" /> Rate Limit Telemetry
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Live request rate, throttle hits, and latency for the last {windowLabel} window.
-          </p>
+    <Card className="relative col-span-full overflow-hidden rounded-[32px] border border-white/30 bg-white/70 px-6 py-6 shadow-[0_25px_50px_rgba(87,65,217,0.18)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.45),_transparent_65%)]" aria-hidden />
+      <CardContent className="relative space-y-5 px-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-muted-foreground">Network telemetry</p>
+            <p className="text-2xl font-semibold text-foreground dark:text-white">Rate-limit health</p>
+            <p className="text-sm text-muted-foreground">
+              Live request rate, throttle hits, and latency for the last {windowLabel} window.
+            </p>
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em]",
+              status === "degraded"
+                ? "border border-rose-300 bg-rose-50/70 text-rose-700 dark:border-rose-500/40 dark:bg-rose-950/40 dark:text-rose-100"
+                : "border border-emerald-200 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-950/40 dark:text-emerald-100",
+            )}
+          >
+            {status === "degraded" ? "Degraded" : "Live"}
+          </span>
         </div>
-        <Badge variant={status === "degraded" ? "destructive" : "outline"} className="uppercase tracking-wide text-xs">
-          {status === "degraded" ? "Degraded" : "Live"}
-        </Badge>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
         {status === "degraded" ? (
-          <div className="flex items-center gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <span>Unable to load live rate limit telemetry.</span>
+          <div className="flex items-center gap-3 rounded-3xl border border-rose-200/60 bg-rose-50/80 p-4 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-950/30 dark:text-rose-100">
+            <AlertTriangle className="h-4 w-4" aria-hidden />
+            Unable to load live telemetry. Retrying automatically.
           </div>
         ) : null}
 
-        {/* single column, full width */}
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
           {layers.length ? (
             layers.map((l) => <Tile key={l.layer} layer={l} windowMs={windowMs} />)
           ) : status !== "degraded" ? (
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground">
+            <div className="rounded-3xl border border-dashed border-white/50 bg-white/40 p-4 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/5">
               Awaiting traffic to populate telemetry.
             </div>
           ) : null}
         </div>
 
         {updatedLabel && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs uppercase tracking-[0.4em] text-muted-foreground">
             Last updated {updatedLabel} • Auto-refresh (backoff): {backoffRef.current / 1000}s
           </p>
         )}

@@ -1,56 +1,46 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-
+import { useMemo } from "react"
 import { MoonStar, Sun } from "lucide-react"
-import { useTheme } from "next-themes"
 
-import { Button } from "@/components/ui/button"
+import { useThemePreference } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
 
 export function ThemeToggle() {
-  const { resolvedTheme, setTheme, theme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const activeTheme = useMemo(() => resolvedTheme ?? theme ?? "system", [resolvedTheme, theme])
-
-  const handleToggle = () => {
-    const nextTheme = activeTheme === "dark" ? "light" : "dark"
-    setTheme(nextTheme)
-  }
-
-  if (!mounted) {
-    return null
-  }
+  const { theme, toggleTheme, mounted } = useThemePreference()
+  const isDark = useMemo(() => (mounted ? theme === "dark" : false), [mounted, theme])
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      type="button"
       aria-label="Toggle theme"
-      onClick={handleToggle}
+      aria-pressed={isDark}
+      onClick={toggleTheme}
       className={cn(
-        "relative flex h-11 w-11 items-center justify-center rounded-full border border-border/70 bg-background/70 shadow-sm transition-all duration-[var(--t-fast,180ms)] ease-[var(--ease)]",
-        "hover:-translate-y-[2px] hover:shadow-[0_12px_24px_rgba(15,23,42,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "relative inline-flex h-11 w-20 items-center justify-between rounded-full border border-white/30 bg-gradient-to-r",
+        "from-violet-500/80 via-purple-500/70 to-cyan-400/70 px-2 text-white shadow-[0_12px_30px_rgba(88,28,135,0.35)]",
+        "transition-all duration-300 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300",
+        "dark:from-slate-900/80 dark:via-indigo-900/80 dark:to-emerald-700/80 dark:border-white/10",
       )}
     >
       <Sun
         className={cn(
-          "h-5 w-5 transition-transform duration-[var(--t-med,240ms)] ease-[var(--ease)]",
-          activeTheme === "dark" ? "-rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100",
+          "relative z-10 h-5 w-5 transition-all duration-300",
+          isDark ? "translate-x-0 opacity-40" : "-translate-x-1 opacity-100 drop-shadow",
         )}
       />
       <MoonStar
         className={cn(
-          "absolute h-5 w-5 transition-transform duration-[var(--t-med,240ms)] ease-[var(--ease)]",
-          activeTheme === "dark" ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-0 opacity-0",
+          "relative z-10 h-5 w-5 transition-all duration-300",
+          isDark ? "translate-x-1 opacity-100 drop-shadow" : "opacity-40",
         )}
       />
-      <span className="sr-only">Toggle theme</span>
-    </Button>
+      <span
+        className={cn(
+          "pointer-events-none absolute inset-1 rounded-full bg-white/80 transition-all duration-300 dark:bg-white/10",
+          isDark ? "translate-x-8" : "translate-x-0",
+        )}
+      />
+    </button>
   )
 }
