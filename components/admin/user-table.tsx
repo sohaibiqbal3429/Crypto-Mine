@@ -198,8 +198,8 @@ export function UserTable({
   )
 
   return (
-    <Card className="space-y-4">
-      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <Card className="space-y-3 py-5">
+      <CardHeader className="flex flex-col gap-3 px-5 pb-3 md:flex-row md:items-center md:justify-between">
         <div>
           <CardTitle className="text-2xl font-semibold">Users</CardTitle>
           <p className="text-sm text-muted-foreground">Search, filter, and manage customer accounts.</p>
@@ -208,14 +208,14 @@ export function UserTable({
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 px-5 pb-5">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="user-search">Search users</Label>
             <Input

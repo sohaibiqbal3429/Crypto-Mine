@@ -1104,7 +1104,7 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
     <div className="flex h-screen bg-background">
       <Sidebar user={user} />
       <main className="flex-1 overflow-auto md:ml-64">
-        <div className="space-y-6 p-6">
+        <div className="space-y-5 px-4 py-4 sm:px-5 sm:py-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold">Admin Panel</h1>
@@ -1115,7 +1115,7 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
             </Button>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard label="Total users" value={stats.totalUsers} />
             <StatCard label="Active users" value={stats.activeUsers} />
             <StatCard label="Pending deposits" value={stats.pendingDeposits} />
@@ -1123,8 +1123,8 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
             <StatCard label="Lucky draw pending" value={stats.pendingLuckyDrawDeposits} />
           </div>
 
-          <Card>
-            <CardHeader className="pb-4">
+          <Card className="gap-5 py-5">
+            <CardHeader className="px-5 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-muted-foreground" />
                 <CardTitle>Wallet addresses</CardTitle>
@@ -1133,14 +1133,14 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
                 Manage the deposit wallets displayed to users. Changes are audited and applied immediately.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleWalletSubmit} className="space-y-6">
+            <CardContent className="px-5 pb-5">
+              <form onSubmit={handleWalletSubmit} className="space-y-5">
                 {walletSettings.length === 0 ? (
                   <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                     No wallet addresses configured yet. Provide values below to publish them to users.
                   </div>
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-3 md:grid-cols-3">
                     {walletSettings.map((wallet) => {
                       const draftValue = walletDrafts[wallet.id] ?? ""
                       const lastUpdated = wallet.updatedAt ? format(new Date(wallet.updatedAt), "PPpp") : null
@@ -1268,13 +1268,13 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
             </AlertDialogContent>
           </AlertDialog>
 
-          <Card>
-            <CardHeader className="pb-4">
+          <Card className="gap-5 py-5">
+            <CardHeader className="px-5 pb-3">
               <CardTitle>Daily profit rate</CardTitle>
               <CardDescription>Adjust the platform-wide mining payout percentage.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveDailyProfitPercent} className="space-y-4">
+            <CardContent className="px-5 pb-5">
+              <form onSubmit={handleSaveDailyProfitPercent} className="space-y-3">
                 <div className="grid gap-2">
                   <label htmlFor="daily-profit-percent" className="text-sm font-medium">
                     Daily profit percent
@@ -1332,79 +1332,79 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
                 </div>
                 {dailyProfitError && <p className="text-sm text-destructive">{dailyProfitError}</p>}
               </form>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle>Team daily profit rate</CardTitle>
-            <CardDescription>
-              Optional override for daily team mining rewards. Leave empty to use level defaults (L1: 1%, L2: 1%, L3–5: 2%).
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSaveTeamDailyProfitPercent} className="space-y-4">
-              <div className="grid gap-2">
-                <label htmlFor="team-daily-profit-percent" className="text-sm font-medium">
-                  Team daily profit percent
-                </label>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <Input
-                    id="team-daily-profit-percent"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min={teamDailyBounds.min.toFixed(2)}
-                    max={teamDailyBounds.max.toFixed(2)}
-                    value={teamDailyDraft}
-                    onChange={handleTeamDailyDraftChange}
-                    placeholder="e.g. 1.00"
-                    aria-describedby="team-daily-profit-percent-help"
-                    className="sm:max-w-[180px]"
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="submit" disabled={teamDailySaving} className="gap-2">
-                      {teamDailySaving ? (
-                        <>
+          <Card className="gap-5 py-5">
+            <CardHeader className="px-5 pb-3">
+              <CardTitle>Team daily profit rate</CardTitle>
+              <CardDescription>
+                Optional override for daily team mining rewards. Leave empty to use level defaults (L1: 1%, L2: 1%, L3–5: 2%).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <form onSubmit={handleSaveTeamDailyProfitPercent} className="space-y-3">
+                <div className="grid gap-2">
+                  <label htmlFor="team-daily-profit-percent" className="text-sm font-medium">
+                    Team daily profit percent
+                  </label>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <Input
+                      id="team-daily-profit-percent"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min={teamDailyBounds.min.toFixed(2)}
+                      max={teamDailyBounds.max.toFixed(2)}
+                      value={teamDailyDraft}
+                      onChange={handleTeamDailyDraftChange}
+                      placeholder="e.g. 1.00"
+                      aria-describedby="team-daily-profit-percent-help"
+                      className="sm:max-w-[180px]"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="submit" disabled={teamDailySaving} className="gap-2">
+                        {teamDailySaving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving
+                          </>
+                        ) : (
+                          "Save"
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={handleTeamDailyProfitRefresh}
+                        disabled={teamDailyLoading || teamDailySaving}
+                      >
+                        {teamDailyLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Saving
-                        </>
-                      ) : (
-                        "Save"
-                      )}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-2"
-                      onClick={handleTeamDailyProfitRefresh}
-                      disabled={teamDailyLoading || teamDailySaving}
-                    >
-                      {teamDailyLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                      Refresh
-                    </Button>
+                        ) : (
+                          <RefreshCw className="h-4 w-4" />
+                        )}
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div id="team-daily-profit-percent-help" className="space-y-1 text-sm text-muted-foreground">
-                <p>
-                  Current override: {teamDailyProfitPercent === null ? <span className="font-medium">Disabled</span> : <span className="font-medium">{teamDailyProfitPercent.toFixed(2)}%</span>}
-                </p>
-                <p>
-                  Draft preview: {teamDailyDraft ? `$100 → ${multiplyAmountByPercent(100, Number.parseFloat(teamDailyDraft)).toFixed(2)}` : "—"} (allowed range {teamDailyBounds.min.toFixed(2)}%–{teamDailyBounds.max.toFixed(2)}%)
-                </p>
-                <p>Clear the input to remove the override and fall back to level defaults.</p>
-              </div>
-              {teamDailyError && <p className="text-sm text-destructive">{teamDailyError}</p>}
-            </form>
-          </CardContent>
-        </Card>
+                <div id="team-daily-profit-percent-help" className="space-y-1 text-sm text-muted-foreground">
+                  <p>
+                    Current override: {teamDailyProfitPercent === null ? <span className="font-medium">Disabled</span> : <span className="font-medium">{teamDailyProfitPercent.toFixed(2)}%</span>}
+                  </p>
+                  <p>
+                    Draft preview: {teamDailyDraft ? `$100 → ${multiplyAmountByPercent(100, Number.parseFloat(teamDailyDraft)).toFixed(2)}` : "—"} (allowed range {teamDailyBounds.min.toFixed(2)}%–{teamDailyBounds.max.toFixed(2)}%)
+                  </p>
+                  <p>Clear the input to remove the override and fall back to level defaults.</p>
+                </div>
+                {teamDailyError && <p className="text-sm text-destructive">{teamDailyError}</p>}
+              </form>
+            </CardContent>
+          </Card>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="xl:col-span-2">
               <AdminDepositsTable
                 deposits={luckyDeposits}
@@ -1456,11 +1456,11 @@ export function AdminDashboard({ initialUser, initialStats, initialSettings, ini
 function StatCard({ label, value }: { label: string; value: unknown }) {
   const formattedValue = formatNumberWithFallback(value, "0")
   return (
-    <Card>
-      <CardHeader className="pb-2">
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-5 pb-1">
         <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 pb-4">
         <p className="text-2xl font-semibold">{formattedValue}</p>
       </CardContent>
     </Card>

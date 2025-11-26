@@ -96,8 +96,8 @@ export function AdminWinnerBox({
   }
 
   return (
-    <Card className="flex h-full flex-col border-0 bg-gradient-to-br from-purple-500/10 via-fuchsia-500/10 to-indigo-500/10 shadow-xl">
-      <CardHeader className="space-y-4">
+    <Card className="flex h-full flex-col border-0 bg-gradient-to-br from-purple-500/10 via-fuchsia-500/10 to-indigo-500/10 py-5 shadow-xl">
+      <CardHeader className="space-y-3 px-5 pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold">Winner Announcement</CardTitle>
           <Trophy className="h-6 w-6 text-purple-500" />
@@ -106,7 +106,7 @@ export function AdminWinnerBox({
           Select a verified participant to lock in the Blind Box Lucky Draw winner. The official reveal and prize credit happen 72 hours after the selection is scheduled.
         </p>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-6">
+      <CardContent className="flex flex-1 flex-col gap-5 px-5 pb-5">
         <div className="space-y-3 rounded-xl border border-white/40 bg-white/60 p-4 shadow-inner">
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
             <CalendarClock className="h-5 w-5 text-purple-500" />

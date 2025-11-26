@@ -292,7 +292,7 @@ export function TransactionTable({
         <div
           key={transaction._id}
           style={style}
-          className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b px-4 py-5 text-sm transition-colors sm:px-6 sm:py-6 md:grid-cols-[minmax(220px,2fr)_repeat(4,minmax(120px,1fr))_auto] md:items-start md:gap-6"
+        className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b px-3 py-4 text-sm transition-colors sm:px-5 sm:py-5 md:grid-cols-[minmax(220px,2fr)_repeat(4,minmax(120px,1fr))_auto] md:items-start md:gap-5"
         >
           {RowInner(transaction)}
         </div>
@@ -302,10 +302,10 @@ export function TransactionTable({
   )
 
   return (
-    <Card className="space-y-4">
-      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <Card className="space-y-3 py-5">
+      <CardHeader className="flex flex-col gap-3 px-5 pb-3 md:flex-row md:items-center md:justify-between">
         <CardTitle className="text-2xl font-semibold">Transactions</CardTitle>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={onRefresh} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
           </Button>
@@ -314,7 +314,7 @@ export function TransactionTable({
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 px-5 pb-5">
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -323,7 +323,7 @@ export function TransactionTable({
         
 
         {/* Filters */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="transaction-search">Search by email or ID</Label>
             <Input
@@ -392,11 +392,11 @@ export function TransactionTable({
 
         {/* Table */}
         <div className="overflow-hidden rounded-md border">
-          <div className="flex items-center justify-between bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+          <div className="flex items-center justify-between bg-muted px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
             <span>User</span>
             <span>Actions</span>
           </div>
-          <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
+          <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-4 bg-muted px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid">
             <span className="col-span-2">User</span>
             <span>Type</span>
             <span>Amount</span>
@@ -421,7 +421,7 @@ export function TransactionTable({
                 </div>
               )}
               {!loading && items.length === 0 && (
-                <div className="py-6 text-center text-sm text-muted-foreground">No transactions found.</div>
+                <div className="py-5 text-center text-sm text-muted-foreground">No transactions found.</div>
               )}
             </div>
           ) : (
@@ -429,7 +429,7 @@ export function TransactionTable({
               {items.map((t) => (
                 <div
                   key={t._id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-3 py-4 sm:px-6
+                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 px-3 py-3 sm:px-5
                              text-sm rounded-lg bg-background/70 shadow-[0_1px_0_0_rgba(0,0,0,0.05)]
                              ring-1 ring-border/60 hover:bg-muted/40 transition-colors"
                 >
@@ -442,7 +442,7 @@ export function TransactionTable({
                 </div>
               )}
               {!loading && items.length === 0 && (
-                <div className="py-6 text-center text-sm text-muted-foreground">No transactions found.</div>
+                <div className="py-5 text-center text-sm text-muted-foreground">No transactions found.</div>
               )}
               {hasMore && !loading && (
                 <div className="px-4 py-3">

@@ -41,7 +41,7 @@ export function Sidebar({ user }: SidebarProps) {
             <span className="absolute -right-1 -bottom-1 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white" />
           </div>
           <div className="leading-tight">
-            <span className="block text-xs uppercase tracking-[0.08em] text-sidebar-foreground/70">Crypto Cloud</span>
+            <span className="block text-xs uppercase tracking-[0.08em] text-sidebar-foreground/70">CryptoMine</span>
             <span className="text-lg font-black text-sidebar-foreground">MintMine Pro</span>
           </div>
         </Link>

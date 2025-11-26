@@ -78,8 +78,8 @@ export function AdminDepositsTable({
   }
 
   return (
-    <Card className="border-0 bg-gradient-to-br from-slate-900/10 via-slate-900/5 to-slate-900/10 shadow-lg">
-      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <Card className="border-0 bg-gradient-to-br from-slate-900/10 via-slate-900/5 to-slate-900/10 py-5 shadow-lg">
+      <CardHeader className="flex flex-col gap-3 px-5 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <CardTitle className="text-lg font-semibold">Deposit Reviews</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -103,7 +103,7 @@ export function AdminDepositsTable({
           ) : null}
         </div>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className="overflow-x-auto px-5 pb-5">
         {error ? (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{error}</AlertDescription>
