@@ -61,15 +61,15 @@ export function KPICards({ kpis }: KPICardsProps) {
           <div className="relative">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
               <div>
-                <CardTitle className="text-sm font-semibold text-muted-foreground/90">{card.title}</CardTitle>
-                <p className="text-xs text-muted-foreground/80">Live synced with backend</p>
+                <CardTitle className="text-sm font-semibold text-muted-foreground/90 dark:text-secondary-dark">{card.title}</CardTitle>
+                <p className="text-xs text-muted-foreground/80 dark:text-muted-dark">Live synced with backend</p>
               </div>
               <div className="group rounded-2xl border border-white/60 bg-white/80 p-3 text-primary shadow-lg backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-2xl dark:border-white/10 dark:bg-white/5">
                 <card.icon className="h-5 w-5" />
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="text-3xl font-black tracking-tight text-foreground">{card.value}</div>
+              <div className="text-3xl font-black tracking-tight text-foreground dark:text-primary-dark">{card.value}</div>
               <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${card.pill}`}>
                 Updated in real time
               </div>

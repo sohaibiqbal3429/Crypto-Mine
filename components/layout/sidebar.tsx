@@ -78,7 +78,7 @@ export function Sidebar({ user }: SidebarProps) {
               </div>
               <div className="flex flex-col">
                 <span>{item.name}</span>
-                <span className="text-[11px] font-normal text-sidebar-foreground/60">{item.description ?? ""}</span>
+                <span className="text-[11px] font-normal text-sidebar-foreground/60 dark:text-secondary-dark">{item.description ?? ""}</span>
               </div>
             </Link>
           )
@@ -112,7 +112,7 @@ export function Sidebar({ user }: SidebarProps) {
             </div>
             <div className="flex flex-col">
               <span>{ADMIN_NAV_ITEM.name}</span>
-              <span className="text-[11px] font-normal text-sidebar-foreground/60">Admin controls</span>
+              <span className="text-[11px] font-normal text-sidebar-foreground/60 dark:text-secondary-dark">Admin controls</span>
             </div>
           </Link>
         )}
@@ -129,8 +129,8 @@ export function Sidebar({ user }: SidebarProps) {
               height={48}
               className="h-12 w-12 rounded-full border border-sidebar-border bg-sidebar"
             />
-            <div className="text-xs text-sidebar-foreground/80">
-              <div className="text-sm font-semibold text-sidebar-foreground">{user.name}</div>
+            <div className="text-xs text-sidebar-foreground/90 dark:text-secondary-dark">
+              <div className="text-sm font-semibold text-sidebar-foreground dark:text-primary-dark">{user.name}</div>
               <div className="truncate">{user.email}</div>
               <div className="mt-1 inline-flex rounded-full bg-sidebar-accent px-2 py-1 font-mono text-[11px] text-sidebar-accent-foreground">
                 Code: {user.referralCode}

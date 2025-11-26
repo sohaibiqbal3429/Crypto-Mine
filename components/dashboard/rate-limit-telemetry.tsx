@@ -34,26 +34,26 @@ function formatThrottleRate(events: number, windowMs: number) {
 const Tile = memo(function Tile({ layer, windowMs }: { layer: TelemetryLayer; windowMs: number }) {
   return (
     <div className="w-full rounded-lg border border-border/60 bg-muted/30 p-4 shadow-sm">
-      <div className="flex items-center justify-between text-sm font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center justify-between text-sm font-medium uppercase tracking-wide text-muted-foreground dark:text-secondary-dark">
         <span>{layer.layer}</span>
-        <Clock3 className="h-4 w-4 text-muted-foreground" />
+        <Clock3 className="h-4 w-4 text-muted-foreground dark:text-secondary-dark" />
       </div>
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-center justify-between">
-          <dt className="text-muted-foreground">Request rate</dt>
-          <dd className="font-semibold text-foreground">
+          <dt className="text-muted-foreground dark:text-secondary-dark">Request rate</dt>
+          <dd className="font-semibold text-foreground dark:text-primary-dark">
             {layer.requestRatePerSecond.toLocaleString()} /s
           </dd>
         </div>
         <div className="flex items-center justify-between">
-          <dt className="text-muted-foreground">Throttle hits</dt>
-          <dd className="font-semibold text-foreground">
+          <dt className="text-muted-foreground dark:text-secondary-dark">Throttle hits</dt>
+          <dd className="font-semibold text-foreground dark:text-primary-dark">
             {formatThrottleRate(layer.throttleEventsLastWindow, windowMs)}
           </dd>
         </div>
         <div className="flex items-center justify-between">
-          <dt className="text-muted-foreground">p95 latency</dt>
-          <dd className="font-semibold text-foreground">{formatLatency(layer.p95LatencyMs)}</dd>
+          <dt className="text-muted-foreground dark:text-secondary-dark">p95 latency</dt>
+          <dd className="font-semibold text-foreground dark:text-primary-dark">{formatLatency(layer.p95LatencyMs)}</dd>
         </div>
       </dl>
     </div>
@@ -127,10 +127,10 @@ export function RateLimitTelemetryCard() {
     <Card className="w-full col-span-full crypto-card">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
-          <CardTitle className="flex items-center gap-2 text-lg">
+          <CardTitle className="flex items-center gap-2 text-lg text-foreground dark:text-primary-dark">
             <Activity className="h-5 w-5 text-primary" /> Rate Limit Telemetry
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground dark:text-secondary-dark">
             Live request rate, throttle hits, and latency for the last {windowLabel} window.
           </p>
         </div>
@@ -152,14 +152,14 @@ export function RateLimitTelemetryCard() {
           {layers.length ? (
             layers.map((l) => <Tile key={l.layer} layer={l} windowMs={windowMs} />)
           ) : status !== "degraded" ? (
-            <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground dark:text-secondary-dark">
               Awaiting traffic to populate telemetry.
             </div>
           ) : null}
         </div>
 
         {updatedLabel && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground dark:text-muted-dark">
             Last updated {updatedLabel} • Auto-refresh (backoff): {backoffRef.current / 1000}s
           </p>
         )}
