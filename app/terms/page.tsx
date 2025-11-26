@@ -136,8 +136,7 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Withdrawals can be made directly from your dashboard once you reach the minimum withdrawal limit. All
-                  withdrawals are processed securely, usually within <strong>24 hours</strong>.
+                  Withdrawals can be made directly from your dashboard once you reach the minimum withdrawal limit. All withdrawals are processed securely, usually within  <strong>24 hours</strong>.
                 </p>
               </CardContent>
             </Card>
