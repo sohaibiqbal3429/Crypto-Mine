@@ -42,28 +42,63 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const fetchDashboardData = useCallback(async () => {
+    const parseResponse = async (response: Response) => {
+      const contentType = response.headers.get("content-type")?.toLowerCase() ?? ""
+
+      if (contentType.includes("application/json")) {
+        const json = await response.json().catch(() => null)
+        return { json, rawText: "" }
+      }
+
+      const rawText = (await response.text().catch(() => "")) || ""
+      return { json: null, rawText }
+    }
+
     try {
-      const [dashboardRes, userRes] = await Promise.all([fetch("/api/dashboard"), fetch("/api/auth/me")])
+      const [dashboardRes, userRes] = await Promise.all([
+        fetch("/api/dashboard", { credentials: "include" }),
+        fetch("/api/auth/me", { credentials: "include" }),
+      ])
+
+      const [dashboardPayload, userPayload] = await Promise.all([
+        parseResponse(dashboardRes),
+        parseResponse(userRes),
+      ])
+
+      if (dashboardRes.status === 401 || userRes.status === 401) {
+        router.replace("/auth/login")
+        return
+      }
 
       if (dashboardRes.status === 403) {
         router.replace("/auth/login?blocked=1")
         return
       }
 
-      if (dashboardRes.ok && userRes.ok) {
-        const dashboardData = await dashboardRes.json()
-        const userData = await userRes.json()
-        setData(dashboardData)
-        setUser(userData.user)
+      if (dashboardRes.ok && userRes.ok && dashboardPayload.json && userPayload.json) {
+        setData(dashboardPayload.json as DashboardData)
+        setUser((userPayload.json as any).user)
+        setErrorMessage(null)
+        return
       }
+
+      const dashError =
+        (dashboardPayload.json && typeof dashboardPayload.json === "object" &&
+          (dashboardPayload.json as any).error) ||
+        dashboardPayload.rawText
+      const friendlyMessage = typeof dashError === "string" && dashError.trim() ? dashError.trim() : null
+
+      setErrorMessage(friendlyMessage ?? "Failed to load dashboard data")
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error)
+      setErrorMessage("Failed to load dashboard data")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     fetchDashboardData()
@@ -88,7 +123,9 @@ export default function DashboardPage() {
             <span className="text-2xl">⚠️</span>
           </div>
           <p className="font-medium text-foreground">Failed to load dashboard data</p>
-          <p className="text-muted-foreground">Please refresh the page or try again later</p>
+          <p className="text-muted-foreground">
+            {errorMessage || "Please refresh the page or try again later"}
+          </p>
         </div>
       </div>
     )

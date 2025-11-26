@@ -3,130 +3,13 @@ import { ZodError } from "zod"
 
 import dbConnect from "@/lib/mongodb"
 import User from "@/models/User"
-import { loginSchema, type LoginInput } from "@/lib/validations/auth"
-import { resolveApiBaseUrl } from "@/config/backend"
+import { loginSchema } from "@/lib/validations/auth"
 import { TOKEN_MAX_AGE_SECONDS, comparePassword, signToken } from "@/lib/auth"
-
-function resolveExternalLoginUrl() {
-  const rawUrl =
-    process.env.AUTH_SERVICE_LOGIN_URL ??
-    process.env.AUTH_SERVICE_URL ??
-    process.env.BACKEND_API_URL ??
-    resolveApiBaseUrl()
-
-  if (!rawUrl) {
-    return null
-  }
-
-  try {
-    const url = new URL(rawUrl)
-    const pathname = url.pathname.replace(/\/$/, "")
-    if (!/auth\/login$/i.test(pathname)) {
-      url.pathname = `${pathname || ""}/auth/login`
-    }
-    return url
-  } catch (error) {
-    console.error("Invalid AUTH service URL", error)
-    return null
-  }
-}
-
-async function proxyLoginRequest(payload: LoginInput) {
-  const targetUrl = resolveExternalLoginUrl()
-
-  if (!targetUrl) {
-    return null
-  }
-
-  let backendResponse: Response | null = null
-
-  try {
-    backendResponse = await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-      credentials: "include",
-    })
-  } catch (error) {
-    console.error("Failed to contact authentication service", error)
-    return null
-  }
-
-  if (!backendResponse) {
-    return null
-  }
-
-  const rawBody = await backendResponse.text().catch(() => "")
-  let parsedBody: any = null
-
-  if (rawBody) {
-    try {
-      parsedBody = JSON.parse(rawBody)
-    } catch {
-      parsedBody = rawBody
-    }
-  }
-
-  if (!backendResponse.ok || (parsedBody && typeof parsedBody === "object" && parsedBody.success === false)) {
-    console.warn(
-      "External auth login failed. Falling back to internal auth.",
-      backendResponse.status,
-      typeof parsedBody === "object" ? parsedBody?.error || parsedBody?.message : parsedBody,
-    )
-    return null
-  }
-
-  const token =
-    (parsedBody && typeof parsedBody === "object" && typeof parsedBody.token === "string" && parsedBody.token) ||
-    (parsedBody &&
-      typeof parsedBody === "object" &&
-      parsedBody.data &&
-      typeof parsedBody.data === "object" &&
-      typeof (parsedBody.data as Record<string, unknown>).token === "string" &&
-      ((parsedBody.data as Record<string, unknown>).token as string)) ||
-    null
-
-  const user =
-    (parsedBody && typeof parsedBody === "object" && parsedBody.user && typeof parsedBody.user === "object" && parsedBody.user) ||
-    (parsedBody &&
-      typeof parsedBody === "object" &&
-      parsedBody.data &&
-      typeof parsedBody.data === "object" &&
-      (parsedBody.data as Record<string, unknown>).user &&
-      typeof (parsedBody.data as Record<string, unknown>).user === "object" &&
-      (parsedBody.data as Record<string, unknown>).user) ||
-    null
-
-  const response = NextResponse.json({
-    success: true,
-    user,
-  })
-
-  if (token) {
-    response.cookies.set("auth-token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: TOKEN_MAX_AGE_SECONDS,
-      path: "/",
-    })
-  }
-
-  return response
-}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const validatedData = loginSchema.parse(body)
-
-    const proxiedResponse = await proxyLoginRequest(validatedData)
-    if (proxiedResponse) {
-      return proxiedResponse
-    }
 
     await dbConnect()
 
