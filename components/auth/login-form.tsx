@@ -53,6 +53,15 @@ export function LoginForm() {
   const [error, setError] = useState("")
   const [blockedModalOpen, setBlockedModalOpen] = useState(false)
 
+  const sanitizeMessage = (message: string | null | undefined) => {
+    if (!message) return ""
+    const text = message.trim()
+    if (!text) return ""
+    // Strip any HTML so raw server responses are not rendered in the UI
+    const withoutTags = text.replace(/<[^>]*>/g, "").trim()
+    return withoutTags || ""
+  }
+
   useEffect(() => {
     if (searchParams?.get("blocked")) {
       setBlockedModalOpen(true)
@@ -104,23 +113,18 @@ export function LoginForm() {
       })
 
       const contentType = response.headers.get("content-type")?.toLowerCase() ?? ""
-      let parsed: unknown = null
+      let parsed: Record<string, unknown> | null = null
+      let fallbackText = ""
 
       if (contentType.includes("application/json")) {
-        parsed = await response.json().catch(() => null)
+        parsed = (await response.json().catch(() => null)) as Record<string, unknown> | null
       } else {
-        const textPayload = await response.text().catch(() => "")
-        try {
-          parsed = textPayload ? JSON.parse(textPayload) : null
-        } catch {
-          parsed = textPayload || null
-        }
+        fallbackText = (await response.text().catch(() => "")) || ""
       }
 
-      const data = (parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null) ?? null
-      const success = Boolean(data?.success)
+      const success = Boolean(parsed?.success)
 
-      if (response.status === 403 && data && typeof data === "object" && (data as any).blocked) {
+      if (response.status === 403 && parsed?.blocked) {
         setBlockedModalOpen(true)
         setError("")
         return
@@ -128,16 +132,16 @@ export function LoginForm() {
 
       if (!response.ok || !success) {
         const backendMessage =
-          (typeof data?.error === "string" && data.error) ||
-          (typeof data?.message === "string" && data.message) ||
-          (typeof parsed === "string" && parsed)
+          (typeof parsed?.error === "string" && parsed.error) ||
+          (typeof parsed?.message === "string" && parsed.message) ||
+          fallbackText
 
         const fallbackMessage =
           response.status === 401 || response.status === 403
-            ? "Invalid email or password."
+            ? "Incorrect email or password."
             : "Login failed. Please try again."
 
-        setError(backendMessage || fallbackMessage)
+        setError(sanitizeMessage(backendMessage) || fallbackMessage)
         return
       }
 
