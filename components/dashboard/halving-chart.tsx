@@ -16,11 +16,11 @@ export function HalvingChart() {
   return (
     <Card className="col-span-full lg:col-span-2">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-foreground dark:text-primary-dark">
           <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-blue-600 rounded"></div>
           Halving 50%
         </CardTitle>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground dark:text-secondary-dark">
           The base mining factor is halved every time the number of users increases by 10x...
         </p>
       </CardHeader>
@@ -33,15 +33,20 @@ export function HalvingChart() {
                 dataKey="userScale"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12 }}
-                className="text-muted-foreground"
+                tick={{ fontSize: 12, fill: "var(--text-secondary-dark)" }}
+                className="text-muted-foreground dark:text-secondary-dark"
               />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12 }}
-                className="text-muted-foreground"
-                label={{ value: "Mining performance (RBlock/day)", angle: -90, position: "insideLeft" }}
+                tick={{ fontSize: 12, fill: "var(--text-secondary-dark)" }}
+                className="text-muted-foreground dark:text-secondary-dark"
+                label={{
+                  value: "Mining performance (RBlock/day)",
+                  angle: -90,
+                  position: "insideLeft",
+                  style: { fill: "var(--text-secondary-dark)", fontSize: 12 },
+                }}
               />
               <Tooltip
                 contentStyle={{
