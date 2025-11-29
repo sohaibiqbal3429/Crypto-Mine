@@ -54,9 +54,9 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  MintMine Pro is a digital mining platform that allows users to earn daily profits through secure and
-                  automated crypto mining. It’s designed for both beginners and professionals to grow their digital
-                  income safely.
+                  MintMine Pro is a digital mining platform that allows users to earn daily profits
+                  through secure and automated crypto mining. It’s designed for both beginners and
+                  professionals to grow their digital income safely.
                 </p>
               </CardContent>
             </Card>
@@ -68,8 +68,9 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Simply create an account, verify your email, and choose a mining plan. Once you make a deposit, your
-                  mining process will automatically begin, and you’ll start earning daily rewards.
+                  Simply create an account, verify your email, and choose a mining plan. Once you
+                  make a deposit, your mining process will automatically begin, and you’ll start
+                  earning daily rewards.
                 </p>
               </CardContent>
             </Card>
@@ -81,8 +82,8 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  The minimum deposit is <strong>30 USDT</strong>. Deposits below this amount are not accepted. Higher
-                  deposits unlock better earning opportunities and bonuses.
+                  The minimum deposit is <strong>30 USDT</strong>. Deposits below this amount are
+                  not accepted. Higher deposits unlock better earning opportunities and bonuses.
                 </p>
               </CardContent>
             </Card>
@@ -94,8 +95,9 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Your daily profit depends on your selected plan. Basic users can earn between <strong>1% – 1.5%</strong>{' '}
-                  daily, while higher-level plans offer increased profit rates.
+                  Your daily profit depends on your selected plan. Basic users can earn between{" "}
+                  <strong>1% – 1.5%</strong> daily, while higher-level plans offer increased profit
+                  rates.
                 </p>
               </CardContent>
             </Card>
@@ -107,11 +109,11 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  When you refer someone who deposits <strong>30 USDT</strong> or more, you receive a{' '}
-                  <strong>15% bonus</strong> instantly as a depositor reward.
+                  When you refer someone who deposits <strong>30 USDT</strong> or more, you receive
+                  a <strong>15% bonus</strong> instantly as a depositor reward.
                 </p>
                 <p className="mt-2">
-                  <em>Example:</em> If your referral deposits <strong>100 USDT</strong>, you earn{' '}
+                  <em>Example:</em> If your referral deposits <strong>100 USDT</strong>, you earn{" "}
                   <strong>15 USDT</strong> directly into your account.
                 </p>
               </CardContent>
@@ -124,7 +126,8 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  No. Joining MintMine Pro is completely free. You only need to deposit funds to start your mining plan.
+                  No. Joining MintMine Pro is completely free. You only need to deposit funds to
+                  start your mining plan.
                 </p>
               </CardContent>
             </Card>
@@ -136,7 +139,9 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Withdrawals can be made directly from your dashboard once you reach the minimum withdrawal limit. All withdrawals are processed securely, usually within  <strong>24 hours</strong>.
+                  Withdrawals can be made directly from your dashboard once you reach the minimum
+                  withdrawal limit. All withdrawals are processed securely, usually within{" "}
+                  <strong>24 hours</strong>.
                 </p>
               </CardContent>
             </Card>
@@ -148,8 +153,8 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  MintMine Pro supports <strong>USDT (BEP-20)</strong> and other popular crypto wallets. You can deposit
-                  and withdraw funds using these methods easily.
+                  MintMine Pro supports <strong>USDT (BEP-20)</strong> and other popular crypto
+                  wallets. You can deposit and withdraw funds using these methods easily.
                 </p>
               </CardContent>
             </Card>
@@ -161,8 +166,8 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  Yes, you can upgrade your mining plan anytime. Upgrading increases your daily profit percentage and
-                  overall mining performance.
+                  Yes, you can upgrade your mining plan anytime. Upgrading increases your daily
+                  profit percentage and overall mining performance.
                 </p>
               </CardContent>
             </Card>
@@ -174,16 +179,50 @@ export default function TermsPage() {
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
-                  If you encounter any problem or delay, please contact the MintMine Pro support team through the{' '}
-                  <strong>“Help”</strong> or <strong>“Contact Us”</strong> section in your dashboard for quick assistance.
+                  If you encounter any problem or delay, please contact the MintMine Pro support
+                  team through the <strong>“Help”</strong> or <strong>“Contact Us”</strong> section
+                  in your dashboard for quick assistance.
                 </p>
               </CardContent>
             </Card>
 
-            {/* 11 Contact (updated email) */}
+            {/* 11 New Withdrawal Policy */}
+            <Card className="w-full">
+              <CardHeader>
+                <CardTitle>11. Updated Withdrawal & Account Policy</CardTitle>
+              </CardHeader>
+              <CardContent className="prose prose-sm max-w-none">
+                <p>
+                  From tonight after <strong>12 AM</strong>, only{" "}
+                  <strong>profit withdrawals</strong> will be allowed, with a minimum of{" "}
+                  <strong>30 USDT</strong>. <strong>Commission withdrawals</strong> will also be
+                  allowed.
+                </p>
+                <p className="mt-2">
+                  Besides this, we need some time because we are going to{" "}
+                  <strong>
+                    block the accounts of those users who have created more than one account
+                  </strong>
+                  . These users have forced us to impose strict policies to protect the system and
+                  maintain fairness.
+                </p>
+                <p className="mt-3">
+                  The final announcement of the new policy has been made. From{" "}
+                  <strong>12 AM</strong>, profit withdrawals will start, and the{" "}
+                  <strong>approval time will be 24 to 48 hours</strong>.
+                </p>
+                <p className="mt-2">
+                  If a withdrawal is <strong>rejected twice</strong> and the member does not
+                  resolve the stated reason, then on the <strong>third attempt</strong> the{" "}
+                  <strong>account will be blocked</strong>.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* 12 Contact (updated email) */}
             <Card>
               <CardHeader>
-                <CardTitle>11. Contact Information</CardTitle>
+                <CardTitle>12. Contact Information</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>For questions about these terms or the platform, please contact us at:</p>
@@ -194,9 +233,6 @@ export default function TermsPage() {
                 </p>
               </CardContent>
             </Card>
-
-         
-            
           </div>
         </div>
       </main>
