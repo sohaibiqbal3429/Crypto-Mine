@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
 import { ImportantUpdateModal } from "@/components/dashboard/important-update-modal"
+import { NewPolicyModal } from "@/components/dashboard/new-policy-modal" // ✅ NEW IMPORT
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { RateLimitTelemetryCard } from "@/components/dashboard/rate-limit-telemetry"
@@ -133,7 +134,10 @@ export default function DashboardPage() {
 
   return (
     <div className="flex h-screen bg-background">
+      {/* ✅ Dono modals yahan render ho rahe hain */}
       <ImportantUpdateModal />
+      <NewPolicyModal />
+
       <Sidebar user={user} />
 
       <main className="flex-1 overflow-auto md:ml-64">
@@ -150,7 +154,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
             <HalvingChart />
-            <RateLimitTelemetryCard  />
+            <RateLimitTelemetryCard />
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
