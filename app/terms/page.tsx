@@ -219,7 +219,7 @@ export default function TermsPage() {
               </CardContent>
             </Card>
 
-            {/* 12 Contact (updated email) */}
+            {/* 12 Contact (email + highlighted Telegram) */}
             <Card>
               <CardHeader>
                 <CardTitle>12. Contact Information</CardTitle>
@@ -227,9 +227,21 @@ export default function TermsPage() {
               <CardContent className="prose prose-sm max-w-none">
                 <p>For questions about these terms or the platform, please contact us at:</p>
                 <p>
-                  Email: <a href="mailto:mintminepro@gmail.com">mintminepro@gmail.com</a>
+                  <strong>Email:</strong>{" "}
+                  <a href="mailto:mintminepro@gmail.com">mintminepro@gmail.com</a>
                   <br />
-                  Support: Available 24/7 through the platform
+                  <strong>Support:</strong> Available 24/7 through the platform
+                  <br />
+                  {/* 🔥 Highlighted Telegram ID */}
+                  <strong>Telegram:</strong>{" "}
+                  <a
+                    href="https://t.me/GeorgeLiu87"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-primary"
+                  >
+                    @GeorgeLiu87
+                  </a>
                 </p>
               </CardContent>
             </Card>
