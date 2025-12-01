@@ -17,9 +17,23 @@ interface KPICardsProps {
 }
 
 export function KPICards({ kpis }: KPICardsProps) {
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString(undefined, {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
 
   const cards = [
+    {
+      title: "Total Earnings",
+      subtitle: "Total earned from mining",
+      value: formatCurrency(kpis.totalEarning),
+      icon: TrendingUp,
+      accent: "from-[#34d399] via-[#22d3ee] to-[#6366f1]",
+      pill: "text-emerald-700 bg-emerald-50 dark:bg-emerald-900/40 dark:text-emerald-200",
+    },
     {
       title: "Total Balance",
       value: formatCurrency(kpis.totalBalance),
@@ -62,7 +76,9 @@ export function KPICards({ kpis }: KPICardsProps) {
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
               <div>
                 <CardTitle className="text-sm font-semibold text-muted-foreground/90 dark:text-secondary-dark">{card.title}</CardTitle>
-                <p className="text-xs text-muted-foreground/80 dark:text-muted-dark">Live synced with backend</p>
+                <p className="text-xs text-muted-foreground/80 dark:text-muted-dark">
+                  {card.subtitle ?? "Live synced with backend"}
+                </p>
               </div>
               <div className="group rounded-2xl border border-white/60 bg-white/80 p-3 text-primary shadow-lg backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-2xl dark:border-white/10 dark:bg-white/5">
                 <card.icon className="h-5 w-5" />

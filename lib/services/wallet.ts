@@ -19,6 +19,7 @@ export interface WalletContext {
     currentBalance: number
     totalBalance: number
     totalEarning: number
+    earningsBalance: number
     pendingWithdraw: number
     staked: number
     walletBalance: number
@@ -70,6 +71,7 @@ export async function fetchWalletContext(userId: string): Promise<WalletContext 
     currentBalance: Number(withdrawableSnapshot.withdrawable ?? 0),
     totalBalance: Number(balanceDoc?.totalBalance ?? 0),
     totalEarning: Number(balanceDoc?.totalEarning ?? 0),
+    earningsBalance: Number(balanceDoc?.totalEarning ?? 0),
     pendingWithdraw: Number(
       withdrawableSnapshot.pendingWithdraw ?? balanceDoc?.pendingWithdraw ?? 0,
     ),

@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = withdrawSchema.parse(body)
     const requestAmount = normaliseAmount(validatedData.amount)
+    const source = validatedData.source ?? "main"
 
     const [user, balanceDoc, settings] = await Promise.all([
       User.findById(userPayload.userId),
@@ -79,10 +80,32 @@ export async function POST(request: NextRequest) {
     }
 
     const withdrawableSnapshot = calculateWithdrawableSnapshot(balanceDoc, now)
+    const earningsBalance = normaliseAmount(balanceDoc.totalEarning ?? 0)
+    const selectedBalance =
+      source === "earnings"
+        ? Math.min(earningsBalance, withdrawableSnapshot.withdrawable)
+        : withdrawableSnapshot.withdrawable
 
     incrementCounter("wallet.withdraw.request_attempt", 1, {
       bucket: resolveAmountBucket(requestAmount),
+      source,
     })
+
+    if (requestAmount > selectedBalance) {
+      incrementCounter("wallet.withdraw.request_rejected", 1, {
+        reason: "insufficient_selected_balance",
+        source,
+      })
+
+      return NextResponse.json(
+        {
+          error: "Withdrawal amount cannot exceed your selected balance.",
+          code: "SELECTED_BALANCE_INSUFFICIENT",
+          context: { requestedAmount: requestAmount, selectedBalance, source },
+        },
+        { status: 400 },
+      )
+    }
 
     if (requestAmount > withdrawableSnapshot.withdrawable) {
       const shortageCents = Math.max(
@@ -107,6 +130,7 @@ export async function POST(request: NextRequest) {
       incrementCounter("wallet.withdraw.request_rejected", 1, {
         reason: "insufficient_withdrawable",
         bucket: resolveAmountBucket(requestAmount),
+        source,
       })
 
       emitAuditLog({
@@ -117,6 +141,8 @@ export async function POST(request: NextRequest) {
           withdrawable: withdrawableSnapshot.withdrawable,
           pendingWithdraw: withdrawableSnapshot.pendingWithdraw,
           shortage,
+          source,
+          selectedBalance,
         },
       })
 
@@ -144,6 +170,7 @@ export async function POST(request: NextRequest) {
     if (pendingWithdrawals >= MAX_PENDING_WITHDRAWALS) {
       incrementCounter("wallet.withdraw.request_rejected", 1, {
         reason: "too_many_pending",
+        source,
       })
 
       return NextResponse.json(
@@ -188,6 +215,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           requestedAmount: requestAmount,
           withdrawable: refreshedSnapshot?.withdrawable ?? 0,
+          source,
         },
         severity: "warn",
       })
@@ -199,6 +227,7 @@ export async function POST(request: NextRequest) {
           context: {
             requestedAmount: requestAmount,
             withdrawable: refreshedSnapshot?.withdrawable ?? 0,
+            source,
           },
         },
         { status: 409 },
@@ -223,6 +252,7 @@ export async function POST(request: NextRequest) {
         userBalance: refreshedSnapshot.current,
         withdrawableAfterRequest: refreshedSnapshot.withdrawable,
         withdrawalFee: 0,
+        source,
       },
     })
 
@@ -235,6 +265,7 @@ export async function POST(request: NextRequest) {
 
     incrementCounter("wallet.withdraw.request_success", 1, {
       bucket: resolveAmountBucket(requestAmount),
+      source,
     })
 
     emitAuditLog({
@@ -244,6 +275,7 @@ export async function POST(request: NextRequest) {
         requestedAmount: requestAmount,
         pendingWithdraw: refreshedSnapshot.pendingWithdraw,
         withdrawableAfterRequest: refreshedSnapshot.withdrawable,
+        source,
       },
     })
 
@@ -255,6 +287,7 @@ export async function POST(request: NextRequest) {
         status: transaction.status,
         createdAt: transaction.createdAt,
         walletAddress: validatedData.walletAddress,
+        source,
       },
       newBalance: refreshedSnapshot.current,
       pendingWithdraw: refreshedSnapshot.pendingWithdraw,

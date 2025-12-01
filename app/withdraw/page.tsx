@@ -28,6 +28,8 @@ export default async function WithdrawPage() {
   }
 
   const withdrawable = context.withdrawable.amount
+  const mainBalance = context.stats.walletBalance
+  const earningsBalance = context.stats.earningsBalance ?? context.stats.totalEarning
 
   return (
     <div className="flex h-screen bg-background">
@@ -42,6 +44,30 @@ export default async function WithdrawPage() {
               </p>
             </div>
           </header>
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <Card className="bg-gradient-to-br from-white/70 to-white/40 shadow-lg shadow-primary/5 dark:from-slate-900/50 dark:to-slate-900/30">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground">Main Balance</CardTitle>
+                <ArrowUpRight className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">${mainBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Your primary wallet funds.</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-[#34d399]/10 via-[#22d3ee]/10 to-[#6366f1]/10 shadow-lg shadow-primary/5 dark:from-emerald-500/10 dark:via-cyan-500/10 dark:to-indigo-500/10">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-semibold text-muted-foreground">Earnings Balance</CardTitle>
+                <ArrowUpRight className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">${earningsBalance.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">Lifetime mining earnings from your mining activity.</p>
+              </CardContent>
+            </Card>
+          </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <Card>
@@ -96,6 +122,7 @@ export default async function WithdrawPage() {
                     withdrawableBalance={withdrawable}
                     pendingWithdraw={context.stats.pendingWithdraw}
                     walletBalance={context.stats.walletBalance}
+                    earningsBalance={earningsBalance}
                   />
                 )}
               </CardContent>

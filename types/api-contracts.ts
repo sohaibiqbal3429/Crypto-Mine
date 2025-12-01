@@ -46,6 +46,7 @@ export interface WalletBalanceResponse {
 export interface WithdrawRequestPayload {
   amount: number
   walletAddress: string
+  source?: "main" | "earnings"
 }
 
 export interface WithdrawHistoryResponse {

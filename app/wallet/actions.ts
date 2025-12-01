@@ -131,6 +131,8 @@ export async function submitWithdrawAction(_: WithdrawFormState, formData: FormD
     return { error: "Enter or select a wallet address" }
   }
 
+  const source = String(formData.get("source") ?? "main") === "earnings" ? "earnings" : "main"
+
   const cookieHeader = cookieStore
     .getAll()
     .map((cookie) => `${cookie.name}=${cookie.value}`)
@@ -146,6 +148,7 @@ export async function submitWithdrawAction(_: WithdrawFormState, formData: FormD
       body: JSON.stringify({
         amount: amountValue,
         walletAddress,
+        source,
       }),
       cache: "no-store",
     })
