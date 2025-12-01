@@ -133,48 +133,38 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background">
       {/* ✅ Dono modals yahan render ho rahe hain */}
       <ImportantUpdateModal />
       <NewPolicyModal />
 
       <Sidebar user={user} />
 
-      <div className="relative z-0 flex min-h-screen flex-1 flex-col overflow-x-hidden bg-gradient-to-b from-background/60 via-background to-background md:ml-64">
-        <main className="relative flex-1">
-          <div className="relative mx-auto flex w-full max-w-screen-2xl flex-col gap-8 px-4 pb-16 pt-8 md:px-6 lg:px-10 lg:pt-12">
-            <div className="space-y-2">
-              <h1 className="crypto-gradient-text text-4xl font-bold">Mining Dashboard</h1>
-              <p className="text-lg text-muted-foreground">
-                Welcome back, <span className="font-semibold text-foreground">{user?.name}</span> • Level {data.user.level} Miner
-              </p>
-            </div>
-
-            <KPICards kpis={data.kpis} />
-
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-7">
-              <div className="min-w-0 xl:col-span-5">
-                <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
-              </div>
-              <div className="min-w-0 xl:col-span-4">
-                <HalvingChart />
-              </div>
-              <div className="min-w-0 xl:col-span-3">
-                <RateLimitTelemetryCard />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:gap-7">
-              <div className="min-w-0 xl:col-span-7">
-                <LuckyDrawCard currentUser={user} />
-              </div>
-              <div className="min-w-0 xl:col-span-5">
-                <InviteAndEarnPanel referralCode={data.user.referralCode} />
-              </div>
-            </div>
+      <main className="flex-1 overflow-auto md:ml-64">
+        <div className="space-y-8 p-6">
+          <div className="space-y-2">
+            <h1 className="crypto-gradient-text text-4xl font-bold">Mining Dashboard</h1>
+            <p className="text-lg text-muted-foreground">
+              Welcome back, <span className="font-semibold text-foreground">{user?.name}</span> • Level {data.user.level} Miner
+            </p>
           </div>
-        </main>
-      </div>
+
+          <KPICards kpis={data.kpis} />
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+            <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
+            <HalvingChart />
+            <RateLimitTelemetryCard />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <LuckyDrawCard currentUser={user} />
+            </div>
+            <InviteAndEarnPanel referralCode={data.user.referralCode} />
+          </div>
+        </div>
+      </main>
     </div>
   )
 }
