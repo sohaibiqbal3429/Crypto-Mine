@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
 import { ImportantUpdateModal } from "@/components/dashboard/important-update-modal"
-import { NewPolicyModal } from "@/components/dashboard/new-policy-modal" // ✅ NEW IMPORT
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { MiningWidget } from "@/components/dashboard/mining-widget"
 import { RateLimitTelemetryCard } from "@/components/dashboard/rate-limit-telemetry"
@@ -136,7 +135,6 @@ export default function DashboardPage() {
     <div className="flex min-h-screen w-full bg-background">
       {/* ✅ Dono modals yahan render ho rahe hain */}
       <ImportantUpdateModal />
-      <NewPolicyModal />
 
       <Sidebar user={user} />
 
