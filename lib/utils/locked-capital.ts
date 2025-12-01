@@ -19,6 +19,7 @@ export function normaliseAmount(amount: number | null | undefined): number {
 
 export interface BalanceSnapshotInput {
   current: number
+  totalEarning?: number
   pendingWithdraw?: number
 }
 
@@ -46,6 +47,7 @@ export function calculateWithdrawableSnapshot(
   asOf = new Date(),
 ): WithdrawableSnapshot {
   const currentCents = toCents(balance.current)
+  const totalEarningCents = toCents(balance.totalEarning ?? 0)
   const pendingWithdraw = normaliseAmount(balance.pendingWithdraw ?? 0)
 
   return {
@@ -55,8 +57,8 @@ export function calculateWithdrawableSnapshot(
     lockedAmountFromLots: 0,
     lockedCapitalField: 0,
     pendingWithdraw,
-    withdrawable: fromCents(currentCents),
-    withdrawableCents: currentCents,
+    withdrawable: fromCents(totalEarningCents),
+    withdrawableCents: totalEarningCents,
     lockedAmountCents: 0,
     currentCents,
     nextUnlockAt: null,
