@@ -51,11 +51,11 @@ export function KPICards({ kpis }: KPICardsProps) {
   ]
 
   return (
-    <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
+    <div className="dashboard-grid mb-10">
       {cards.map((card, index) => (
         <Card
           key={index}
-          className="relative overflow-hidden rounded-2xl border-border/60 bg-gradient-to-br from-white/80 to-white/60 shadow-xl shadow-primary/5 dark:from-white/5 dark:to-white/0"
+          className="dashboard-card relative overflow-hidden rounded-2xl border-border/60 bg-gradient-to-br from-white/80 to-white/60 shadow-xl shadow-primary/5 dark:from-white/5 dark:to-white/0"
         >
           <div className={`absolute inset-0 opacity-60 bg-gradient-to-br ${card.accent}`} />
           <div className="relative">

@@ -286,7 +286,7 @@ export function NotificationBell() {
         align="end"
         sideOffset={10}
         alignOffset={-4}
-        className="w-[min(92vw,380px)] max-h-[50vh] rounded-3xl border border-white/40 bg-white/80 p-4 text-foreground shadow-[0_30px_55px_-30px_rgba(59,130,246,0.55)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/70 dark:border-white/10 dark:bg-slate-950/70"
+        className="notification-panel rounded-3xl border border-white/40 bg-white/80 p-4 text-foreground shadow-[0_30px_55px_-30px_rgba(59,130,246,0.55)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/70 dark:border-white/10 dark:bg-slate-950/70"
       >
         {panelContent}
       </PopoverContent>

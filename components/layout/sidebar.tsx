@@ -154,7 +154,7 @@ export function Sidebar({ user }: SidebarProps) {
   )
 
   return (
-    <aside className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
+    <aside className="sidebar hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
       <SidebarContent />
     </aside>
   )

@@ -124,7 +124,7 @@ export function RateLimitTelemetryCard() {
   const windowLabel = `${Math.round(windowMs / 1000)} seconds`
 
   return (
-    <Card className="w-full col-span-full crypto-card">
+    <Card className="dashboard-card w-full col-span-full crypto-card">
       <CardHeader className="flex flex-row items-start justify-between gap-3">
         <div>
           <CardTitle className="flex items-center gap-2 text-lg text-foreground dark:text-primary-dark">

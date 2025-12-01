@@ -14,7 +14,7 @@ const halvingData = [
 
 export function HalvingChart() {
   return (
-    <Card className="col-span-full lg:col-span-2">
+    <Card className="dashboard-card col-span-full lg:col-span-2">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-foreground dark:text-primary-dark">
           <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-blue-600 rounded"></div>
@@ -25,7 +25,7 @@ export function HalvingChart() {
         </p>
       </CardHeader>
       <CardContent>
-        <div className="h-64">
+        <div className="chart-container h-64">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={halvingData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />

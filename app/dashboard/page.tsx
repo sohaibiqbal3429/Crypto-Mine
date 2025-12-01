@@ -133,14 +133,14 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex min-h-screen w-full bg-background">
       {/* ✅ Dono modals yahan render ho rahe hain */}
       <ImportantUpdateModal />
       <NewPolicyModal />
 
       <Sidebar user={user} />
 
-      <main className="flex-1 overflow-auto md:ml-64">
+      <main className="main-content flex-1 min-w-0">
         <div className="space-y-8 p-6">
           <div className="space-y-2">
             <h1 className="crypto-gradient-text text-4xl font-bold">Mining Dashboard</h1>
@@ -151,14 +151,14 @@ export default function DashboardPage() {
 
           <KPICards kpis={data.kpis} />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
+          <div className="dashboard-grid">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
             <HalvingChart />
             <RateLimitTelemetryCard />
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div className="xl:col-span-2">
+          <div className="dashboard-grid">
+            <div className="dashboard-card xl:col-span-2">
               <LuckyDrawCard currentUser={user} />
             </div>
             <InviteAndEarnPanel referralCode={data.user.referralCode} />

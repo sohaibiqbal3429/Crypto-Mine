@@ -62,7 +62,7 @@ export function InviteAndEarnPanel({ referralCode = "CRYPTO123", activeInvites =
   }, [referralCode, toast])
 
   return (
-    <Card className="flex h-full flex-col border-0 bg-gradient-to-br from-emerald-500/10 via-cyan-500/10 to-sky-500/10 shadow-lg">
+    <Card className="dashboard-card flex h-full flex-col border-0 bg-gradient-to-br from-emerald-500/10 via-cyan-500/10 to-sky-500/10 shadow-lg">
       <CardHeader className="space-y-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold text-foreground">Invite &amp; Earn</CardTitle>

@@ -230,7 +230,7 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
   const isMiningBusy = isSubmitting || Boolean(polling)
 
   return (
-    <Card className="col-span-full lg:col-span-2 crypto-card">
+    <Card className="dashboard-card col-span-full lg:col-span-2 crypto-card">
       <CardHeader>
         <CardTitle className="flex items-center gap-3">
           <div className="relative">
