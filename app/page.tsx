@@ -5,9 +5,10 @@ import Image from "next/image"
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[hsl(var(--background))] via-[hsl(var(--secondary))] to-[hsl(var(--muted))] text-foreground transition-colors dark:from-[#050505] dark:via-[#0c0c0c] dark:to-[#161616]">
+    <div className="relative min-h-screen bg-white text-black transition-colors dark:bg-[#0A0A0A] dark:text-white">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#f8fafc] via-[#eef2ff] to-[#e0f2fe] opacity-70 dark:from-[#0f172a] dark:via-[#0b1220] dark:to-[#0a0a0a]" aria-hidden />
       {/* Header */}
-      <header className="border-b border-border/60 bg-card/80 backdrop-blur-md supports-[backdrop-filter]:bg-card/60 dark:bg-[#101010]/80">
+      <header className="relative z-10 border-b border-black/5 bg-white/80 backdrop-blur-md dark:border-white/5 dark:bg-black/40">
         <div className="container mx-auto flex items-center justify-between px-4 py-4">
           <div className="flex items-center space-x-2">
             <Image src="/images/logo.png" alt="Mintmine Pro" width={32} height={32} className="rounded-lg" />
@@ -25,8 +26,8 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <main className="container mx-auto px-4 py-16">
-        <div className="mx-auto max-w-4xl text-center">
+      <main className="relative z-10 container mx-auto px-4 py-16">
+        <div className="relative mx-auto max-w-4xl text-center">
           <h1 className="text-balance text-5xl font-bold leading-tight sm:text-6xl">
             Next-Generation
             <span className="bg-gradient-to-r from-primary via-accent to-primary/80 bg-clip-text text-transparent">
@@ -56,7 +57,7 @@ export default function HomePage() {
 
         {/* Features */}
         <div className="mt-20 grid gap-8 md:grid-cols-2">
-          <div className="group rounded-3xl border border-border/60 bg-card/80 p-6 shadow-lg shadow-primary/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30">
+          <div className="group rounded-3xl border border-gray-100 bg-white p-6 text-black shadow-lg shadow-black/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30 dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/30">
               <Zap className="h-8 w-8" />
             </div>
@@ -65,7 +66,7 @@ export default function HomePage() {
               Simple one-click mining with daily rewards and automated profit distribution.
             </p>
           </div>
-          <div className="group rounded-3xl border border-border/60 bg-card/80 p-6 shadow-lg shadow-primary/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30">
+          <div className="group rounded-3xl border border-gray-100 bg-white p-6 text-black shadow-lg shadow-black/10 transition-all hover:-translate-y-1 hover:border-primary/60 hover:shadow-primary/30 dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg shadow-primary/30">
               <Shield className="h-8 w-8" />
             </div>

@@ -55,21 +55,21 @@ export function KPICards({ kpis }: KPICardsProps) {
       {cards.map((card, index) => (
         <Card
           key={index}
-          className="dashboard-card relative overflow-hidden rounded-2xl border-border/60 bg-gradient-to-br from-white/80 to-white/60 shadow-xl shadow-primary/5 dark:from-white/5 dark:to-white/0"
+          className="dashboard-card relative overflow-hidden rounded-3xl border border-gray-100 bg-white text-black shadow-lg shadow-black/10 dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white"
         >
-          <div className={`absolute inset-0 opacity-60 bg-gradient-to-br ${card.accent}`} />
+          <div className={`pointer-events-none absolute inset-0 opacity-60 bg-gradient-to-br ${card.accent}`} />
           <div className="relative">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
               <div>
-                <CardTitle className="text-sm font-semibold text-muted-foreground/90 dark:text-secondary-dark">{card.title}</CardTitle>
-                <p className="text-xs text-muted-foreground/80 dark:text-muted-dark">Live synced with backend</p>
+                <CardTitle className="text-sm font-semibold text-black dark:text-white">{card.title}</CardTitle>
+                <p className="text-xs text-gray-600 dark:text-gray-400">Live synced with backend</p>
               </div>
               <div className="group rounded-2xl border border-white/60 bg-white/80 p-3 text-primary shadow-lg backdrop-blur-sm transition hover:-translate-y-0.5 hover:shadow-2xl dark:border-white/10 dark:bg-white/5">
                 <card.icon className="h-5 w-5" />
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="text-3xl font-black tracking-tight text-foreground dark:text-primary-dark">{card.value}</div>
+              <div className="text-3xl font-black tracking-tight text-black dark:text-white">{card.value}</div>
               <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${card.pill}`}>
                 Updated in real time
               </div>

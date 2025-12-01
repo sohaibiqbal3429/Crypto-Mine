@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white text-black dark:bg-[#0A0A0A] dark:text-white">
         <div className="space-y-4 text-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
           <p className="text-muted-foreground">Loading your mining dashboard...</p>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
 
   if (!data) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
+      <div className="flex h-screen items-center justify-center bg-white text-black dark:bg-[#0A0A0A] dark:text-white">
         <div className="space-y-4 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
             <span className="text-2xl">⚠️</span>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full bg-white text-black dark:bg-[#0A0A0A] dark:text-white">
       {/* ✅ Dono modals yahan render ho rahe hain */}
       <ImportantUpdateModal />
       <NewPolicyModal />
