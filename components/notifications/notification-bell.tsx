@@ -252,10 +252,12 @@ export function NotificationBell() {
     </div>
   )
 
+  const scrollAreaHeight = isMobile ? "max-h-[65vh]" : "max-h-[62vh]"
+
   const panelContent = (
     <div className="space-y-3">
       <Header onClose={() => setOpen(false)} />
-      <ScrollArea className={`${isMobile ? "max-h-[55vh]" : "max-h-[45vh]"} pr-1`}>
+      <ScrollArea className={`${scrollAreaHeight} pr-1 pt-1`}>
         <NotificationItems onItemSelect={() => isMobile && setOpen(false)} />
       </ScrollArea>
     </div>
@@ -284,9 +286,9 @@ export function NotificationBell() {
       <PopoverContent
         side="bottom"
         align="end"
-        sideOffset={10}
+        sideOffset={12}
         alignOffset={-4}
-        className="w-[min(92vw,380px)] max-h-[50vh] rounded-3xl border border-white/40 bg-white/80 p-4 text-foreground shadow-[0_30px_55px_-30px_rgba(59,130,246,0.55)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/70 dark:border-white/10 dark:bg-slate-950/70"
+        className="w-[min(440px,calc(100vw-3rem))] max-h-[72vh] overflow-hidden rounded-3xl border border-white/40 bg-white/90 p-4 text-foreground shadow-[0_30px_55px_-26px_rgba(59,130,246,0.6)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/70 dark:border-white/10 dark:bg-slate-950/95"
       >
         {panelContent}
       </PopoverContent>
