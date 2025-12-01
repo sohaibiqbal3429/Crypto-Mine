@@ -326,7 +326,7 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
             onClick={() => void handleMining()}
             disabled={!canMine || isMiningBusy}
             size="lg"
-            className="inline-flex h-12 w-full max-w-sm items-center justify-center rounded-full bg-gradient-to-r from-[#a855f7] via-[#3b82f6] to-[#22c55e] text-lg font-semibold text-white shadow-lg shadow-black/10 transition duration-300 hover:opacity-90"
+            className="w-full max-w-sm h-12 text-lg font-semibold bg-gradient-to-r from-primary to-accent hover:from-accent hover:to-primary transition-all duration-300 shadow-lg hover:shadow-xl"
           >
             {isMiningBusy ? (
               <>

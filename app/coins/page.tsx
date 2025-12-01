@@ -185,7 +185,7 @@ export default function CoinsPage() {
       : "Discover upcoming tokens, presales, and exchange listings. We’re finalizing the platform—join the waitlist for day one access and instant alerts."
 
   return (
-    <div className="flex min-h-screen bg-white text-black dark:bg-[#0A0A0A] dark:text-white">
+    <div className="flex min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Sidebar user={user} />
 
       <main className="flex-1 overflow-auto md:ml-64">
@@ -209,13 +209,10 @@ export default function CoinsPage() {
               <Input
                 type="email"
                 placeholder="you@example.com"
-                className="h-12 w-full rounded-full border border-gray-200 bg-white px-5 text-base text-black shadow-sm placeholder:text-gray-400 dark:border-white/10 dark:bg-[#1e1e1e] dark:text-white dark:placeholder:text-gray-500"
+                className="h-12 rounded-full border-muted bg-background/80 px-5 text-base shadow-sm"
                 aria-label="Email address"
               />
-              <Button
-                type="submit"
-                className="inline-flex h-12 rounded-full bg-gradient-to-r from-[#a855f7] via-[#3b82f6] to-[#22c55e] px-8 text-base font-semibold text-white shadow-lg shadow-black/10 hover:opacity-90"
-              >
+              <Button type="submit" className="h-12 rounded-full px-8 text-base font-semibold shadow-lg">
                 Notify me
               </Button>
             </form>
@@ -233,12 +230,12 @@ export default function CoinsPage() {
               {LISTINGS.map((listing) => (
                 <Card
                   key={listing.name}
-                  className="border border-black/5 bg-white text-black shadow-lg shadow-black/10 transition-colors hover:border-primary/40 hover:shadow-xl dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white"
+                  className="border-muted/60 bg-background/90 shadow-sm transition-colors hover:border-primary/40 hover:shadow-md"
                 >
                   <CardContent className="flex flex-col gap-4 p-6 text-left sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-3">
-                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-semibold text-black dark:text-white">
+                        <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-semibold">
                           {listing.stage}
                         </Badge>
                         <span className="text-sm text-muted-foreground">{listing.launch}</span>
@@ -264,7 +261,7 @@ export default function CoinsPage() {
               ))}
             </div>
 
-            <Card className="h-full border border-black/5 bg-white text-black shadow-lg shadow-black/10 backdrop-blur-md dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white">
+            <Card className="h-full border-muted/60 bg-background/90 shadow-sm backdrop-blur">
               <CardContent className="flex h-full flex-col justify-between p-6">
                 <div>
                   <h2 className="text-2xl font-semibold tracking-tight">Stay listing-ready</h2>
@@ -277,33 +274,33 @@ export default function CoinsPage() {
                   {highlightSet.map((highlight) => (
                     <div
                       key={highlight.title}
-                      className="rounded-xl border border-black/5 bg-white p-4 transition-colors duration-[var(--t-med)] ease-[var(--ease)] dark:border-white/5 dark:bg-[#1e1e1e]"
+                      className="rounded-xl border border-muted/40 bg-background/60 p-4 transition-colors duration-[var(--t-med)] ease-[var(--ease)]"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                             {highlight.title}
                           </h3>
-                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{highlight.description}</p>
+                          <p className="mt-2 text-sm text-muted-foreground/80">{highlight.description}</p>
                         </div>
                         <div className="text-right">
                           <span className="text-3xl font-semibold text-primary">{highlight.stat}</span>
-                          <p className="text-xs uppercase tracking-wider text-gray-600 dark:text-gray-400">{highlight.helper}</p>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground">{highlight.helper}</p>
                         </div>
                       </div>
                     </div>
                   ))}
-                  <div className="rounded-xl border border-black/5 bg-white p-4 transition-colors duration-[var(--t-med)] ease-[var(--ease)] dark:border-white/5 dark:bg-[#1e1e1e]">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">Mining Economics</h3>
+                  <div className="rounded-xl border border-muted/40 bg-background/60 p-4 transition-colors duration-[var(--t-med)] ease-[var(--ease)]">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Mining Economics</h3>
                     <div className="mt-4 space-y-4">
                       {ECONOMICS_RULES.map((rule) => (
                         <div
                           key={rule.label}
-                          className="flex items-start justify-between gap-4 rounded-lg border border-black/5 bg-white p-3 text-black shadow-sm shadow-black/5 dark:border-white/5 dark:bg-[#1e1e1e] dark:text-white"
+                          className="flex items-start justify-between gap-4 rounded-lg bg-background/70 p-3 shadow-sm shadow-black/5"
                         >
                           <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-gray-600 dark:text-gray-400">{rule.label}</p>
-                            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-muted-foreground">{rule.label}</p>
+                            <p className="mt-1 text-sm text-muted-foreground/80">
                               {snapshotKey === "live" ? rule.live : rule.scheduled}
                             </p>
                           </div>
@@ -314,14 +311,14 @@ export default function CoinsPage() {
                     <div className="mt-5 space-y-3">
                       {progressSnapshot.map((progress) => (
                         <div key={progress.label}>
-                          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-gray-600 dark:text-gray-400">
+                          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.25em] text-muted-foreground">
                             <span>{progress.label}</span>
                             <span>{progress.value}%</span>
                           </div>
-                          <Progress value={progress.value} className="mt-2 overflow-hidden">
+                          <Progress value={progress.value} className="mt-2 h-2 overflow-hidden">
                             <span className="sr-only">{progress.label}</span>
                           </Progress>
-                          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{progress.helper}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{progress.helper}</p>
                         </div>
                       ))}
                     </div>
