@@ -2,6 +2,7 @@ import mongoose from "mongoose"
 
 import { connectMongo } from "./db"
 import { initializeInMemoryDatabase } from "./in-memory"
+import { resolveMongoUri } from "./mongo-uri"
 
 type MongooseCache = {
   conn: any
@@ -37,39 +38,32 @@ async function ensureInMemoryConnection() {
 }
 
 export default async function dbConnect() {
-  const hasUri = Boolean(process.env.MONGODB_URI)
   const seedFlag = process.env.SEED_IN_MEMORY === "true"
-  const allowFallback =
-    seedFlag ||
-    !hasUri ||
-    process.env.NODE_ENV !== "production" ||
-    process.env.ALLOW_DB_FALLBACK === "true"
+  const allowFallback = seedFlag || process.env.ALLOW_DB_FALLBACK === "true"
+  const uri = resolveMongoUri()
 
-  if (!hasUri && allowFallback) {
-    return ensureInMemoryConnection()
-  }
-
-  const preferInMemory = seedFlag || (!seedFlag && process.env.NODE_ENV !== "production")
-
-  if (preferInMemory) {
-    return ensureInMemoryConnection()
-  }
-
-  const uri = process.env.MONGODB_URI
   if (!uri) {
+    if (allowFallback || process.env.NODE_ENV !== "production") {
+      return ensureInMemoryConnection()
+    }
+
     throw new Error("Add MONGODB_URI to .env.local or set SEED_IN_MEMORY=true for demo mode")
+  }
+
+  if (seedFlag) {
+    return ensureInMemoryConnection()
   }
 
   if (cached.conn) return cached.conn
 
   try {
-    await connectMongo()
+    await connectMongo(uri)
     cached.conn = mongoose.connection
     return cached.conn
   } catch (error) {
     cached.promise = null
 
-    if (allowFallback) {
+    if (allowFallback || process.env.NODE_ENV !== "production") {
       console.error("[database] Failed to connect to MongoDB. Falling back to in-memory store.", error)
       return ensureInMemoryConnection()
     }
