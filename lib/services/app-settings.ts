@@ -1,4 +1,3 @@
-import { type FilterQuery } from "mongoose"
 
 import dbConnect from "@/lib/mongodb"
 import AppSetting from "@/models/AppSetting"
@@ -389,9 +388,7 @@ export async function updateWalletAddressSettings(input: UpdateWalletSettingsInp
   return getWalletSettingsForAdmin()
 }
 
-export async function findAuditEntries(
-  filter: FilterQuery<IAppSettingAudit>,
-): Promise<IAppSettingAudit[]> {
+export async function findAuditEntries(filter: Record<string, unknown>): Promise<IAppSettingAudit[]> {
   await dbConnect()
   return AppSettingAudit.find(filter).sort({ changedAt: -1 }).exec()
 }

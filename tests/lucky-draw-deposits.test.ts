@@ -19,7 +19,7 @@ import dbConnect from "@/lib/mongodb"
 async function createUniqueUser(overrides: Record<string, unknown> = {}) {
   const unique = randomUUID()
   await dbConnect()
-  return User.create({
+  const created = await User.create({
     email: `${unique}@example.com`,
     passwordHash: "test-hash",
     name: `Test User ${unique}`,
@@ -27,6 +27,8 @@ async function createUniqueUser(overrides: Record<string, unknown> = {}) {
     referralCode: unique.replace(/-/g, "").slice(0, 10),
     ...overrides,
   } as any)
+
+  return Array.isArray(created) ? created[0] : created
 }
 
 const toId = (value: unknown) =>

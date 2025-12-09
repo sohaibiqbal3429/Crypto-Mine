@@ -34,7 +34,8 @@ async function createUser(overrides: Record<string, unknown> = {}) {
     phoneVerified: true,
     emailVerified: true,
   }
-  return User.create({ ...base, ...overrides } as any)
+  const created = await User.create({ ...base, ...overrides } as any)
+  return Array.isArray(created) ? created[0] : created
 }
 
 function createAuthorizedRequest(
