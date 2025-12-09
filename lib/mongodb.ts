@@ -20,29 +20,39 @@ if (!globalWithMongoose.mongoose) {
   globalWithMongoose.mongoose = cached
 }
 
+async function ensureInMemoryConnection() {
+  if (!globalWithMongoose.__inMemoryDbInitialized) {
+    await initializeInMemoryDatabase()
+    globalWithMongoose.__inMemoryDbInitialized = true
+    console.warn(
+      "[database] Running in demo mode with an in-memory data set. Set MONGODB_URI to connect to a persistent database.",
+    )
+  }
+
+  if (!cached.conn) {
+    cached.conn = { inMemory: true }
+  }
+
+  return cached.conn
+}
+
 export default async function dbConnect() {
   const hasUri = Boolean(process.env.MONGODB_URI)
-  const seedFlag = process.env.SEED_IN_MEMORY
-  const preferInMemory =
-    seedFlag === "true" ||
-    (!seedFlag && process.env.NODE_ENV !== "production") ||
-    (!hasUri && process.env.NODE_ENV !== "production")
-  const allowFallback = process.env.NODE_ENV !== "production" || process.env.ALLOW_DB_FALLBACK === "true"
+  const seedFlag = process.env.SEED_IN_MEMORY === "true"
+  const allowFallback =
+    seedFlag ||
+    !hasUri ||
+    process.env.NODE_ENV !== "production" ||
+    process.env.ALLOW_DB_FALLBACK === "true"
+
+  if (!hasUri && allowFallback) {
+    return ensureInMemoryConnection()
+  }
+
+  const preferInMemory = seedFlag || (!seedFlag && process.env.NODE_ENV !== "production")
 
   if (preferInMemory) {
-    if (!globalWithMongoose.__inMemoryDbInitialized) {
-      await initializeInMemoryDatabase()
-      globalWithMongoose.__inMemoryDbInitialized = true
-      console.warn(
-        "[database] Running in demo mode with an in-memory data set. Set MONGODB_URI to connect to a persistent database.",
-      )
-    }
-
-    if (!cached.conn) {
-      cached.conn = { inMemory: true }
-    }
-
-    return cached.conn
+    return ensureInMemoryConnection()
   }
 
   const uri = process.env.MONGODB_URI
@@ -61,10 +71,7 @@ export default async function dbConnect() {
 
     if (allowFallback) {
       console.error("[database] Failed to connect to MongoDB. Falling back to in-memory store.", error)
-      await initializeInMemoryDatabase()
-      globalWithMongoose.__inMemoryDbInitialized = true
-      cached.conn = { inMemory: true }
-      return cached.conn
+      return ensureInMemoryConnection()
     }
 
     throw error
