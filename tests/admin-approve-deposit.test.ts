@@ -26,7 +26,7 @@ async function reset() {
 }
 
 async function buildApproveRequest() {
-  const admin = await User.create({
+  const adminResult = await User.create({
     email: "admin@example.com",
     passwordHash: "hash",
     role: "admin",
@@ -35,8 +35,9 @@ async function buildApproveRequest() {
     status: "active",
     isActive: true,
   })
+  const admin = Array.isArray(adminResult) ? adminResult[0] : adminResult
 
-  const member = await User.create({
+  const memberResult = await User.create({
     email: "user@example.com",
     passwordHash: "hash",
     role: "user",
@@ -46,6 +47,7 @@ async function buildApproveRequest() {
     isActive: false,
     depositTotal: 0,
   })
+  const member = Array.isArray(memberResult) ? memberResult[0] : memberResult
 
   const transaction = await Transaction.create({
     userId: member._id,

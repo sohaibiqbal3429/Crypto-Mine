@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Password hashed successfully")
 
     // Create user
-    const user = await User.create({
+    const createdUser = await User.create({
       name: validatedData.name,
       email: validatedData.email.toLowerCase(),
       phone: validatedData.phone,
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       referralCode: newReferralCode,
       referredBy: referrer._id,
     })
+    const user = Array.isArray(createdUser) ? createdUser[0] : createdUser
     console.log("[v0] User created successfully:", user._id)
 
     // Create initial balance

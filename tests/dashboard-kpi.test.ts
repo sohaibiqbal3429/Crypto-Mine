@@ -14,7 +14,7 @@ async function createUser(overrides: Record<string, unknown> = {}) {
   await dbConnect()
   const unique = randomUUID().replace(/-/g, "")
 
-  return User.create({
+  const created = await User.create({
     email: `${unique}@example.com`,
     passwordHash: "hash",
     name: `User ${unique}`,
@@ -24,6 +24,8 @@ async function createUser(overrides: Record<string, unknown> = {}) {
     depositTotal: 0,
     ...overrides,
   } as any)
+
+  return Array.isArray(created) ? created[0] : created
 }
 
 test.before(async () => {
@@ -36,7 +38,7 @@ test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
   const createdTransactionIds: mongoose.Types.ObjectId[] = []
 
   try {
-    const rewardWithDay = await Transaction.create({
+    const rewardWithDayResult = await Transaction.create({
       userId: user._id,
       type: "teamReward",
       amount: 0.12,
@@ -46,9 +48,10 @@ test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
       createdAt: new Date("2025-10-11T23:59:59Z"),
       updatedAt: new Date("2025-10-11T23:59:59Z"),
     } as any)
+    const rewardWithDay = Array.isArray(rewardWithDayResult) ? rewardWithDayResult[0] : rewardWithDayResult
     createdTransactionIds.push(rewardWithDay._id as mongoose.Types.ObjectId)
 
-    const rewardWithoutDay = await Transaction.create({
+    const rewardWithoutDayResult = await Transaction.create({
       userId: user._id,
       type: "teamReward",
       amount: 0.05,
@@ -58,9 +61,10 @@ test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
       createdAt: new Date("2025-10-11T18:30:00Z"),
       updatedAt: new Date("2025-10-11T18:30:00Z"),
     } as any)
+    const rewardWithoutDay = Array.isArray(rewardWithoutDayResult) ? rewardWithoutDayResult[0] : rewardWithoutDayResult
     createdTransactionIds.push(rewardWithoutDay._id as mongoose.Types.ObjectId)
 
-    const otherUserReward = await Transaction.create({
+    const otherUserRewardResult = await Transaction.create({
       userId: otherUser._id,
       type: "teamReward",
       amount: 0.99,
@@ -70,9 +74,10 @@ test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
       createdAt: new Date("2025-10-11T23:00:00Z"),
       updatedAt: new Date("2025-10-11T23:00:00Z"),
     } as any)
+    const otherUserReward = Array.isArray(otherUserRewardResult) ? otherUserRewardResult[0] : otherUserRewardResult
     createdTransactionIds.push(otherUserReward._id as mongoose.Types.ObjectId)
 
-    const previousDayReward = await Transaction.create({
+    const previousDayRewardResult = await Transaction.create({
       userId: user._id,
       type: "teamReward",
       amount: 0.3,
@@ -82,6 +87,7 @@ test("getDailyTeamRewardTotal sums the previous UTC day rewards", async () => {
       createdAt: new Date("2025-10-10T23:59:59Z"),
       updatedAt: new Date("2025-10-10T23:59:59Z"),
     } as any)
+    const previousDayReward = Array.isArray(previousDayRewardResult) ? previousDayRewardResult[0] : previousDayRewardResult
     createdTransactionIds.push(previousDayReward._id as mongoose.Types.ObjectId)
 
     const total = await getDailyTeamRewardTotal(
