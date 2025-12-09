@@ -42,13 +42,13 @@ export default async function dbConnect() {
   const allowFallback = seedFlag || process.env.ALLOW_DB_FALLBACK === "true"
   const uri = resolveMongoUri()
 
-  if (!uri) {
-    if (allowFallback || process.env.NODE_ENV !== "production") {
-      return ensureInMemoryConnection()
-    }
+  // if (!uri) {
+  //   if (allowFallback || process.env.NODE_ENV !== "production") {
+  //     return ensureInMemoryConnection()
+  //   }
 
-    throw new Error("Add MONGODB_URI to .env.local or set SEED_IN_MEMORY=true for demo mode")
-  }
+  //   throw new Error("Add MONGODB_URI to .env.local or set SEED_IN_MEMORY=true for demo mode")
+  // }
 
   if (seedFlag) {
     return ensureInMemoryConnection()
