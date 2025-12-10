@@ -11,7 +11,6 @@ import { RateLimitTelemetryCard } from "@/components/dashboard/rate-limit-teleme
 import { HalvingChart } from "@/components/dashboard/halving-chart"
 import { LuckyDrawCard } from "@/components/dashboard/lucky-draw-card"
 import { InviteAndEarnPanel } from "@/components/dashboard/invite-and-earn-panel"
-import { Sidebar } from "@/components/layout/sidebar"
 
 interface DashboardData {
   kpis: {
@@ -132,31 +131,61 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      {/* ✅ Dono modals yahan render ho rahe hain */}
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-50">
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.1),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(6,182,212,0.12),transparent_40%)]" />
+      </div>
+
       <ImportantUpdateModal />
-
-      <Sidebar user={user} />
-
-      <main className="main-content flex-1 min-w-0">
-        <div className="space-y-8 p-6">
-          <div className="space-y-2">
-            <h1 className="crypto-gradient-text text-4xl font-bold">Mining Dashboard</h1>
-            <p className="text-lg text-muted-foreground">
-              Welcome back, <span className="font-semibold text-foreground">{user?.name}</span> • Level {data.user.level} Miner
+      <main className="main-content relative min-w-0">
+        <div className="grid-overlay relative mx-auto flex max-w-7xl flex-col gap-8 px-4 pb-12 pt-6 md:px-8">
+          <div className="flex flex-col gap-2">
+            <p className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-100">
+              5gbotify overview
             </p>
+            <h1 className="text-3xl font-semibold">Hi, {user?.name} 👋</h1>
+            <p className="text-sm text-slate-400">Role: Network Harvester – Tier {data.user.level}</p>
           </div>
 
-          <KPICards kpis={data.kpis} />
+          <div className="grid gap-4 lg:grid-cols-[2fr,1fr] lg:items-center">
+            <KPICards kpis={data.kpis} />
+            <div className="rounded-2xl border border-slate-800/70 bg-slate-900/70 p-5 shadow-lg shadow-emerald-500/10">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-emerald-200">Ops status</p>
+                  <p className="text-sm text-slate-300">Backend parity with MintMine Pro, new skin for 5gbotify.</p>
+                </div>
+                <span className="rounded-md bg-emerald-500/20 px-3 py-1 text-[11px] font-semibold uppercase text-emerald-100">synced</span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Link
+                  href="/mining"
+                  className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-3 text-left text-sm font-semibold text-emerald-100 transition hover:-translate-y-[1px] hover:border-emerald-400/70"
+                >
+                  Launch Mining Hub
+                  <span className="block text-xs font-normal text-emerald-50/80">Jump to engine controls</span>
+                </Link>
+                <Link
+                  href="/wallet/deposit"
+                  className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-left text-sm font-semibold text-cyan-100 transition hover:-translate-y-[1px] hover:border-cyan-400/60"
+                >
+                  Add funds in Top-Up Center
+                  <span className="block text-xs font-normal text-cyan-50/80">Same flow, sharper look</span>
+                </Link>
+              </div>
+            </div>
+          </div>
 
-          <div className="dashboard-grid">
+          <div className="grid gap-6 xl:grid-cols-[2fr,1.25fr]">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
-            <HalvingChart />
-            <RateLimitTelemetryCard />
+            <div className="grid gap-6">
+              <HalvingChart />
+              <RateLimitTelemetryCard />
+            </div>
           </div>
 
-          <div className="dashboard-grid">
-            <div className="dashboard-card xl:col-span-2">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
               <LuckyDrawCard currentUser={user} />
             </div>
             <InviteAndEarnPanel referralCode={data.user.referralCode} />
