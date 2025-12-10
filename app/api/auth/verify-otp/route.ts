@@ -26,12 +26,11 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect()
 
-    const rawBody = (await request.json().catch(() => ({}))) as unknown
-    const body = (typeof rawBody === "object" && rawBody !== null ? rawBody : {}) as Record<string, unknown>
+    const body = await request.json()
     const validatedData = verifyOTPSchema.parse({
       ...body,
-      email: normalizeEmail(body?.email as string | undefined),
-      phone: normalizePhoneNumber(body?.phone as string | undefined),
+      email: normalizeEmail(body?.email),
+      phone: normalizePhoneNumber(body?.phone),
     })
 
     const { code, purpose } = validatedData

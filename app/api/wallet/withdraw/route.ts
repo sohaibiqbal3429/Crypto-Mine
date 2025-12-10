@@ -1,7 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-
 import dbConnect from "@/lib/mongodb"
-import { isTimeoutError, withRequestTiming } from "@/lib/observability/timing"
 import User from "@/models/User"
 import Balance from "@/models/Balance"
 import Transaction from "@/models/Transaction"
@@ -14,7 +12,6 @@ import { emitAuditLog } from "@/lib/observability/audit"
 import { incrementCounter } from "@/lib/observability/metrics"
 
 const MAX_PENDING_WITHDRAWALS = 3
-const QUERY_TIMEOUT_MS = Number(process.env.WALLET_QUERY_TIMEOUT_MS || 5000)
 
 function resolveAmountBucket(amount: number): string {
   if (amount >= 1000) return "1000_plus"
@@ -26,25 +23,24 @@ function resolveAmountBucket(amount: number): string {
 export async function POST(request: NextRequest) {
   const now = new Date()
 
-  return withRequestTiming("api.wallet.withdraw", async () => {
-    try {
-      const userPayload = getUserFromRequest(request)
-      if (!userPayload) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-      }
+  try {
+    const userPayload = getUserFromRequest(request)
+    if (!userPayload) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-      await dbConnect()
+    await dbConnect()
 
-      const body = await request.json()
-      const validatedData = withdrawSchema.parse(body)
-      const requestAmount = normaliseAmount(validatedData.amount)
-      const source = validatedData.source ?? "main"
+    const body = await request.json()
+    const validatedData = withdrawSchema.parse(body)
+    const requestAmount = normaliseAmount(validatedData.amount)
+    const source = validatedData.source ?? "main"
 
-      const [user, balanceDoc, settings] = await Promise.all([
-        User.findById(userPayload.userId).maxTimeMS(QUERY_TIMEOUT_MS),
-        Balance.findOne({ userId: userPayload.userId }).maxTimeMS(QUERY_TIMEOUT_MS),
-        Settings.findOne().maxTimeMS(QUERY_TIMEOUT_MS),
-      ])
+    const [user, balanceDoc, settings] = await Promise.all([
+      User.findById(userPayload.userId),
+      Balance.findOne({ userId: userPayload.userId }),
+      Settings.findOne(),
+    ])
 
     if (!user) {
       return NextResponse.json({ error: "Account not found" }, { status: 404 })
@@ -169,7 +165,7 @@ export async function POST(request: NextRequest) {
       userId: userPayload.userId,
       type: "withdraw",
       status: "pending",
-    }).maxTimeMS(QUERY_TIMEOUT_MS)
+    })
 
     if (pendingWithdrawals >= MAX_PENDING_WITHDRAWALS) {
       incrementCounter("wallet.withdraw.request_rejected", 1, {
@@ -203,10 +199,10 @@ export async function POST(request: NextRequest) {
           pendingWithdraw: requestAmount,
         },
       },
-    ).maxTimeMS(QUERY_TIMEOUT_MS)
+    )
 
     if (updateResult.modifiedCount === 0) {
-      const freshBalance = await Balance.findOne({ userId: userPayload.userId }).maxTimeMS(QUERY_TIMEOUT_MS)
+      const freshBalance = await Balance.findOne({ userId: userPayload.userId })
       const refreshedSnapshot = freshBalance ? calculateWithdrawableSnapshot(freshBalance, now) : null
 
       incrementCounter("wallet.withdraw.request_rejected", 1, {
@@ -238,7 +234,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const refreshedBalance = await Balance.findOne({ userId: userPayload.userId }).maxTimeMS(QUERY_TIMEOUT_MS)
+    const refreshedBalance = await Balance.findOne({ userId: userPayload.userId })
     if (!refreshedBalance) {
       throw new Error("Balance missing after withdrawal update")
     }
@@ -297,30 +293,25 @@ export async function POST(request: NextRequest) {
       pendingWithdraw: refreshedSnapshot.pendingWithdraw,
       withdrawableBalance: refreshedSnapshot.withdrawable,
     })
-    } catch (error: any) {
-      console.error("Withdrawal error:", error)
+  } catch (error: any) {
+    console.error("Withdrawal error:", error)
 
-      if (isTimeoutError(error)) {
-        return NextResponse.json({ error: "Withdrawal request timed out" }, { status: 504 })
-      }
-
-      if (error.name === "ZodError") {
-        return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
-      }
-
-      incrementCounter("wallet.withdraw.request_failed", 1, {
-        reason: error?.code ?? "unknown",
-      })
-
-      emitAuditLog({
-        event: "withdrawal_request_error",
-        severity: "error",
-        metadata: {
-          message: error?.message,
-        },
-      })
-
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    if (error.name === "ZodError") {
+      return NextResponse.json({ error: "Validation failed", details: error.errors }, { status: 400 })
     }
-  })
+
+    incrementCounter("wallet.withdraw.request_failed", 1, {
+      reason: error?.code ?? "unknown",
+    })
+
+    emitAuditLog({
+      event: "withdrawal_request_error",
+      severity: "error",
+      metadata: {
+        message: error?.message,
+      },
+    })
+
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }

@@ -21,7 +21,6 @@ export interface ITransaction extends Document {
   claimable?: boolean
   claimedAt?: Date
   createdAt: Date
-  updatedAt: Date
 }
 
 const TransactionSchema = new Schema<ITransaction>(

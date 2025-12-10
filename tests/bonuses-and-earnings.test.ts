@@ -58,8 +58,7 @@ async function createUser(overrides: Record<string, unknown> = {}) {
     withdrawTotal: 0,
     roiEarnedTotal: 0,
   }
-  const created = await User.create({ ...defaults, ...overrides } as any)
-  return Array.isArray(created) ? created[0] : created
+  return User.create({ ...defaults, ...overrides } as any)
 }
 
 async function approveDeposit(userId: mongoose.Types.ObjectId, amount: number) {

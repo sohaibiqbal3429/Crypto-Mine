@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const outcome = await applyDepositRewards(depositorIdStr, amountNum, {
-        depositTransactionId: toDocumentId(approvedTx._id),
+        depositTransactionId: approvedTx.id ?? toDocumentId(approvedTx._id),
         depositAt: approvedTx.createdAt ?? new Date(),
         transactional: false,
       });

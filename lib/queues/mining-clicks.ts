@@ -56,7 +56,13 @@ export async function getMiningQueueDepth(): Promise<number> {
     return 0
   }
 
-  return miningQueueInstance.getJobCountByTypes("waiting", "paused", "delayed")
+  const [waiting, paused, delayed] = await Promise.all([
+    miningQueueInstance.getWaitingCount(),
+    miningQueueInstance.getPausedCount(),
+    miningQueueInstance.getDelayedCount(),
+  ])
+
+  return waiting + paused + delayed
 }
 
 export function createMiningClickWorker(
@@ -65,10 +71,6 @@ export function createMiningClickWorker(
 ): Worker<MiningClickJobData> | null {
   if (!hasRedis) {
     console.warn("[queue] Mining queue worker disabled. Configure REDIS_URL to enable processing.")
-    return null
-  }
-
-  if (!queueOptions) {
     return null
   }
 

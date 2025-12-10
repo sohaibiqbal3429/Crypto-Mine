@@ -95,7 +95,7 @@ test("verify-otp rejects bad or expired codes", async () => {
 })
 
 test("register-with-otp creates an account after OTP verification", async () => {
-  const referrerResult = await User.create({
+  const referrer = await User.create({
     email: "ref@example.com",
     passwordHash: "hash",
     name: "Referrer",
@@ -103,7 +103,6 @@ test("register-with-otp creates an account after OTP verification", async () => 
     referralCode: "REFCODE",
     isActive: true,
   })
-  const referrer = Array.isArray(referrerResult) ? referrerResult[0] : referrerResult
 
   const { response: sendResponse } = await callRoute(sendOTP, {
     email: "newuser@example.com",
@@ -146,14 +145,13 @@ test("register-with-otp creates an account after OTP verification", async () => 
 
 test("reset-password uses a verified OTP and clears it after update", async () => {
   const originalHash = await hashPassword("OldPass1")
-  const userResult = await User.create({
+  const user = await User.create({
     email: "reset@example.com",
     passwordHash: originalHash,
     name: "Reset",
     referralCode: "RESET1",
     isActive: true,
   })
-  const user = Array.isArray(userResult) ? userResult[0] : userResult
 
   const { response: sendResponse } = await callRoute(sendOTP, {
     email: "reset@example.com",
@@ -266,7 +264,7 @@ test("send-otp returns structured SMTP errors without exposing sensitive data", 
     )
     assert.equal("debug" in data, false)
   } finally {
-    mock.restoreAll()
+    sendMock.restore()
     Object.assign(process.env, previousEnv)
   }
 })
@@ -300,7 +298,7 @@ test("send-otp exposes SMTP debug info in non-production environments", async ()
     assert.ok(data.debug)
     assert.equal(data.debug.code, "EAUTH")
   } finally {
-    mock.restoreAll()
+    sendMock.restore()
     Object.assign(process.env, previousEnv)
   }
 })

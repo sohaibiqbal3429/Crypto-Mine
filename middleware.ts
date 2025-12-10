@@ -4,8 +4,6 @@ import { getTokenFromRequest, getUserFromRequest } from "@/lib/auth-middleware"
 import { enforceUnifiedRateLimit, getRateLimitContext, shouldBypassRateLimit } from "@/lib/rate-limit/edge"
 import { trackRequestRate } from "@/lib/observability/request-metrics"
 
-const AUTH_STATUS_TIMEOUT_MS = Number(process.env.AUTH_STATUS_TIMEOUT_MS ?? 3000)
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const context = getRateLimitContext(request)
@@ -51,14 +49,10 @@ export async function middleware(request: NextRequest) {
     try {
       const token = getTokenFromRequest(request)
       if (token) {
-        const abortController = new AbortController()
-        const timeout = setTimeout(() => abortController.abort(new Error("Auth status check timed out")), AUTH_STATUS_TIMEOUT_MS)
-
         const statusResponse = await fetch(new URL("/api/auth/status", request.url), {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
-          signal: abortController.signal,
-        }).finally(() => clearTimeout(timeout))
+        })
 
         if (statusResponse.ok) {
           const payload = await statusResponse.json()

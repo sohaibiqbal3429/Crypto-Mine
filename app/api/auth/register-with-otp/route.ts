@@ -115,8 +115,7 @@ export async function POST(request: NextRequest) {
       userData.phoneVerified = true
     }
 
-    const createdUser = await User.create(userData)
-    const user = Array.isArray(createdUser) ? createdUser[0] : createdUser
+    const user = await User.create(userData)
 
     // Create initial balance
     await Balance.create({
