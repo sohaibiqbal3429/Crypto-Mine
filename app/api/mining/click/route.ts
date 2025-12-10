@@ -34,7 +34,9 @@ function buildStatusResponse(
     }
   } else if (status.status === "completed") {
     statusCode = 200
-    headers["Cache-Control"] = `private, max-age=0, s-maxage=${Math.floor(MINING_STATUS_TTL_MS / 1000)}`
+    headers["Cache-Control"] = `private, max-age=0, s-maxage=${Math.floor(
+      MINING_STATUS_TTL_MS / 1000,
+    )}`
   } else {
     statusCode = status.error?.retryable ? 503 : 409
     if (status.error?.retryAfterMs) {
@@ -61,7 +63,11 @@ export async function POST(request: NextRequest) {
   trackRequestRate("backend", { path })
 
   const respond = (response: NextResponse, tags: Record<string, string | number> = {}) => {
-    recordRequestLatency("backend", Date.now() - startedAt, { path, status: response.status, ...tags })
+    recordRequestLatency("backend", Date.now() - startedAt, {
+      path,
+      status: response.status,
+      ...tags,
+    })
     return response
   }
 
@@ -72,21 +78,25 @@ export async function POST(request: NextRequest) {
 
   const idempotencyKey = request.headers.get("idempotency-key")?.trim()
   if (!idempotencyKey) {
-    return respond(NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 }), {
-      outcome: "missing_idempotency",
-    })
+    return respond(
+      NextResponse.json({ error: "Idempotency-Key header is required" }, { status: 400 }),
+      { outcome: "missing_idempotency" },
+    )
   }
 
   const userPayload = getUserFromRequest(request)
   if (!userPayload) {
-    return respond(NextResponse.json({ error: "Unauthorized" }, { status: 401 }), { outcome: "unauthorized" })
+    return respond(
+      NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+      { outcome: "unauthorized" },
+    )
   }
 
   const ip = getClientIp(request)
-
   const queueAvailable = isRedisEnabled() && isMiningQueueEnabled()
 
-  if (!queueAvailable) {
+  // Helper to perform mining immediately and return a completed status
+  const processDirect = async (successOutcome: string) => {
     try {
       const requestedAt = new Date()
       const result = await performMiningClick(userPayload.userId, { idempotencyKey })
@@ -109,30 +119,35 @@ export async function POST(request: NextRequest) {
         queueDepth: 0,
         result: {
           ...result,
+          // This is what the UI should show when the user clicks "Start Mining"
           message: "Mining rewarded",
           completedAt: completedAt.toISOString(),
         },
       }
 
-      return respond(buildStatusResponse(status, request), { outcome: "completed_no_queue" })
+      return respond(buildStatusResponse(status, request), { outcome: successOutcome })
     } catch (error) {
       if (error instanceof MiningActionError) {
-        return respond(NextResponse.json({ error: error.message }, { status: error.status }), {
-          outcome: "mining_error",
-        })
+        return respond(
+          NextResponse.json({ error: error.message }, { status: error.status }),
+          { outcome: "mining_error" },
+        )
       }
 
       console.error("Mining click processing error", error)
       return respond(
         NextResponse.json(
-          {
-            error: "Unable to process mining request",
-          },
+          { error: "Unable to process mining request" },
           { status: 500 },
         ),
         { outcome: "processing_failure" },
       )
     }
+  }
+
+  // If queue is disabled/unavailable, just process immediately.
+  if (!queueAvailable) {
+    return processDirect("completed_no_queue")
   }
 
   const existingStatus = await getMiningRequestStatus(idempotencyKey)
@@ -157,15 +172,8 @@ export async function POST(request: NextRequest) {
 
     return respond(buildStatusResponse(enqueueResult.status, request), { outcome: "enqueued" })
   } catch (error) {
-    console.error("Mining click enqueue error", error)
-    return respond(
-      NextResponse.json(
-        {
-          error: "Unable to queue mining request",
-        },
-        { status: 500 },
-      ),
-      { outcome: "enqueue_failure" },
-    )
+    // Queue failed – fall back to processing immediately so the user still gets rewarded
+    console.error("Mining click enqueue error, falling back to direct processing", error)
+    return processDirect("completed_after_enqueue_failure")
   }
 }
