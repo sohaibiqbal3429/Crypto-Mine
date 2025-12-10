@@ -12,15 +12,30 @@ test("all wallet funds above the minimum are withdrawable", () => {
   const now = new Date("2024-07-01T00:00:00Z")
   const balance = {
     current: 842.58,
+    totalEarning: 1200.25,
     pendingWithdraw: 100.12,
   }
 
   const snapshot = calculateWithdrawableSnapshot(balance, now)
 
-  assert.equal(snapshot.withdrawable, 842.58)
+  assert.equal(snapshot.withdrawable, 1200.25)
   assert.equal(snapshot.lockedAmount, 0)
   assert.equal(snapshot.pendingWithdraw, 100.12)
-  assert.equal(getWithdrawableBalance(balance, now), 842.58)
+  assert.equal(getWithdrawableBalance(balance, now), 1200.25)
+})
+
+test("withdrawable balance is derived from total earnings, not current wallet", () => {
+  const now = new Date("2024-07-01T00:00:00Z")
+  const balance = {
+    current: 212.92,
+    totalEarning: 76.92,
+    pendingWithdraw: 0,
+  }
+
+  const snapshot = calculateWithdrawableSnapshot(balance, now)
+
+  assert.equal(snapshot.withdrawable, 76.92)
+  assert.equal(snapshot.current, 212.92)
 })
 
 test("legacy locked lots no longer reduce withdrawable balance", () => {
