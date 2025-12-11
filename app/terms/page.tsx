@@ -189,7 +189,7 @@ export default function TermsPage() {
             {/* 11 New Withdrawal Policy */}
             <Card className="w-full">
               <CardHeader>
-                <CardTitle>11. Updated Withdrawal & Account Policy</CardTitle>
+                <CardTitle>11. Updated Withdrawal & Account Policyy</CardTitle>
               </CardHeader>
               <CardContent className="prose prose-sm max-w-none">
                 <p>
