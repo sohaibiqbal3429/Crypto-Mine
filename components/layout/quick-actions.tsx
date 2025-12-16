@@ -22,9 +22,10 @@ type QuickActionsVariant = "mobile" | "desktop" | "both"
 type QuickActionsProps = {
   mobileClassName?: string
   variant?: QuickActionsVariant
+  inline?: boolean
 }
 
-export default function QuickActions({ mobileClassName, variant = "both" }: QuickActionsProps = {}) {
+export default function QuickActions({ mobileClassName, variant = "both", inline = false }: QuickActionsProps = {}) {
   const pathname = usePathname() ?? "/"
 
   const shouldHide = useMemo(
@@ -48,6 +49,29 @@ export default function QuickActions({ mobileClassName, variant = "both" }: Quic
       <LogoutAction />
     </div>
   )
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-2">
+        {showMobile ? (
+          <div
+            className={cn(
+              "md:hidden flex items-center rounded-lg border border-border/70 bg-secondary/60 px-2 py-1 text-sm shadow-sm",
+              mobileClassName,
+            )}
+          >
+            {renderActions()}
+          </div>
+        ) : null}
+
+        {showDesktop ? (
+          <div className="hidden items-center gap-3 rounded-lg border border-border/70 bg-secondary/60 px-3 py-2 shadow-sm lg:flex">
+            {renderActions()}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
     <>

@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "CryptoMine - Next-Generation Mining Platform",
+  title: "5gbotify | Network-grade mining control",
   description:
-    "Join our innovative mining ecosystem with referral rewards, team building, and sustainable earning opportunities.",
+    "Operate the 5gbotify control plane for high-performance mining, payouts, and crew orchestration.",
   generator: "v0.app",
   icons: {
     icon: "/logo.png",
@@ -35,7 +35,7 @@ export default function RootLayout({
       <body className={cn("min-h-screen bg-background font-sans antialiased text-foreground")}>
         <Suspense fallback={null}>
           <TopLoaderProvider>
-            <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+            <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
               <AppHeader />
               {children}
             </ThemeProvider>
