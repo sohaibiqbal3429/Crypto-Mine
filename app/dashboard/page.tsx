@@ -11,7 +11,6 @@ import { RateLimitTelemetryCard } from "@/components/dashboard/rate-limit-teleme
 import { HalvingChart } from "@/components/dashboard/halving-chart"
 import { LuckyDrawCard } from "@/components/dashboard/lucky-draw-card"
 import { InviteAndEarnPanel } from "@/components/dashboard/invite-and-earn-panel"
-import { Sidebar } from "@/components/layout/sidebar"
 
 interface DashboardData {
   kpis: {
@@ -132,31 +131,50 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      {/* ✅ Dono modals yahan render ho rahe hain */}
+    <div className="min-h-screen bg-background">
       <ImportantUpdateModal />
 
-      <Sidebar user={user} />
+      <main className="mx-auto min-w-0 max-w-6xl px-4 pb-12 pt-6 lg:px-6">
+        <div className="flex flex-col gap-2 border-b border-border/60 pb-4">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Hi, {user?.name} 👋</p>
+          <h1 className="text-3xl font-bold text-foreground">Overview Control</h1>
+          <p className="text-sm text-muted-foreground">Network Harvester – Tier {data.user.level}</p>
+        </div>
 
-      <main className="main-content flex-1 min-w-0">
-        <div className="space-y-8 p-6">
-          <div className="space-y-2">
-            <h1 className="crypto-gradient-text text-4xl font-bold">Mining Dashboard</h1>
-            <p className="text-lg text-muted-foreground">
-              Welcome back, <span className="font-semibold text-foreground">{user?.name}</span> • Level {data.user.level} Miner
-            </p>
-          </div>
-
+        <div className="mt-6 space-y-8">
           <KPICards kpis={data.kpis} />
 
-          <div className="dashboard-grid">
+          <div className="grid gap-6 lg:grid-cols-3">
             <MiningWidget mining={data.mining} onMiningSuccess={fetchDashboardData} />
+            <div className="space-y-4 rounded-xl border border-border/70 bg-card/70 p-4 shadow-[0_18px_38px_-26px_rgba(0,0,0,0.7)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Quick actions</p>
+                  <p className="text-sm text-foreground">Boost, fund, or notify your crew.</p>
+                </div>
+                <span className="rounded-md bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">Live</span>
+              </div>
+              <div className="space-y-3">
+                {["Boost performance", "Add funds to vault", "Invite crew member"].map((action) => (
+                  <div
+                    key={action}
+                    className="flex items-center justify-between rounded-lg border border-border/60 bg-secondary/60 px-3 py-2 text-sm text-foreground"
+                  >
+                    <span>{action}</span>
+                    <button className="text-xs font-semibold text-primary hover:underline">Launch</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-3">
             <HalvingChart />
             <RateLimitTelemetryCard />
           </div>
 
-          <div className="dashboard-grid">
-            <div className="dashboard-card xl:col-span-2">
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="rounded-xl border border-border/70 bg-card/70 p-4 shadow-[0_18px_38px_-26px_rgba(0,0,0,0.7)] xl:col-span-2">
               <LuckyDrawCard currentUser={user} />
             </div>
             <InviteAndEarnPanel referralCode={data.user.referralCode} />

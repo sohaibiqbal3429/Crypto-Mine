@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Zap, Clock, AlertCircle, Coins } from "lucide-react"
+import { Loader2, Zap, AlertCircle, Coins } from "lucide-react"
 import { motion } from "framer-motion"
 
 interface MiningWidgetProps {
@@ -230,136 +230,151 @@ export function MiningWidget({ mining, onMiningSuccess }: MiningWidgetProps) {
   const isMiningBusy = isSubmitting || Boolean(polling)
 
   return (
-    <Card className="dashboard-card col-span-full lg:col-span-2 crypto-card">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center shadow-lg">
-              <Coins className="w-6 h-6 text-primary-foreground" />
+    <Card className="col-span-full lg:col-span-2 rounded-xl border border-border/70 bg-card/70 shadow-[0_18px_38px_-26px_rgba(0,0,0,0.7)]">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <div className="space-y-2">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
+              <Coins className="h-5 w-5" aria-hidden />
             </div>
-            {canMine && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse" />
-            )}
-          </div>
-          <div>
-            <div className="crypto-gradient-text text-xl font-bold">Mint-Coin Mining</div>
-            <div className="text-sm text-muted-foreground dark:text-secondary-dark">Decentralized Mining Protocol</div>
-          </div>
-        </CardTitle>
+            Core Hashing Engine
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">Status orchestration for 5G-grade mining lanes.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge className="rounded-md border border-primary/40 bg-primary/10 px-3 py-1 text-primary">
+            {canMine ? "Active" : mining.requiresDeposit ? "Funding Needed" : "Cooling"}
+          </Badge>
+          <span className="rounded-md bg-secondary px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">{nextWindowDisplay}</span>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {feedback.error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="border-destructive/40 bg-destructive/10 text-destructive-foreground">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{feedback.error}</AlertDescription>
           </Alert>
         )}
 
         {feedback.success && (
-          <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-            <Zap className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800 dark:text-success-dark">{feedback.success}</AlertDescription>
+          <Alert className="border-accent/40 bg-accent/10 text-accent-foreground">
+            <Zap className="h-4 w-4" />
+            <AlertDescription className="text-foreground">{feedback.success}</AlertDescription>
           </Alert>
         )}
 
-        <div className="text-center space-y-6">
-          <motion.div
-            className="relative mx-auto w-40 h-40 flex items-center justify-center"
-            whileHover={{ scale: canMine ? 1.05 : 1 }}
-            whileTap={{ scale: canMine ? 0.95 : 1 }}
-          >
-            <div
-              className={`w-full h-full rounded-full flex items-center justify-center text-5xl font-bold text-white shadow-2xl relative overflow-hidden ${
-                canMine && !isMiningBusy
-                  ? "bg-gradient-to-br from-primary to-accent cursor-pointer crypto-glow"
-                  : "bg-gradient-to-br from-gray-400 to-gray-600 cursor-not-allowed"
-              }`}
-              onClick={canMine && !isMiningBusy ? handleMining : undefined}
-            >
-              <Coins className="w-16 h-16" />
-              {canMine && !isMiningBusy && (
-                <>
-                  <motion.div
-                    className="absolute inset-0 rounded-full bg-gradient-to-br from-primary to-accent opacity-30"
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-                  />
-                  <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-                </>
-              )}
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-lg border border-border/60 bg-secondary/60 p-4">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Next eligible window</p>
+            <p className="mt-2 text-xl font-semibold text-foreground">{nextWindowDisplay}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Clock synced to network time</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-secondary/60 p-4">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Cycle earnings</p>
+            <p className="mt-2 text-xl font-semibold text-foreground">${mining.earnedInCycle.toFixed(2)}</p>
+            <div className="mt-3 h-1.5 rounded-full bg-background/60">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                initial={{ width: "10%" }}
+                animate={{ width: canMine ? "80%" : "48%" }}
+                transition={{ duration: 0.6 }}
+              />
             </div>
-          </motion.div>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-secondary/60 p-4">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Engine readiness</p>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-md border border-border/70 bg-background/60 text-center text-sm font-semibold leading-10 text-primary">
+                {canMine ? "ON" : "PAUSE"}
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>Thermal</span>
+                  <span>{canMine ? "Stable" : "Cooling"}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-background/60">
+                  <div className="h-full w-[72%] rounded-full bg-primary" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-          <div className="space-y-3">
-            {canMine ? (
-              <Badge
-                variant="secondary"
-                className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-success-dark px-4 py-2"
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                Mining Available
-              </Badge>
-            ) : mining.requiresDeposit ? (
-              <Badge
-                variant="secondary"
-                className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-error-dark px-4 py-2"
-              >
-                <AlertCircle className="w-4 h-4 mr-2" />
-                Deposit Required
-              </Badge>
-            ) : (
-              <Badge
-                variant="secondary"
-                className="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-warn-dark px-4 py-2"
-              >
-                <Clock className="w-4 h-4 mr-2" />
-                Cooldown Period
-              </Badge>
-            )}
-            <div className="bg-muted rounded-lg p-3">
-              <p className="text-sm font-medium text-muted-foreground dark:text-secondary-dark">Next Mining Window</p>
-              <p className="text-lg font-mono font-bold text-foreground dark:text-primary-dark">{nextWindowDisplay}</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-lg border border-border/60 bg-secondary/60 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Run scheduler</p>
+            <div className="space-y-2">
+              {["Signal check", "Hashing", "Verification", "Settlement"].map((stage, idx) => (
+                <div key={stage} className="space-y-1">
+                  <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+                    <span>{stage}</span>
+                    <span className="text-foreground/80">{idx < 2 ? "Queued" : "Ready"}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-background/60">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-primary to-accent"
+                      style={{ width: `${40 + idx * 15}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          <Button
-            onClick={() => void handleMining()}
-            disabled={!canMine || isMiningBusy}
-            size="lg"
-            className="w-full max-w-sm h-12 text-lg font-semibold bg-gradient-to-r from-primary to-accent hover:from-accent hover:to-primary transition-all duration-300 shadow-lg hover:shadow-xl"
-          >
-            {isMiningBusy ? (
-              <>
-                <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                Mining in Progress...
-              </>
-            ) : (
-              <>
-                <Zap className="mr-3 h-5 w-5" />
-                {canMine ? "Start Mining" : "Mining Unavailable"}
-              </>
-            )}
-          </Button>
-
-          {mining.requiresDeposit && (
-            <Button
-              asChild
-              variant="outline"
-              className="w-full max-w-sm h-11 border-dashed border-slate-300 text-sm font-semibold"
-            >
-              <Link href="/wallet/deposit">
-                Make a deposit (min ${mining.minDeposit?.toFixed(0) ?? 30} USDT)
-              </Link>
-            </Button>
-          )}
-
-          {mining.earnedInCycle > 0 && (
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 rounded-lg p-4 border border-green-200 dark:border-green-800">
-              <p className="text-sm text-muted-foreground dark:text-muted-dark mb-1">Last Mining Cycle</p>
-              <p className="text-2xl font-bold crypto-gradient-text">+${mining.earnedInCycle.toFixed(2)}</p>
+          <div className="space-y-3 rounded-lg border border-border/60 bg-secondary/60 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Control actions</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                onClick={() => void handleMining()}
+                disabled={!canMine || isMiningBusy}
+                className="h-11 justify-center rounded-lg bg-primary text-primary-foreground transition hover:bg-primary/90"
+              >
+                {isMiningBusy ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing
+                  </>
+                ) : (
+                  <>
+                    <Zap className="mr-2 h-4 w-4" />
+                    Queue Next Run
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                className="h-11 justify-center rounded-lg border-dashed border-border/70 bg-background/40 text-sm text-foreground"
+                asChild
+              >
+                <Link href="/mining">View session planner</Link>
+              </Button>
+              <Button
+                variant="secondary"
+                className="h-11 justify-center rounded-lg border border-border/70 bg-background/60 text-sm"
+                asChild
+              >
+                <Link href="/deposit">Add signal credits</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                className="h-11 justify-center rounded-lg text-sm text-muted-foreground"
+                asChild
+              >
+                <Link href="/team">Notify crew</Link>
+              </Button>
             </div>
-          )}
+          </div>
         </div>
+
+        {mining.requiresDeposit && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertCircle className="h-4 w-4" />
+              Funding required to unlock the next run.
+            </div>
+            <p className="mt-1 text-destructive/80">Minimum top-up: ${mining.minDeposit?.toFixed(0) ?? 30} USDT.</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

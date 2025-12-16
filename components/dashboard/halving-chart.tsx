@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 const halvingData = [
   { userScale: "1K", performance: 10, label: "10 Rb/d" },
@@ -14,57 +14,50 @@ const halvingData = [
 
 export function HalvingChart() {
   return (
-    <Card className="dashboard-card col-span-full lg:col-span-2">
+    <Card className="col-span-full lg:col-span-2 rounded-xl border border-border/70 bg-card/70 shadow-[0_18px_38px_-26px_rgba(0,0,0,0.7)]">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-foreground dark:text-primary-dark">
-          <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-blue-600 rounded"></div>
-          Halving 50%
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <div className="h-6 w-6 rounded-md bg-gradient-to-br from-primary to-chart-3" />
+          Network Efficiency Curve
         </CardTitle>
-        <p className="text-sm text-muted-foreground dark:text-secondary-dark">
-          The base mining factor is halved every time the number of users increases by 10x...
+        <p className="text-sm text-muted-foreground">
+          Network milestones vs hashing efficiency across the fleet. Higher density reduces per-node issuance.
         </p>
       </CardHeader>
       <CardContent>
-        <div className="chart-container h-64">
+        <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={halvingData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis
-                dataKey="userScale"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: "var(--text-secondary-dark)" }}
-                className="text-muted-foreground dark:text-secondary-dark"
-              />
+            <AreaChart data={halvingData} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="efficiency" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.1} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+              <XAxis dataKey="userScale" tickLine={false} axisLine={false} tick={{ fill: "hsl(var(--muted-foreground))" }} />
               <YAxis
-                axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 12, fill: "var(--text-secondary-dark)" }}
-                className="text-muted-foreground dark:text-secondary-dark"
+                axisLine={false}
+                tick={{ fill: "hsl(var(--muted-foreground))" }}
                 label={{
-                  value: "Mining performance (RBlock/day)",
+                  value: "Hash output (RBlock/day)",
                   angle: -90,
                   position: "insideLeft",
-                  style: { fill: "var(--text-secondary-dark)", fontSize: 12 },
+                  fill: "hsl(var(--muted-foreground))",
+                  fontSize: 12,
                 }}
               />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  borderRadius: 10,
                 }}
                 labelStyle={{ color: "hsl(var(--foreground))" }}
               />
-              <Bar dataKey="performance" fill="url(#blueGradient)" radius={[4, 4, 0, 0]}>
-                <defs>
-                  <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.6} />
-                  </linearGradient>
-                </defs>
-              </Bar>
-            </BarChart>
+              <Area type="monotone" dataKey="performance" stroke="hsl(var(--chart-1))" fill="url(#efficiency)" strokeWidth={2.4} />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
